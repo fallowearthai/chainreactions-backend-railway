@@ -1,7 +1,5 @@
 import express from 'express';
-import { SearchController } from './controllers/SearchController';
-import { MetaController } from './controllers/MetaController';
-import { MultiSearchController } from './controllers/MultiSearchController';
+import { EnhancedSearchController } from './controllers/EnhancedSearchController';
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -45,50 +43,43 @@ app.use((req, res, next) => {
   }
 });
 
-// Create controller instances
-const searchController = new SearchController();
-const metaController = new MetaController();
-const multiSearchController = new MultiSearchController();
+// Create controller instance
+const enhancedSearchController = new EnhancedSearchController();
 
-// Routes
-// Main search endpoint
-app.post('/api/search', searchController.search);
+// Routes - 3-Stage OSINT Workflow
+app.post('/api/enhanced/search', (req, res) => enhancedSearchController.enhancedSearch(req, res));
+app.post('/api/enhanced/strategy', (req, res) => enhancedSearchController.getSearchStrategy(req, res));
+app.get('/api/enhanced/test', (req, res) => enhancedSearchController.testWorkflow(req, res));
+app.get('/api/enhanced/info', (req, res) => enhancedSearchController.getWorkflowInfo(req, res));
 
 // Health check endpoint
-app.get('/api/health', searchController.healthCheck);
-
-// Legacy webhook endpoint (for n8n compatibility)
-app.post('/webhook/search', searchController.webhook);
-
-// Meta prompting endpoints
-app.post('/api/meta/strategy', (req, res) => metaController.generateStrategy(req, res));
-app.get('/api/meta/test', (req, res) => metaController.testMetaPrompt(req, res));
-
-// Multi-search engine endpoints
-app.get('/api/multisearch/health', (req, res) => multiSearchController.healthCheck(req, res));
-app.post('/api/multisearch/search', (req, res) => multiSearchController.searchMultiple(req, res));
-app.get('/api/multisearch/test', (req, res) => multiSearchController.quickTest(req, res));
-app.post('/api/multisearch/compare', (req, res) => multiSearchController.compareEngines(req, res));
-app.get('/api/multisearch/engines', (req, res) => multiSearchController.testEngineSelection(req, res));
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    service: '3-Stage OSINT Workflow API',
+    version: '1.0.0'
+  });
+});
 
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
-    message: 'Gemini Search API',
+    message: '3-Stage OSINT Workflow API',
     version: '1.0.0',
-    endpoints: {
-      search: 'POST /api/search',
-      health: 'GET /api/health',
-      webhook: 'POST /webhook/search',
-      metaStrategy: 'POST /api/meta/strategy',
-      metaTest: 'GET /api/meta/test',
-      multiSearchHealth: 'GET /api/multisearch/health',
-      multiSearch: 'POST /api/multisearch/search',
-      multiSearchTest: 'GET /api/multisearch/test',
-      multiSearchCompare: 'POST /api/multisearch/compare',
-      engineSelection: 'GET /api/multisearch/engines'
+    architecture: {
+      stage1: 'WebSearch Meta-Prompting',
+      stage2: 'Multi-Engine SERP Execution',
+      stage3: 'AI Analysis & Integration'
     },
-    documentation: 'See CLAUDE.md for usage instructions'
+    endpoints: {
+      search: 'POST /api/enhanced/search - Complete 3-stage workflow',
+      strategy: 'POST /api/enhanced/strategy - Stage 1 only (meta-prompting)',
+      test: 'GET /api/enhanced/test - Test with sample data',
+      info: 'GET /api/enhanced/info - Workflow information',
+      health: 'GET /api/health - Health check'
+    },
+    documentation: 'See CLAUDE.md for detailed usage instructions'
   });
 });
 
@@ -116,14 +107,18 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 // Start server
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🚀 Gemini Search API server running on port ${PORT}`);
+    console.log(`🚀 3-Stage OSINT Workflow API server running on port ${PORT}`);
     console.log(`📖 Health check: http://localhost:${PORT}/api/health`);
-    console.log(`🔍 Search endpoint: http://localhost:${PORT}/api/search`);
-    console.log(`🪝 Legacy webhook: http://localhost:${PORT}/webhook/search`);
+    console.log(`🔍 Complete workflow: http://localhost:${PORT}/api/enhanced/search`);
+    console.log(`🧠 Meta-prompting only: http://localhost:${PORT}/api/enhanced/strategy`);
+    console.log(`🧪 Test workflow: http://localhost:${PORT}/api/enhanced/test`);
 
     // Check if environment variables are set
     if (!process.env.GEMINI_API_KEY) {
       console.warn('⚠️  GEMINI_API_KEY environment variable is not set');
+    }
+    if (!process.env.BRIGHT_DATA_API_KEY) {
+      console.warn('⚠️  BRIGHT_DATA_API_KEY environment variable is not set');
     }
   });
 }

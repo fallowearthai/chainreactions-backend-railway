@@ -108,14 +108,26 @@ export interface SearchRequest {
 }
 
 export interface SearchResult {
+  success: boolean;
+  data?: OSINTFinding[];
+  metadata?: {
+    total_risk_entities?: number;
+    analysis_timestamp?: string;
+    search_execution_summary?: any;
+    overall_confidence?: number;
+    methodology?: string;
+  };
+  sources?: string[];
+  error?: string;
+}
+
+export interface OSINTFinding {
   risk_item: string;
   institution_A: string;
   relationship_type: 'Direct' | 'Indirect' | 'Significant Mention' | 'Unknown' | 'No Evidence Found';
   finding_summary: string;
-  potential_intermediary_B: string[] | null;
+  potential_intermediary_B?: string;
   sources: string[];
-  search_completeness?: string;
-  confidence_level?: string;
 }
 
 export interface FormattedSearchResult {
