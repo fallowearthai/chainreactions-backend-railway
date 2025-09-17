@@ -44,9 +44,13 @@ export class WebSearchMetaPromptService {
     const entityVerificationResults: any[] = [];
 
     try {
-      // Step 1: Verify Target Institution
+      // Step 1: Verify Target Institution (with context about risk entities)
       console.log(`Verifying target institution: ${Target_institution}`);
-      const targetInstitutionInfo = await this.performEntityVerification(Target_institution, Location);
+      const targetInstitutionInfo = await this.performEntityVerification(
+        Target_institution,
+        Location,
+        `Risk entities to investigate: ${Risk_Entity}`
+      );
       entityVerificationResults.push({
         type: 'target_institution',
         ...targetInstitutionInfo
@@ -55,10 +59,14 @@ export class WebSearchMetaPromptService {
       // Small delay between API calls
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Step 2: Verify Risk Entities (limit to first 2 to manage API costs)
+      // Step 2: Verify Risk Entities (with context about target institution)
       for (const riskEntity of riskEntities.slice(0, 2)) {
         console.log(`Verifying risk entity: ${riskEntity}`);
-        const riskEntityInfo = await this.performEntityVerification(riskEntity, Location);
+        const riskEntityInfo = await this.performEntityVerification(
+          riskEntity,
+          Location,
+          Target_institution
+        );
         entityVerificationResults.push({
           type: 'risk_entity',
           ...riskEntityInfo
@@ -75,11 +83,15 @@ export class WebSearchMetaPromptService {
     return entityVerificationResults;
   }
 
-  private async performEntityVerification(entityName: string, location: string): Promise<any> {
+  private async performEntityVerification(
+    entityName: string,
+    location: string,
+    targetInstitution?: string
+  ): Promise<any> {
     try {
       console.log(`Verifying entity: ${entityName} in ${location}`);
 
-      const entityInfo = await this.geminiService.verifyCompanyEntity(entityName, location);
+      const entityInfo = await this.geminiService.verifyCompanyEntity(entityName, location, targetInstitution);
 
       return {
         entityName,
@@ -103,120 +115,193 @@ export class WebSearchMetaPromptService {
     entityVerificationData: any[]
   ): Promise<MetaPromptResult> {
 
-    const prompt = this.buildAnalysisPrompt(request, entityVerificationData);
-
     try {
-      const response = await this.geminiService.generateContent(
-        [{
-          parts: [{ text: prompt }]
-        }],
-        undefined, // no system instruction
-        undefined, // no tools
-        {
-          temperature: 0.2,
-          maxOutputTokens: 2048,
-          responseMimeType: "application/json"
-        }
-      );
+      console.log('Extracting keywords from entity verification results...');
 
-      const resultText = response.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!resultText) {
-        throw new Error('No response text from Gemini API');
-      }
+      // Extract all keywords from entity verification results
+      const allKeywords = this.extractKeywordsFromEntities(entityVerificationData);
+      const combinedKeywords = this.combineKeywords(request, allKeywords);
 
-      const result = JSON.parse(resultText);
+      // Calculate confidence based on AI analysis and entity verification quality
+      const confidence = this.calculateConfidence(entityVerificationData, allKeywords.relationship_likelihood);
 
       return {
-        searchKeywords: result.searchKeywords || [],
-        searchEngines: this.selectOptimalEngines(request.Location, result),
+        searchKeywords: combinedKeywords.searchKeywords,
+        searchEngines: combinedKeywords.searchEngines,
         searchStrategy: {
-          primaryTerms: result.searchStrategy?.primaryTerms || [],
-          secondaryTerms: result.searchStrategy?.secondaryTerms || [],
-          exclusionTerms: result.searchStrategy?.exclusionTerms || [],
+          primaryTerms: combinedKeywords.primaryTerms,
+          secondaryTerms: combinedKeywords.secondaryTerms,
+          exclusionTerms: combinedKeywords.exclusionTerms,
           timeRange: this.formatTimeRange(request),
-          languages: result.searchStrategy?.languages || ['en'],
-          regions: result.searchStrategy?.regions || []
+          languages: combinedKeywords.languages,
+          regions: [this.getCountryCode(request.Location)]
         },
-        confidence: result.confidence || 0.5
+        confidence: confidence
       };
 
     } catch (error) {
-      console.warn('Failed to analyze WebSearch data with AI:', error);
+      console.warn('Failed to extract keywords from entity verification data:', error);
       return this.generateFallbackStrategy(request);
     }
   }
 
-  private buildAnalysisPrompt(request: SearchRequest, entityVerificationData: any[]): string {
-    const { Target_institution, Risk_Entity, Location, Start_Date, End_Date } = request;
+  private extractKeywordsFromEntities(entityVerificationData: any[]): any {
+    const extractedKeywords = {
+      search_keywords: [] as string[],
+      languages: [] as string[],
+      source_engines: [] as string[],
+      relationship_likelihood: 'low' as string
+    };
 
-    const entitySummary = entityVerificationData.map(entity => {
-      const result = entity.verificationResult;
-      return `Entity Type: ${entity.type}
-Entity Name: ${entity.entityName}
-Verification Result:
-- Original Name: ${result.original_name || 'N/A'}
-- English Name: ${result.english_name || 'N/A'}
-- Description: ${result.description || 'N/A'}
-- Headquarters: ${result.headquarters || 'N/A'}
-- Sectors: ${result.sectors ? result.sectors.join(', ') : 'N/A'}
-- Similar Name Companies Exist: ${result.similar_name_companies_exist || false}
-- Past Names: ${result.past_names ? result.past_names.join(', ') : 'N/A'}`;
-    }).join('\n\n');
+    for (const entity of entityVerificationData) {
+      const verificationResult = entity.verificationResult;
 
-    return `You are an expert OSINT analyst. Based on the following verified entity information, generate optimized search keywords and strategy for SERP API execution to find relationships between these entities.
+      if (verificationResult && !verificationResult.error) {
+        // Extract from new JSON structure
+        if (verificationResult.search_strategy) {
+          const strategy = verificationResult.search_strategy;
 
-INVESTIGATION TARGET:
-- Institution: ${Target_institution}
-- Risk Entities: ${Risk_Entity}
-- Location: ${Location}
-- Time Range: ${Start_Date || 'N/A'} to ${End_Date || 'N/A'}
+          if (strategy.search_keywords) {
+            extractedKeywords.search_keywords.push(...strategy.search_keywords);
+          }
+          if (strategy.languages) {
+            extractedKeywords.languages.push(...strategy.languages);
+          }
+          if (strategy.source_engine) {
+            extractedKeywords.source_engines.push(...strategy.source_engine);
+          }
+          if (strategy.relationship_likelihood) {
+            // Use the highest likelihood found
+            const currentLikelihood = extractedKeywords.relationship_likelihood;
+            const newLikelihood = strategy.relationship_likelihood;
 
-VERIFIED ENTITY INFORMATION:
-${entitySummary}
+            if (newLikelihood === 'high' ||
+                (newLikelihood === 'medium' && currentLikelihood === 'low')) {
+              extractedKeywords.relationship_likelihood = newLikelihood;
+            }
+          }
+        }
+      }
+    }
 
-TASK: Generate a comprehensive search strategy for SERP API execution that will find documented relationships, partnerships, or significant connections between the target institution and risk entities.
-
-Return JSON with this exact structure:
-{
-  "searchKeywords": [
-    "Precise keyword combinations optimized for SERP APIs",
-    "Include entity names, product names, and relationship terms",
-    "Consider both English and local language terms",
-    "Maximum 15 keywords"
-  ],
-  "searchStrategy": {
-    "primaryTerms": ["Most important search terms based on web intelligence"],
-    "secondaryTerms": ["Alternative search approaches"],
-    "exclusionTerms": ["Terms to exclude to avoid noise"],
-    "languages": ["en", "zh", "etc - based on location"],
-    "regions": ["Country codes for geo-targeting"]
-  },
-  "entityInsights": {
-    "institutionType": "university|corporation|government|ngo|other",
-    "riskCategory": "military|technology|academic|financial|other",
-    "keyProducts": ["Products/services discovered from web search"],
-    "keyPersonnel": ["Important people mentioned"],
-    "subsidiaries": ["Related entities found"]
-  },
-  "confidence": 0.8
-}
-
-Focus on:
-1. Use verified official entity names and past names from the verification results
-2. Incorporate specific sectors, products, and business descriptions from verified data
-3. Consider headquarters locations and regional presence from verified information
-4. Generate search terms that combine entity names with their specific business activities
-5. Use both English and local language terms based on the geographic location
-6. Account for potential name variations and similar companies if they exist
-
-Generate search terms that are:
-- Specific enough to find real documented relationships
-- Based on verified entity information rather than assumptions
-- Comprehensive enough to capture direct partnerships, indirect connections, and significant mentions
-- Optimized for the business sectors and geographic regions involved`;
+    return extractedKeywords;
   }
 
-  private selectOptimalEngines(location: string, analysisResult: any): string[] {
+  private combineKeywords(request: SearchRequest, extractedKeywords: any): any {
+    const { Target_institution, Risk_Entity } = request;
+    const riskEntities = Risk_Entity.split(',').map(e => e.trim());
+
+    // Use AI-generated keywords as primary source
+    let searchKeywords = [...new Set(extractedKeywords.search_keywords || [])];
+
+    // If no AI keywords available, generate fallback keywords
+    if (searchKeywords.length === 0) {
+      searchKeywords = [
+        // Direct institution + risk entity combinations
+        ...riskEntities.map(entity => `"${Target_institution}" "${entity}"`),
+        ...riskEntities.map(entity => `"${Target_institution}" ${entity} partnership`),
+        ...riskEntities.map(entity => `"${Target_institution}" ${entity} collaboration`),
+        `${Target_institution} technology transfer`,
+        `${Target_institution} research collaboration`
+      ];
+    }
+
+    // Determine search engines based on AI recommendation or fallback
+    const searchEngines = extractedKeywords.source_engines.length > 0
+      ? this.mapToSupportedEngines(extractedKeywords.source_engines)
+      : this.selectOptimalEngines(request.Location);
+
+    // Get languages from AI or fallback
+    const languages = extractedKeywords.languages.length > 0
+      ? extractedKeywords.languages
+      : this.getLanguagesForLocation(request.Location);
+
+    return {
+      searchKeywords: searchKeywords.slice(0, 15), // Limit to 15 keywords
+      primaryTerms: searchKeywords.slice(0, 8),
+      secondaryTerms: [], // Simplified structure
+      exclusionTerms: ['job', 'career', 'hiring', 'recruitment', 'advertisement'],
+      searchEngines: searchEngines,
+      languages: languages,
+      relationship_likelihood: extractedKeywords.relationship_likelihood
+    };
+  }
+
+  private mapToSupportedEngines(aiEngines: string[]): string[] {
+    const engineMap: { [key: string]: string } = {
+      'google': 'google',
+      'baidu': 'baidu',
+      'yandex': 'yandex',
+      'bing': 'bing',
+      'duckduckgo': 'duckduckgo',
+      'duoduogo': 'duckduckgo' // Map to supported engine
+    };
+
+    const mappedEngines = aiEngines
+      .map(engine => engineMap[engine.toLowerCase()])
+      .filter(engine => engine);
+
+    // Ensure we have at least Google as fallback
+    if (mappedEngines.length === 0) {
+      return ['google', 'bing'];
+    }
+
+    return [...new Set(mappedEngines)];
+  }
+
+  private calculateConfidence(entityVerificationData: any[], relationshipLikelihood?: string): number {
+    // Primary confidence based on relationship likelihood from AI analysis
+    let baseConfidence = 0.3; // Default low confidence
+
+    if (relationshipLikelihood) {
+      switch (relationshipLikelihood.toLowerCase()) {
+        case 'high':
+          baseConfidence = 0.85;
+          break;
+        case 'medium':
+          baseConfidence = 0.65;
+          break;
+        case 'low':
+          baseConfidence = 0.35;
+          break;
+      }
+    }
+
+    // Adjust based on entity verification quality
+    let validEntities = 0;
+    let verificationBonus = 0;
+
+    for (const entity of entityVerificationData) {
+      const result = entity.verificationResult;
+      if (result && !result.error) {
+        validEntities++;
+        // Bonus for having search strategy data
+        if (result.search_strategy && result.search_strategy.search_keywords) {
+          verificationBonus += 0.1;
+        }
+      }
+    }
+
+    // Apply verification bonus (max 0.2)
+    const finalConfidence = Math.min(baseConfidence + Math.min(verificationBonus, 0.2), 0.95);
+
+    return validEntities > 0 ? finalConfidence : 0.3;
+  }
+
+  private getLanguagesForLocation(location: string): string[] {
+    const loc = location.toLowerCase();
+
+    if (loc.includes('china') || loc.includes('中国')) return ['en', 'zh'];
+    if (loc.includes('russia') || loc.includes('russian')) return ['en', 'ru'];
+    if (loc.includes('japan')) return ['en', 'ja'];
+    if (loc.includes('france')) return ['en', 'fr'];
+    if (loc.includes('germany')) return ['en', 'de'];
+
+    return ['en'];
+  }
+
+
+  private selectOptimalEngines(location: string): string[] {
     const loc = location.toLowerCase();
 
     // Start with default engines
@@ -257,7 +342,7 @@ Generate search terms that are:
         `${Target_institution} technology transfer`,
         `${Target_institution} research collaboration`
       ],
-      searchEngines: this.selectOptimalEngines(Location, {}),
+      searchEngines: this.selectOptimalEngines(Location),
       searchStrategy: {
         primaryTerms: [
           `"${Target_institution}"`,

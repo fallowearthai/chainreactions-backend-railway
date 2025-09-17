@@ -94,25 +94,62 @@ export class GeminiService {
     ];
 
     const generationConfig: GeminiGenerationConfig = {
-      temperature: 0.2,
+      temperature: 0.1,
       maxOutputTokens: 65536,
       topP: 0.95,
       topK: 10,
       thinkingConfig: {
-        thinkingBudget: 12000
+        thinkingBudget: -1
       }
     };
 
     return this.generateContent(contents, systemInstructionObj, tools, generationConfig);
   }
 
-  async verifyCompanyEntity(companyName: string, location: string): Promise<any> {
-    const prompt = `Act as a professional business intelligence analyst. Given a specific company name and address, your goal is to accurately identify the correct company entity. Search authoritative sources, including the official company website, government registries, reputable business directories, SEC filings, press releases, and partnership announcements. If multiple companies with similar or identical names are found, set 'similar_name_companies_exist' to true and provide a list of these entities with distinguishing details. For the identified company, return a JSON object with these fields: original_name (as registered), english_name, past_names (list of previous names), description (concise summary of main activities and industry in English), headquarters (full registered address), sectors (primary business sectors), similar_name_companies_exist (true/false). Ensure all data is current, accurate, and cite the source URL for each field. Format your response as a single, well-structured JSON object. Company_name = ${companyName}, Company_location = ${location}`;
+  async verifyCompanyEntity(companyName: string, location: string, targetInstitution?: string): Promise<any> {
+    const companyA = companyName;
+    const companyB = targetInstitution || 'Unknown';
+
+    // User Prompt from prompt.md
+    const userPrompt = `Analyze the following entity entities and generate an optimized relationship search strategy:
+Entity A Information:
+Entity Name: ${companyA}
+Entity B Information:
+Entity Name: ${companyB}
+Location:${location}`;
 
     try {
+      // System Prompt from prompt.md
+      const systemInstruction = {
+        parts: [{ text: `You are an expert business intelligence analyst specializing in entity identification and open-source relationship analysis. Given two entity names and their locations, your task is to: (1) precisely identify and verify each  entity, and (2) develop actionable search strategies to uncover any documented connections between them.
+
+Step 1: Entity Verification
+- For each entity, use authoritative sources such as the official website, government registries, reputable business directories, SEC filings, press releases, and partnership announcements to confirm the correct entity.
+- For each verified entity, return a single JSON object with these fields:
+  - original_name (as legally registered)
+  - description (concise summary of core activities and industry, in English)
+  - sectors (primary business sectors)
+- Ensure all information is up-to-date and accurate.
+
+Step 2: Search Strategy for Connections
+- Based on the verified entity data, analyze the institutional type, risk category, geographic focus, and likelihood of a relationship between the two entities.
+- Create an optimized search strategy and return a JSON object with the following structure:
+  {
+    "search_strategy": {
+      "search_keywords": ["string"], // 3-5 targeted keyword combinations, including English and local language search terms
+      "languages": ["string"], // recommended search languages based on entity locations (e.g. en, zh, jp)
+      "source_engine": ["string"], // preferred source engine (e.g. google, baidu, yandex, bing, duoduogo)
+      "search_operators": ["string"], // Google search operators to use
+      "relationship_likelihood": "string" // "high", "medium", "low"
+    }
+  }
+- Tailor search strategies to maximize the likelihood of finding documented collaborations, partnerships, or significant mentions, considering both geographic and cultural context.
+- Return all outputs as clearly structured JSON objects, with no additional commentary.` }]
+      };
+
       const response = await this.generateContent(
-        [{ role: 'user', parts: [{ text: prompt }] }],
-        undefined,
+        [{ role: 'user', parts: [{ text: userPrompt }] }],
+        systemInstruction,
         [{ googleSearch: {} }],
         {
           temperature: 0.1,
