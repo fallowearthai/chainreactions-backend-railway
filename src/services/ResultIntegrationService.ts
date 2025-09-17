@@ -103,7 +103,7 @@ export class ResultIntegrationService {
         analysis_metadata: {
           confidence_score: analysis.confidence_score || 0.1,
           sources_analyzed: relevantResults.length,
-          search_keywords_used: metaPromptResult.searchKeywords,
+          search_keywords_used: metaPromptResult.search_strategy.search_keywords,
           engines_used: serpResults.executionSummary.enginesUsed,
           analysis_timestamp: new Date().toISOString()
         }
@@ -165,8 +165,8 @@ SEARCH RESULTS TO ANALYZE:
 ${resultsText}
 
 ANALYSIS CONTEXT:
-- Meta-prompt confidence: ${metaPromptResult.confidence}
-- Search keywords used: ${metaPromptResult.searchKeywords.join(', ')}
+- Relationship likelihood: ${metaPromptResult.search_strategy.relationship_likelihood}
+- Search keywords used: ${metaPromptResult.search_strategy.search_keywords.join(', ')}
 - Sources analyzed: ${relevantResults.length}
 
 TASK: Determine the relationship type and provide detailed analysis.

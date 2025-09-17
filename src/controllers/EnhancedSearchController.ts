@@ -28,8 +28,8 @@ export class EnhancedSearchController {
       console.log('Stage 1: Generating search strategy with WebSearch...');
       const metaPromptResult = await this.metaPromptService.generateSearchStrategy(searchRequest);
 
-      console.log(`Generated ${metaPromptResult.searchKeywords.length} keywords for ${metaPromptResult.searchEngines.length} engines`);
-      console.log(`Meta-prompt confidence: ${metaPromptResult.confidence}`);
+      console.log(`Generated ${metaPromptResult.search_strategy.search_keywords.length} keywords for ${metaPromptResult.search_strategy.source_engine.length} engines`);
+      console.log(`Relationship likelihood: ${metaPromptResult.search_strategy.relationship_likelihood}`);
 
       // Stage 2: Execute SERP searches based on strategy
       console.log('Stage 2: Executing SERP searches...');
@@ -52,13 +52,17 @@ export class EnhancedSearchController {
         ...finalResult,
         workflow_metadata: {
           execution_time_ms: totalTime,
-          meta_prompt_confidence: metaPromptResult.confidence,
+          relationship_likelihood: metaPromptResult.search_strategy.relationship_likelihood,
           serp_execution_summary: serpResults.executionSummary,
           search_strategy: {
-            keywords_generated: metaPromptResult.searchKeywords.length,
-            engines_used: metaPromptResult.searchEngines,
-            primary_terms: metaPromptResult.searchStrategy.primaryTerms,
-            languages: metaPromptResult.searchStrategy.languages
+            keywords_generated: metaPromptResult.search_strategy.search_keywords.length,
+            engines_used: metaPromptResult.search_strategy.source_engine,
+            search_keywords: metaPromptResult.search_strategy.search_keywords,
+            languages: metaPromptResult.search_strategy.languages
+          },
+          entity_info: {
+            target: metaPromptResult.entity_a,
+            risk: metaPromptResult.entity_b
           }
         }
       };
@@ -127,9 +131,9 @@ export class EnhancedSearchController {
         success: true,
         test_result: {
           meta_prompt_working: true,
-          keywords_generated: metaPromptResult.searchKeywords.length,
-          engines_selected: metaPromptResult.searchEngines,
-          confidence: metaPromptResult.confidence,
+          keywords_generated: metaPromptResult.search_strategy.search_keywords.length,
+          engines_selected: metaPromptResult.search_strategy.source_engine,
+          relationship_likelihood: metaPromptResult.search_strategy.relationship_likelihood,
           execution_time_ms: executionTime
         },
         sample_strategy: metaPromptResult,

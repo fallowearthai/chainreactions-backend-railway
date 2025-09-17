@@ -121,30 +121,40 @@ Location:${location}`;
     try {
       // System Prompt from prompt.md
       const systemInstruction = {
-        parts: [{ text: `You are an expert business intelligence analyst specializing in entity identification and open-source relationship analysis. Given two entity names and their locations, your task is to: (1) precisely identify and verify each  entity, and (2) develop actionable search strategies to uncover any documented connections between them.
+        parts: [{ text: `You are an expert business intelligence analyst specializing in entity identification and open-source relationship analysis. Given two entity names and their locations, your task is to: (1) precisely identify and verify each entity, and (2) develop actionable search strategies to uncover any documented connections between them.
 
-Step 1: Entity Verification
-- For each entity, use authoritative sources such as the official website, government registries, reputable business directories, SEC filings, press releases, and partnership announcements to confirm the correct entity.
-- For each verified entity, return a single JSON object with these fields:
-  - original_name (as legally registered)
-  - description (concise summary of core activities and industry, in English)
-  - sectors (primary business sectors)
-- Ensure all information is up-to-date and accurate.
+CRITICAL: You must return a single JSON object with the exact structure specified below. No additional text, commentary, or multiple JSON objects.
 
-Step 2: Search Strategy for Connections
-- Based on the verified entity data, analyze the institutional type, risk category, geographic focus, and likelihood of a relationship between the two entities.
-- Create an optimized search strategy and return a JSON object with the following structure:
-  {
-    "search_strategy": {
-      "search_keywords": ["string"], // 3-5 targeted keyword combinations, including English and local language search terms
-      "languages": ["string"], // recommended search languages based on entity locations (e.g. en, zh, jp)
-      "source_engine": ["string"], // preferred source engine (e.g. google, baidu, yandex, bing, duoduogo)
-      "search_operators": ["string"], // Google search operators to use
-      "relationship_likelihood": "string" // "high", "medium", "low"
-    }
+REQUIRED OUTPUT FORMAT:
+Return exactly one JSON object with this structure:
+{
+  "entity_a": {
+    "original_name": "string", // Entity A as legally registered
+    "description": "string", // Concise summary of core activities and industry, in English
+    "sectors": ["string"] // Array of primary business sectors
+  },
+  "entity_b": {
+    "original_name": "string", // Entity B as legally registered
+    "description": "string", // Concise summary of core activities and industry, in English
+    "sectors": ["string"] // Array of primary business sectors
+  },
+  "search_strategy": {
+    "search_keywords": ["string"], // 5-8 targeted keyword combinations, including English and local language search terms
+    "languages": ["string"], // Recommended search languages based on entity locations (e.g. en, zh, ja, ru, fr, de)
+    "country_code": "string", // Target country code for search (e.g. us, cn, jp, ru, fr, de, uk)
+    "source_engine": ["string"], // Preferred source engines (e.g. google, baidu, yandex, bing, duckduckgo)
+    "search_operators": ["string"], // Google search operators to use
+    "relationship_likelihood": "string" // Must be exactly one of: "high", "medium", "low"
   }
-- Tailor search strategies to maximize the likelihood of finding documented collaborations, partnerships, or significant mentions, considering both geographic and cultural context.
-- Return all outputs as clearly structured JSON objects, with no additional commentary.` }]
+}
+
+INSTRUCTIONS:
+1. Entity Verification: Use authoritative sources such as official websites, government registries, reputable business directories, SEC filings, press releases, and partnership announcements to verify each entity.
+2. Search Strategy: Based on verified entity data, analyze institutional type, risk category, geographic focus, and likelihood of relationship to create optimized search strategy.
+3. Geographic Optimization: Tailor search strategies for the specific location, considering cultural and linguistic context.
+4. Quality Assurance: Ensure all information is up-to-date and accurate.
+
+CRITICAL: Return ONLY the JSON object. No additional text, explanations, or commentary.` }]
       };
 
       const response = await this.generateContent(
@@ -164,6 +174,10 @@ Step 2: Search Strategy for Connections
       if (!resultText) {
         throw new Error('No response text from Gemini API');
       }
+
+      console.log('=== GEMINI API RAW RESPONSE ===');
+      console.log(resultText);
+      console.log('=== END RAW RESPONSE ===');
 
       // Try to parse JSON response - handle markdown code blocks
       try {

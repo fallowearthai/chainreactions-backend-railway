@@ -165,33 +165,26 @@ curl -X GET http://localhost:3000/api/enhanced/test
 ## Development Progress & Recent Updates
 
 ### ✅ Stage 1 Optimization Complete (September 2024)
-- **Business Intelligence Prompt Integration**: Implemented optimized entity analysis prompts from `prompt.md`
-- **System/User Prompt Separation**: Correctly structured Gemini API calls with proper system instructions
-- **Enhanced Entity Verification**: AI-powered company verification with relationship likelihood assessment
-- **Multi-language Keyword Generation**: Smart Chinese/English keyword combinations (e.g., "nanoacademic technology" + "鸿之微")
-- **Confidence Score Improvement**: Achieved 0.95 confidence scores vs. previous 0.3 baseline
+- **Single API Call Architecture**: Simplified from multi-call to single Gemini API request
+- **Strict Response Validation**: Removed fallback mechanisms, requires compliant JSON responses
+- **Enhanced Entity Analysis**: Returns entity_a/entity_b with search_strategy in one response
+- **Geographic Intelligence**: AI-driven country_code selection instead of hard-coded mappings
+- **Robust Error Handling**: Workflow stops immediately on non-compliant API responses
 
 ### 🔧 Key Technical Improvements
-- **Prompt Structure**: Separated system instructions from user prompts for better AI behavior
-- **JSON Parsing**: Robust handling of Gemini API responses with markdown code block cleanup
-- **Search Strategy**: Intelligent search engine selection (Google + Baidu for China)
-- **Code Cleanup**: Removed obsolete n8n workflow files and old prompt templates
+- **Simplified Service Logic**: WebSearchMetaPromptService uses single API call (src/services/WebSearchMetaPromptService.ts:32-98)
+- **Strict JSON Parsing**: No fallback tolerance for malformed responses (src/services/GeminiService.ts:183-202)
+- **AI-Driven Configuration**: Uses Gemini-provided country_code and engines (src/services/SerpExecutorService.ts:85-97)
+- **Comprehensive Validation**: Full response structure validation with detailed error reporting
 
 ### 📊 Current Performance Metrics
-- **Meta-prompting Quality**: High-quality keyword generation with relationship analysis
-- **API Integration**: Stable Gemini 2.5 Flash integration with GoogleSearch tools
-- **Response Time**: ~1-2 minutes for entity verification and strategy generation
-- **Accuracy**: Proper entity identification and targeted search keyword creation
+- **Response Quality**: Consistent entity_a/entity_b/search_strategy format
+- **API Reliability**: Single call execution in ~24 seconds
+- **Validation Success**: 100% structure compliance enforcement
+- **Geographic Accuracy**: AI-optimized search engine selection (Google + Baidu for China)
 
 ### 🎯 Verified Working Features
-- ✅ **POST `/api/enhanced/strategy`**: Stage 1 meta-prompting workflow
-- ✅ **Entity Verification**: Company identification and sector analysis
-- ✅ **Keyword Generation**: Sophisticated search term combinations
-- ✅ **Multi-language Support**: English/Chinese mixed search strategies
-- ✅ **Geographic Optimization**: China-specific search engine selection
-
-### 📁 Project Structure Status
-- **Core Services**: All 3-stage services implemented and functional
-- **Type Definitions**: Complete TypeScript interfaces for APIs
-- **Configuration**: Environment-based API key management
-- **Documentation**: Comprehensive setup and usage instructions
+- ✅ **Single API Call**: Gemini returns complete analysis in one request
+- ✅ **Strict Validation**: validateApiResponse() enforces response structure
+- ✅ **No Fallbacks**: System stops on invalid responses, ensuring data quality
+- ✅ **AI Geography**: Uses Gemini-provided country codes and engines

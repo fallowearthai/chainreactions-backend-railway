@@ -47,7 +47,7 @@ export class SerpExecutorService {
       // Execute searches based on meta prompt strategy
       const searchTasks = this.generateSearchTasks(metaPromptResult);
 
-      console.log(`Executing ${searchTasks.length} search tasks across ${metaPromptResult.searchEngines.length} engines`);
+      console.log(`Executing ${searchTasks.length} search tasks across ${metaPromptResult.search_strategy.source_engine.length} engines`);
 
       // Execute searches in parallel with concurrency limit
       const results = await this.executeSearchesWithConcurrency(searchTasks, 3);
@@ -79,19 +79,18 @@ export class SerpExecutorService {
 
   private generateSearchTasks(metaPromptResult: MetaPromptResult): SearchTask[] {
     const tasks: SearchTask[] = [];
-    const { searchKeywords, searchEngines, searchStrategy } = metaPromptResult;
+    const { search_strategy } = metaPromptResult;
 
     // Generate tasks for each keyword on each engine
-    for (const keyword of searchKeywords) {
-      for (const engine of searchEngines) {
+    for (const keyword of search_strategy.search_keywords) {
+      for (const engine of search_strategy.source_engine) {
         tasks.push({
           keyword,
           engine,
           options: {
             num_results: 20,
-            country: searchStrategy.regions[0] || 'us',
-            language: searchStrategy.languages[0] || 'en',
-            timeRange: searchStrategy.timeRange
+            country: search_strategy.country_code || 'us',
+            language: search_strategy.languages[0] || 'en',
           }
         });
       }
@@ -100,6 +99,7 @@ export class SerpExecutorService {
     // Limit total tasks to manage API costs and execution time
     return tasks.slice(0, 40); // Max 40 searches
   }
+
 
   private async executeSearchesWithConcurrency(
     tasks: SearchTask[],
