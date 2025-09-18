@@ -169,6 +169,65 @@ export class EnhancedSearchController {
     };
   }
 
+  async testStage2Only(req: Request, res: Response): Promise<void> {
+    try {
+      // Expect the request body to contain a Stage 1 result
+      if (!req.body.entity_a || !req.body.entity_b || !req.body.search_strategy) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid Stage 1 result format. Expected entity_a, entity_b, and search_strategy'
+        });
+        return;
+      }
+
+      const metaPromptResult = req.body;
+
+      // Create a minimal search request for Stage 2 execution
+      const searchRequest: SearchRequest = {
+        Target_institution: metaPromptResult.entity_a.original_name,
+        Risk_Entity: metaPromptResult.entity_b.original_name,
+        Location: "China", // Default for test
+      };
+
+      console.log('Testing Stage 2 execution with stored Stage 1 result...');
+      console.log(`Entity A: ${metaPromptResult.entity_a.original_name}`);
+      console.log(`Entity B: ${metaPromptResult.entity_b.original_name}`);
+      console.log(`Keywords: ${metaPromptResult.search_strategy.search_keywords.length}`);
+      console.log(`Engines: ${metaPromptResult.search_strategy.source_engine.join(', ')}`);
+
+      const startTime = Date.now();
+
+      // Execute Stage 2 only
+      const serpResults = await this.serpExecutorService.executeSearchStrategy(searchRequest, metaPromptResult);
+
+      const executionTime = Date.now() - startTime;
+
+      res.status(200).json({
+        success: true,
+        stage: 2,
+        test_result: {
+          stage2_execution_time_ms: executionTime,
+          total_queries: serpResults.executionSummary.totalQueries,
+          successful_queries: serpResults.executionSummary.successfulQueries,
+          total_results: serpResults.executionSummary.totalResults,
+          engines_used: serpResults.executionSummary.enginesUsed,
+          engine_success_rates: serpResults.executionSummary.performanceMetrics?.engineSuccessRates
+        },
+        serp_results: serpResults,
+        message: 'Stage 2 test completed successfully'
+      });
+
+    } catch (error) {
+      console.error('Stage 2 test failed:', error);
+
+      res.status(500).json({
+        success: false,
+        error: 'Stage 2 test failed',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
   // Helper endpoint to get workflow status and capabilities
   async getWorkflowInfo(req: Request, res: Response): Promise<void> {
     try {

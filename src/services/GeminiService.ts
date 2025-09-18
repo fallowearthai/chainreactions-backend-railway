@@ -129,12 +129,12 @@ REQUIRED OUTPUT FORMAT:
 Return exactly one JSON object with this structure:
 {
   "entity_a": {
-    "original_name": "string", // Entity A as legally registered
+    "original_name": "string", // Entity A as legally registered name in its local language
     "description": "string", // Concise summary of core activities and industry, in English
     "sectors": ["string"] // Array of primary business sectors
   },
   "entity_b": {
-    "original_name": "string", // Entity B as legally registered
+    "original_name": "string", // Entity B as legally registered name in its local language
     "description": "string", // Concise summary of core activities and industry, in English
     "sectors": ["string"] // Array of primary business sectors
   },
@@ -143,7 +143,6 @@ Return exactly one JSON object with this structure:
     "languages": ["string"], // Recommended search languages based on entity locations (e.g. en, zh, ja, ru, fr, de)
     "country_code": "string", // Target country code for search (e.g. us, cn, jp, ru, fr, de, uk)
     "source_engine": ["string"], // Preferred source engines (e.g. google, baidu, yandex, bing, duckduckgo)
-    "search_operators": ["string"], // Google search operators to use
     "relationship_likelihood": "string" // Must be exactly one of: "high", "medium", "low"
   }
 }

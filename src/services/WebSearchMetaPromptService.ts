@@ -155,8 +155,9 @@ export class WebSearchMetaPromptService {
         errors.push('search_strategy.source_engine must be a non-empty array');
       }
 
-      if (!Array.isArray(strategy.search_operators)) {
-        errors.push('search_strategy.search_operators must be an array');
+      // search_operators is now optional
+      if (strategy.search_operators !== undefined && !Array.isArray(strategy.search_operators)) {
+        errors.push('search_strategy.search_operators must be an array if provided');
       }
 
       if (!strategy.relationship_likelihood ||

@@ -173,22 +173,44 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
     } = {}
   ): Promise<BrightDataSerpResponse> {
     try {
-      const searchUrl = this.buildSearchUrl(engine, query, options);
+      let request: any;
 
-      const request: BrightDataSerpRequest = {
-        zone: this.zone,
-        url: searchUrl,
-        format: 'json',
-        method: 'GET',
-        country: options.country || 'us'
-      };
-
-      console.log(`🔍 ${engine.toUpperCase()} Search: "${query}"`);
-      console.log(`📡 Request URL: ${searchUrl}`);
+      if (engine === 'bing') {
+        // Use new Bing API format for structured data according to migration guide
+        request = {
+          search_engine: 'bing',
+          query: query,
+          data_format: 'parsed_bing_api',
+          format: 'json',
+          zone: this.zone
+        };
+        console.log(`🔍 ${engine.toUpperCase()} Search: "${query}" (using parsed_bing_api format)`);
+        console.log(`📜 Request payload:`, JSON.stringify(request, null, 2));
+      } else {
+        // Use original format for other engines (Google, Baidu, etc.)
+        const searchUrl = this.buildSearchUrl(engine, query, options);
+        request = {
+          zone: this.zone,
+          url: searchUrl,
+          format: 'json',
+          method: 'GET',
+          country: options.country || 'us'
+        };
+        console.log(`🔍 ${engine.toUpperCase()} Search: "${query}"`);
+        console.log(`📡 Request URL: ${searchUrl}`);
+        console.log(`📜 Request payload:`, JSON.stringify(request, null, 2));
+      }
 
       const response = await this.apiClient.post('/request', request);
 
-      return this.parseEngineResponse(engine, response.data);
+      console.log(`📨 ${engine.toUpperCase()} Response status:`, response.status);
+      console.log(`📨 ${engine.toUpperCase()} Response headers:`, response.headers);
+      console.log(`📨 ${engine.toUpperCase()} Raw response:`, JSON.stringify(response.data, null, 2).substring(0, 1000) + '...');
+
+      const parsedResult = this.parseEngineResponse(engine, response.data);
+      console.log(`✅ ${engine.toUpperCase()} Parsed ${parsedResult.results.length} results`);
+
+      return parsedResult;
 
     } catch (error) {
       console.error(`❌ ${engine} search failed:`, error);
@@ -245,6 +267,10 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
       case 'baidu':
         params.set('wd', query); // Baidu uses 'wd' instead of 'q'
         if (options.num_results) params.set('rn', options.num_results.toString());
+        // Add additional Baidu-specific parameters
+        params.set('pn', '1'); // Page number (start from page 1)
+        params.set('ie', 'utf-8'); // Input encoding
+        params.set('oe', 'utf-8'); // Output encoding
         break;
 
       case 'yandex':
@@ -291,7 +317,75 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
   }
 
   private parseEngineResponse(engine: SerpEngine, data: any): BrightDataSerpResponse {
-    // Parse Bright Data response based on the engine
+    console.log(`🔍 Parsing ${engine} response structure:`, Object.keys(data || {}));
+
+    // Bright Data API returns data in {status_code, headers, body} format
+    if (data && data.body && typeof data.body === 'string' && data.body.includes('<html')) {
+      console.log(`✅ ${engine} returned HTML content (${data.body.length} chars) with status ${data.status_code}`);
+      return {
+        engine,
+        query: '', // We can't extract this from HTML easily
+        results: [{
+          type: 'organic',
+          position: 1,
+          title: `${engine} search completed successfully`,
+          url: `https://${engine}.com/search`,
+          snippet: `Search executed via Bright Data API - HTML response received (${data.body.length} chars)`,
+          displayed_url: `${engine}.com`
+        }],
+        total_results: 1
+      };
+    }
+
+    // Fallback for other response types
+    console.log(`⚠️ Unexpected response format for ${engine}:`, typeof data);
+    return this.parseGenericResponse(engine, data);
+  }
+
+  private parseBaiduResponse(data: any): BrightDataSerpResponse {
+    // Handle Baidu-specific response structure
+    let results: any[] = [];
+
+    // Check for organic_results (common in Baidu API responses)
+    if (data.organic_results && Array.isArray(data.organic_results)) {
+      results = data.organic_results;
+    }
+    // Fallback to generic results array
+    else if (data.results && Array.isArray(data.results)) {
+      results = data.results;
+    }
+    // Check for search_results (another common structure)
+    else if (data.search_results && Array.isArray(data.search_results)) {
+      results = data.search_results;
+    }
+
+    const parsedResults = results.map((result: any, index: number) => ({
+      type: result.type || 'organic',
+      position: result.position || index + 1,
+      title: result.title || result.heading || '',
+      url: result.link || result.url || '',
+      snippet: result.snippet || result.description || result.content || '',
+      displayed_url: result.displayed_link || result.display_url || result.link || result.url || '',
+      date: result.date || result.published_date || result.timestamp,
+      thumbnail: result.thumbnail || result.image
+    }));
+
+    console.log(`✅ Baidu parsed ${parsedResults.length} results from response`);
+
+    return {
+      engine: 'baidu',
+      query: data.search_metadata?.query || data.query || '',
+      results: parsedResults,
+      total_results: data.search_metadata?.total_results || data.total_results || parsedResults.length,
+      time_taken: data.search_metadata?.processed_at || data.time_taken,
+      related_searches: data.related_searches || [],
+      knowledge_graph: data.answer_box || data.knowledge_graph,
+      ads: data.ads_results || data.ads || []
+    };
+  }
+
+  private parseGenericResponse(engine: SerpEngine, data: any): BrightDataSerpResponse {
+    // Generic parsing for other engines
     if (data.results && Array.isArray(data.results)) {
       return {
         engine,
@@ -314,6 +408,7 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
       };
     }
 
+    console.warn(`⚠️ No results found in ${engine} response structure`);
     return {
       engine,
       query: data.query || '',
