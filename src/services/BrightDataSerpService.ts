@@ -107,13 +107,8 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
       selectedEngines.push('baidu');
       reasons.push('Baidu for native Chinese content and local sources');
 
-      selectedEngines.push('bing');
-      reasons.push('Bing for China-accessible international perspective');
-
-      if (riskCategory === 'government' || riskCategory === 'military') {
-        selectedEngines.push('duckduckgo');
-        reasons.push('DuckDuckGo for uncensored China-related content');
-      }
+      selectedEngines.push('duckduckgo');
+      reasons.push('DuckDuckGo for uncensored China-related content');
     }
 
     if (['russia', 'belarus', 'kazakhstan', 'ukraine'].some(region => locationLower.includes(region))) {
@@ -125,18 +120,15 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
     }
 
     if (['iran', 'syria', 'lebanon', 'iraq'].some(region => locationLower.includes(region))) {
-      selectedEngines.push('bing');
-      reasons.push('Bing for Middle East accessibility');
-
       selectedEngines.push('duckduckgo');
       reasons.push('DuckDuckGo for uncensored Middle East content');
     }
 
     // Risk category based additions
     if (riskCategory === 'academic' || riskCategory === 'technology') {
-      if (!selectedEngines.includes('bing')) {
-        selectedEngines.push('bing');
-        reasons.push('Bing for academic and technical content diversity');
+      if (!selectedEngines.includes('yandex')) {
+        selectedEngines.push('yandex');
+        reasons.push('Yandex for academic and technical content diversity');
       }
     }
 
@@ -149,9 +141,9 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
 
     // Default fallback for other regions
     if (selectedEngines.length === 1) {
-      selectedEngines.push('bing');
+      selectedEngines.push('yandex');
       selectedEngines.push('duckduckgo');
-      reasons.push('Bing and DuckDuckGo for additional coverage');
+      reasons.push('Yandex and DuckDuckGo for additional coverage');
     }
 
     return {
@@ -173,33 +165,25 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
     } = {}
   ): Promise<BrightDataSerpResponse> {
     try {
-      let request: any;
-
+      // Skip Bing due to persistent timeout issues with Bright Data API
       if (engine === 'bing') {
-        // Use new Bing API format for structured data according to migration guide
-        request = {
-          search_engine: 'bing',
-          query: query,
-          data_format: 'parsed_bing_api',
-          format: 'json',
-          zone: this.zone
-        };
-        console.log(`🔍 ${engine.toUpperCase()} Search: "${query}" (using parsed_bing_api format)`);
-        console.log(`📜 Request payload:`, JSON.stringify(request, null, 2));
-      } else {
-        // Use original format for other engines (Google, Baidu, etc.)
-        const searchUrl = this.buildSearchUrl(engine, query, options);
-        request = {
-          zone: this.zone,
-          url: searchUrl,
-          format: 'json',
-          method: 'GET',
-          country: options.country || 'us'
-        };
-        console.log(`🔍 ${engine.toUpperCase()} Search: "${query}"`);
-        console.log(`📡 Request URL: ${searchUrl}`);
-        console.log(`📜 Request payload:`, JSON.stringify(request, null, 2));
+        console.warn(`⚠️ Bing search skipped - Bright Data API timeout issues detected`);
+        throw new Error(`Bing search engine not supported - API timeout issues`);
       }
+
+      // Use URL format for all supported engines (Google, Baidu, Yandex, DuckDuckGo)
+      const searchUrl = this.buildSearchUrl(engine, query, options);
+      const request = {
+        zone: this.zone,
+        url: searchUrl,
+        format: 'json',
+        method: 'GET',
+        country: options.country || 'us'
+      };
+
+      console.log(`🔍 ${engine.toUpperCase()} Search: "${query}"`);
+      console.log(`📡 Request URL: ${searchUrl}`);
+      console.log(`📜 Request payload:`, JSON.stringify(request, null, 2));
 
       const response = await this.apiClient.post('/request', request);
 
