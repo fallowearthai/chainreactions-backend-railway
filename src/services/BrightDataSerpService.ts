@@ -244,11 +244,17 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
         };
 
       case 'baidu':
-      case 'duckduckgo':
-        // Other engines use standard JSON format (returns HTML in body)
+        // Baidu uses JSON format (returns HTML in body)
         return {
           ...baseRequest,
           format: 'json'
+        };
+
+      case 'duckduckgo':
+        // DuckDuckGo requires format: 'raw' (not 'json')
+        return {
+          ...baseRequest,
+          format: 'raw'
         };
 
       default:
@@ -335,11 +341,26 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
 
       case 'duckduckgo':
         params.set('q', query);
-        if (options.language && options.country) {
-          params.set('kl', `${options.country}-${options.language}`);
-        } else {
-          params.set('kl', 'us-en');
-        }
+
+        // Map country and language combinations to DuckDuckGo kl codes
+        const countryLangToKl: Record<string, string> = {
+          'cn-zh': 'cn-zh',       // China - Chinese
+          'cn-en': 'cn-zh',       // China fallback to Chinese
+          'ru-ru': 'ru-ru',       // Russia - Russian
+          'ru-en': 'ru-ru',       // Russia fallback to Russian
+          'ir-fa': 'xa-ar',       // Iran -> Saudi Arabia (Arabic, closest available)
+          'ir-en': 'xa-ar',       // Iran fallback
+          'us-en': 'us-en',       // US - English
+          'uk-en': 'uk-en',       // UK - English
+          'de-de': 'de-de',       // Germany - German
+          'fr-fr': 'fr-fr',       // France - French
+          'hk-zh': 'hk-tzh',      // Hong Kong - Traditional Chinese
+          'hk-en': 'hk-tzh',      // Hong Kong fallback
+        };
+
+        const countryLangKey = `${options.country || 'us'}-${options.language || 'en'}`;
+        const klValue = countryLangToKl[countryLangKey] || 'us-en';
+        params.set('kl', klValue);
         if (options.safe_search) {
           const safeMap: Record<string, string> = { strict: '1', moderate: '-1', off: '-2' };
           params.set('kp', safeMap[options.safe_search] || '-1');
@@ -430,7 +451,19 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
       }
     }
 
-    // Handle HTML content - parse for supported engines
+    // Handle DuckDuckGo format: 'raw' response (direct HTML content)
+    if (engine === 'duckduckgo' && data && typeof data === 'string' && data.includes('<html')) {
+      console.log(`🦆 DuckDuckGo returned raw HTML content (${data.length} chars)`);
+      return this.parseDuckDuckGoHtml(data, engine);
+    }
+
+    // Handle DuckDuckGo format: 'raw' response (might be wrapped in status response)
+    if (engine === 'duckduckgo' && data && data.body && typeof data.body === 'string' && data.body.includes('<html')) {
+      console.log(`🦆 DuckDuckGo returned wrapped raw HTML content (${data.body.length} chars)`);
+      return this.parseDuckDuckGoHtml(data.body, engine);
+    }
+
+    // Handle HTML content - parse for supported engines (format: 'json' responses)
     if (data && data.body && typeof data.body === 'string' && data.body.includes('<html')) {
       console.log(`📄 ${engine} returned HTML content (${data.body.length} chars)`);
 
@@ -650,45 +683,55 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
       const $ = cheerio.load(html);
       const results: any[] = [];
 
-      // DuckDuckGo search results are typically in div elements with class "result"
-      $('.result, .web-result').each((index, element) => {
-        const $element = $(element);
+      // Modern DuckDuckGo uses React and new CSS classes
+      // Try multiple selectors for different DuckDuckGo layouts
+      const selectors = [
+        '[data-testid="result"]',  // Modern DuckDuckGo React components
+        '.react-results .result',   // React result container
+        '.result',                  // Classic result class
+        '.web-result',             // Alternative class
+        '#links .result',          // Links container results
+        '.results .result',        // Results container
+        '[class*="result"]'        // Any class containing "result"
+      ];
 
-        // Extract title (usually in h2 > a or .result__title a)
-        const titleElement = $element.find('h2 a, .result__title a, .result__a').first();
-        const title = titleElement.text().trim();
-        const url = titleElement.attr('href') || '';
-
-        // Extract snippet (usually in .result__snippet or .result__body)
-        const snippet = $element.find('.result__snippet, .result__body').first().text().trim();
-
-        // Only add if we have meaningful data
-        if (title && url) {
-          results.push({
-            type: 'organic' as const,
-            position: index + 1,
-            title: title,
-            url: url.startsWith('http') ? url : `https://duckduckgo.com${url}`,
-            snippet: snippet || '',
-            displayed_url: url
-          });
-        }
-      });
-
-      // Alternative selectors if main ones don't work
-      if (results.length === 0) {
-        $('#links .result').each((index, element) => {
+      for (const selector of selectors) {
+        $(selector).each((index, element) => {
           const $element = $(element);
 
-          const titleElement = $element.find('h3 a, .result-title a').first();
-          const title = titleElement.text().trim();
-          const url = titleElement.attr('href') || '';
+          // Multiple title selector strategies
+          let titleElement = $element.find('h2 a, h3 a, .result__title a, .result__a, a[data-testid="result-title-a"]').first();
 
-          if (title && url) {
-            const snippet = $element.find('.result-snippet, .result-description').first().text().trim();
+          // If no title found, try broader selectors
+          if (!titleElement.length) {
+            titleElement = $element.find('a').first();
+          }
+
+          const title = titleElement.text().trim();
+          let url = titleElement.attr('href') || '';
+
+          // Handle DuckDuckGo redirect URLs
+          if (url.startsWith('/l/?uddg=') || url.startsWith('/l/?kh=')) {
+            // Extract real URL from DuckDuckGo redirect
+            const urlMatch = url.match(/uddg=([^&]+)/);
+            if (urlMatch) {
+              url = decodeURIComponent(urlMatch[1]);
+            }
+          }
+
+          // Multiple snippet selector strategies
+          let snippet = $element.find('.result__snippet, .result__body, .snippet, [data-testid="result-snippet"]').first().text().trim();
+
+          // If no snippet found, try broader selectors
+          if (!snippet) {
+            snippet = $element.find('span, p, div').not(':has(a)').first().text().trim();
+          }
+
+          // Only add if we have meaningful data
+          if (title && url && !results.find(r => r.url === url)) {
             results.push({
               type: 'organic' as const,
-              position: index + 1,
+              position: results.length + 1,
               title: title,
               url: url.startsWith('http') ? url : `https://duckduckgo.com${url}`,
               snippet: snippet || '',
@@ -696,6 +739,19 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
             });
           }
         });
+
+        // Break if we found results
+        if (results.length > 0) {
+          console.log(`✅ DuckDuckGo: Found ${results.length} results using selector: ${selector}`);
+          break;
+        }
+      }
+
+      // Debug: Log HTML structure if no results found
+      if (results.length === 0) {
+        console.log(`⚠️ DuckDuckGo: No results found. Analyzing HTML structure...`);
+        console.log(`📋 Available classes:`, $('[class]').map((i, el) => $(el).attr('class')).get().slice(0, 20));
+        console.log(`🔗 Available links:`, $('a').map((i, el) => ({ text: $(el).text().trim().substring(0, 50), href: $(el).attr('href') })).get().slice(0, 10));
       }
 
       console.log(`✅ DuckDuckGo HTML parsing extracted ${results.length} results`);
