@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import * as cheerio from 'cheerio';
 import {
   BrightDataSerpRequest,
   BrightDataSerpResponse,
@@ -158,15 +159,9 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
   ): Promise<BrightDataSerpResponse> {
     try {
 
-      // Use URL format for all supported engines (Google, Baidu, Yandex, DuckDuckGo)
+      // Use URL format for all supported engines with engine-specific API format
       const searchUrl = this.buildSearchUrl(engine, query, options);
-      const request = {
-        zone: this.zone,
-        url: searchUrl,
-        format: 'json',
-        method: 'GET',
-        country: options.country || 'us'
-      };
+      const request = this.buildEngineSpecificRequest(engine, searchUrl, options);
 
       console.log(`🔍 ${engine.toUpperCase()} Search: "${query}"`);
       console.log(`📡 Request URL: ${searchUrl}`);
@@ -194,6 +189,46 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
       }
 
       throw error;
+    }
+  }
+
+  private buildEngineSpecificRequest(
+    engine: SerpEngine,
+    searchUrl: string,
+    options: any
+  ): any {
+    const baseRequest = {
+      zone: this.zone,
+      url: searchUrl,
+      method: 'GET',
+      country: options.country || 'us'
+    };
+
+    // Engine-specific API format configuration
+    switch (engine) {
+      case 'google':
+        // Google supports data_format: 'parsed' for structured JSON response
+        return {
+          ...baseRequest,
+          format: 'json',
+          data_format: 'parsed'
+        };
+
+      case 'baidu':
+      case 'yandex':
+      case 'duckduckgo':
+        // Other engines use standard JSON format (returns HTML in body)
+        return {
+          ...baseRequest,
+          format: 'json'
+        };
+
+      default:
+        // Fallback to standard format
+        return {
+          ...baseRequest,
+          format: 'json'
+        };
     }
   }
 
@@ -276,23 +311,106 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
 
   private parseEngineResponse(engine: SerpEngine, data: any): BrightDataSerpResponse {
     console.log(`🔍 Parsing ${engine} response structure:`, Object.keys(data || {}));
+    console.log(`📊 ${engine} response details:`, {
+      status_code: data.status_code,
+      body_type: typeof data.body,
+      body_keys: data.body && typeof data.body === 'object' ? Object.keys(data.body) : 'N/A',
+      body_size: data.body ? (typeof data.body === 'string' ? data.body.length : 'object') : 0
+    });
 
-    // Bright Data API returns data in {status_code, headers, body} format
+    // Enhanced Google structured data detection
+    if (engine === 'google' && data.body) {
+      let googleBody = data.body;
+
+      // Handle Google's data_format: 'parsed' which may return JSON string
+      if (typeof data.body === 'string') {
+        console.log(`🔍 Google returned string body, attempting JSON parse...`);
+        try {
+          googleBody = JSON.parse(data.body);
+          console.log(`✅ Google JSON parse successful, keys:`, Object.keys(googleBody));
+        } catch (error) {
+          console.warn(`⚠️ Google JSON parse failed:`, error instanceof Error ? error.message : String(error));
+          // If JSON parse fails, fall through to HTML handling
+          googleBody = null;
+        }
+      }
+
+      if (googleBody && typeof googleBody === 'object') {
+        console.log(`🔍 Google body structure analysis:`, {
+          has_organic: !!googleBody.organic,
+          has_results: !!googleBody.results,
+          has_search_results: !!googleBody.search_results,
+          has_general: !!googleBody.general,
+          all_keys: Object.keys(googleBody)
+        });
+
+        // Check multiple possible result fields for Google
+        const organicResults = googleBody.organic || googleBody.results || googleBody.search_results || googleBody.items;
+
+        if (organicResults && Array.isArray(organicResults)) {
+          console.log(`✅ Found ${organicResults.length} Google results in field:`,
+            googleBody.organic ? 'organic' :
+            googleBody.results ? 'results' :
+            googleBody.search_results ? 'search_results' : 'items');
+
+          const parsedResults = organicResults.map((result: any) => ({
+            type: 'organic' as const,
+            position: result.rank || result.position,
+            title: result.title,
+            url: result.link || result.url,
+            snippet: result.description || result.snippet,
+            displayed_url: result.display_link || result.displayed_url || result.link || result.url
+          }));
+
+          console.log(`✅ Google parsed ${parsedResults.length} structured results from parsed format`);
+
+          return {
+            engine,
+            query: googleBody.general?.query || '',
+            results: parsedResults,
+            total_results: googleBody.general?.results_cnt || parsedResults.length,
+            time_taken: googleBody.general?.search_time,
+            related_searches: [],
+            knowledge_graph: null,
+            ads: []
+          };
+        } else {
+          console.warn(`⚠️ Google: No valid result arrays found in structured response`);
+          console.log(`📋 Available fields in googleBody:`, Object.keys(googleBody));
+        }
+      }
+    }
+
+    // Handle HTML content - parse for supported engines
     if (data && data.body && typeof data.body === 'string' && data.body.includes('<html')) {
-      console.warn(`⚠️ ${engine} returned HTML content instead of structured data - skipping parse`);
-      console.log(`HTML response size: ${data.body.length} chars, status: ${data.status_code}`);
+      console.log(`📄 ${engine} returned HTML content (${data.body.length} chars)`);
 
-      // Return empty results instead of fake data to preserve Stage 2 data integrity
-      return {
-        engine,
-        query: '',
-        results: [], // Empty results - don't create fake data
-        total_results: 0,
-        time_taken: 0,
-        related_searches: [],
-        knowledge_graph: null,
-        ads: []
-      };
+      switch (engine) {
+        case 'baidu':
+          console.log(`🔍 Parsing Baidu HTML content...`);
+          return this.parseBaiduHtml(data.body, engine);
+
+        case 'yandex':
+          console.log(`🔍 Parsing Yandex HTML content...`);
+          return this.parseYandexHtml(data.body, engine);
+
+        case 'duckduckgo':
+          console.log(`🔍 Parsing DuckDuckGo HTML content...`);
+          return this.parseDuckDuckGoHtml(data.body, engine);
+
+        default:
+          console.warn(`⚠️ ${engine} HTML parsing not implemented - returning empty results`);
+          return {
+            engine,
+            query: '',
+            results: [],
+            total_results: 0,
+            time_taken: 0,
+            related_searches: [],
+            knowledge_graph: null,
+            ads: []
+          };
+      }
     }
 
     // Fallback for other response types
@@ -300,46 +418,263 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
     return this.parseGenericResponse(engine, data);
   }
 
-  private parseBaiduResponse(data: any): BrightDataSerpResponse {
-    // Handle Baidu-specific response structure
-    let results: any[] = [];
+  private parseBaiduHtml(html: string, engine: SerpEngine): BrightDataSerpResponse {
+    console.log(`🔍 Parsing Baidu HTML content (${html.length} chars)...`);
 
-    // Check for organic_results (common in Baidu API responses)
-    if (data.organic_results && Array.isArray(data.organic_results)) {
-      results = data.organic_results;
+    try {
+      const $ = cheerio.load(html);
+      const results: any[] = [];
+
+      // Baidu search results are typically in div elements with class "result"
+      $('.result, .c-container').each((index, element) => {
+        const $element = $(element);
+
+        // Extract title (usually in h3 > a)
+        const titleElement = $element.find('h3 a, .t a, .c-title a').first();
+        const title = titleElement.text().trim();
+        const url = titleElement.attr('href') || '';
+
+        // Extract snippet (usually in class "c-abstract" or similar)
+        const snippet = $element.find('.c-abstract, .c-span9, .c-span18').first().text().trim();
+
+        // Only add if we have meaningful data
+        if (title && url) {
+          results.push({
+            type: 'organic' as const,
+            position: index + 1,
+            title: title,
+            url: url.startsWith('http') ? url : `https://www.baidu.com${url}`,
+            snippet: snippet || '',
+            displayed_url: url
+          });
+        }
+      });
+
+      // If no results with .result class, try alternative selectors
+      if (results.length === 0) {
+        $('#content_left > div').each((index, element) => {
+          const $element = $(element);
+
+          // Skip ads and unwanted content
+          if ($element.hasClass('ad') || $element.find('.ec_wise_ad').length > 0) {
+            return;
+          }
+
+          const titleElement = $element.find('h3 a').first();
+          const title = titleElement.text().trim();
+          const url = titleElement.attr('href') || '';
+
+          if (title && url) {
+            const snippet = $element.find('.c-abstract, .c-span18').first().text().trim();
+            results.push({
+              type: 'organic' as const,
+              position: index + 1,
+              title: title,
+              url: url.startsWith('http') ? url : `https://www.baidu.com${url}`,
+              snippet: snippet || '',
+              displayed_url: url
+            });
+          }
+        });
+      }
+
+      console.log(`✅ Baidu HTML parsing extracted ${results.length} results`);
+
+      return {
+        engine,
+        query: '', // Query not easily extractable from HTML
+        results: results,
+        total_results: results.length,
+        time_taken: 0,
+        related_searches: [],
+        knowledge_graph: null,
+        ads: []
+      };
+
+    } catch (error) {
+      console.error(`❌ Baidu HTML parsing failed:`, error);
+      return {
+        engine,
+        query: '',
+        results: [],
+        total_results: 0,
+        time_taken: 0,
+        related_searches: [],
+        knowledge_graph: null,
+        ads: []
+      };
     }
-    // Fallback to generic results array
-    else if (data.results && Array.isArray(data.results)) {
-      results = data.results;
+  }
+
+  private parseYandexHtml(html: string, engine: SerpEngine): BrightDataSerpResponse {
+    console.log(`🔍 Parsing Yandex HTML content (${html.length} chars)...`);
+
+    try {
+      const $ = cheerio.load(html);
+      const results: any[] = [];
+
+      // Yandex search results are typically in div elements with class "serp-item"
+      $('.serp-item, .organic').each((index, element) => {
+        const $element = $(element);
+
+        // Extract title (usually in h2 > a or .organic__title-wrapper a)
+        const titleElement = $element.find('h2 a, .organic__title-wrapper a, .organic__url a').first();
+        const title = titleElement.text().trim();
+        const url = titleElement.attr('href') || '';
+
+        // Extract snippet (usually in .organic__text or .serp-item__text)
+        const snippet = $element.find('.organic__text, .serp-item__text, .text-container').first().text().trim();
+
+        // Only add if we have meaningful data
+        if (title && url) {
+          results.push({
+            type: 'organic' as const,
+            position: index + 1,
+            title: title,
+            url: url.startsWith('http') ? url : `https://yandex.com${url}`,
+            snippet: snippet || '',
+            displayed_url: url
+          });
+        }
+      });
+
+      // If no results with main selectors, try alternative approach
+      if (results.length === 0) {
+        $('li[data-cid], .serp-list__item').each((index, element) => {
+          const $element = $(element);
+
+          // Skip ads
+          if ($element.find('.serp-adv__found').length > 0) {
+            return;
+          }
+
+          const titleElement = $element.find('h2 a, .link').first();
+          const title = titleElement.text().trim();
+          const url = titleElement.attr('href') || '';
+
+          if (title && url) {
+            const snippet = $element.find('.text-container, .serp-item__text').first().text().trim();
+            results.push({
+              type: 'organic' as const,
+              position: index + 1,
+              title: title,
+              url: url.startsWith('http') ? url : `https://yandex.com${url}`,
+              snippet: snippet || '',
+              displayed_url: url
+            });
+          }
+        });
+      }
+
+      console.log(`✅ Yandex HTML parsing extracted ${results.length} results`);
+
+      return {
+        engine,
+        query: '',
+        results: results,
+        total_results: results.length,
+        time_taken: 0,
+        related_searches: [],
+        knowledge_graph: null,
+        ads: []
+      };
+
+    } catch (error) {
+      console.error(`❌ Yandex HTML parsing failed:`, error);
+      return {
+        engine,
+        query: '',
+        results: [],
+        total_results: 0,
+        time_taken: 0,
+        related_searches: [],
+        knowledge_graph: null,
+        ads: []
+      };
     }
-    // Check for search_results (another common structure)
-    else if (data.search_results && Array.isArray(data.search_results)) {
-      results = data.search_results;
+  }
+
+  private parseDuckDuckGoHtml(html: string, engine: SerpEngine): BrightDataSerpResponse {
+    console.log(`🔍 Parsing DuckDuckGo HTML content (${html.length} chars)...`);
+
+    try {
+      const $ = cheerio.load(html);
+      const results: any[] = [];
+
+      // DuckDuckGo search results are typically in div elements with class "result"
+      $('.result, .web-result').each((index, element) => {
+        const $element = $(element);
+
+        // Extract title (usually in h2 > a or .result__title a)
+        const titleElement = $element.find('h2 a, .result__title a, .result__a').first();
+        const title = titleElement.text().trim();
+        const url = titleElement.attr('href') || '';
+
+        // Extract snippet (usually in .result__snippet or .result__body)
+        const snippet = $element.find('.result__snippet, .result__body').first().text().trim();
+
+        // Only add if we have meaningful data
+        if (title && url) {
+          results.push({
+            type: 'organic' as const,
+            position: index + 1,
+            title: title,
+            url: url.startsWith('http') ? url : `https://duckduckgo.com${url}`,
+            snippet: snippet || '',
+            displayed_url: url
+          });
+        }
+      });
+
+      // Alternative selectors if main ones don't work
+      if (results.length === 0) {
+        $('#links .result').each((index, element) => {
+          const $element = $(element);
+
+          const titleElement = $element.find('h3 a, .result-title a').first();
+          const title = titleElement.text().trim();
+          const url = titleElement.attr('href') || '';
+
+          if (title && url) {
+            const snippet = $element.find('.result-snippet, .result-description').first().text().trim();
+            results.push({
+              type: 'organic' as const,
+              position: index + 1,
+              title: title,
+              url: url.startsWith('http') ? url : `https://duckduckgo.com${url}`,
+              snippet: snippet || '',
+              displayed_url: url
+            });
+          }
+        });
+      }
+
+      console.log(`✅ DuckDuckGo HTML parsing extracted ${results.length} results`);
+
+      return {
+        engine,
+        query: '',
+        results: results,
+        total_results: results.length,
+        time_taken: 0,
+        related_searches: [],
+        knowledge_graph: null,
+        ads: []
+      };
+
+    } catch (error) {
+      console.error(`❌ DuckDuckGo HTML parsing failed:`, error);
+      return {
+        engine,
+        query: '',
+        results: [],
+        total_results: 0,
+        time_taken: 0,
+        related_searches: [],
+        knowledge_graph: null,
+        ads: []
+      };
     }
-
-    const parsedResults = results.map((result: any, index: number) => ({
-      type: result.type || 'organic',
-      position: result.position || index + 1,
-      title: result.title || result.heading || '',
-      url: result.link || result.url || '',
-      snippet: result.snippet || result.description || result.content || '',
-      displayed_url: result.displayed_link || result.display_url || result.link || result.url || '',
-      date: result.date || result.published_date || result.timestamp,
-      thumbnail: result.thumbnail || result.image
-    }));
-
-    console.log(`✅ Baidu parsed ${parsedResults.length} results from response`);
-
-    return {
-      engine: 'baidu',
-      query: data.search_metadata?.query || data.query || '',
-      results: parsedResults,
-      total_results: data.search_metadata?.total_results || data.total_results || parsedResults.length,
-      time_taken: data.search_metadata?.processed_at || data.time_taken,
-      related_searches: data.related_searches || [],
-      knowledge_graph: data.answer_box || data.knowledge_graph,
-      ads: data.ads_results || data.ads || []
-    };
   }
 
   private parseGenericResponse(engine: SerpEngine, data: any): BrightDataSerpResponse {
