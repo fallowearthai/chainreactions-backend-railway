@@ -228,6 +228,89 @@ export class EnhancedSearchController {
     }
   }
 
+  // Force test DuckDuckGo engine specifically
+  async testDuckDuckGo(req: Request, res: Response): Promise<void> {
+    try {
+      console.log('🦆 Testing DuckDuckGo engine forcefully...');
+
+      // Create a mock meta prompt result that forces DuckDuckGo usage
+      const mockMetaPromptResult = {
+        entity_a: {
+          original_name: "Test Company",
+          description: "Test company for DuckDuckGo verification",
+          sectors: ["Technology"]
+        },
+        entity_b: {
+          original_name: "Technology Partner",
+          description: "Test technology partner",
+          sectors: ["Technology"]
+        },
+        search_strategy: {
+          search_keywords: [
+            "\"Test Company\" \"Technology Partner\" partnership",
+            "\"Test Company\" collaboration technology",
+            "\"Test Company\" technology agreement"
+          ],
+          languages: ["en"],
+          country_code: "us",
+          source_engine: ["duckduckgo"], // Force DuckDuckGo only
+          search_operators: [], // Required field
+          relationship_likelihood: "medium"
+        }
+      };
+
+      const searchRequest: SearchRequest = {
+        Target_institution: "Test Company",
+        Risk_Entity: "Technology Partner",
+        Location: "United States"
+      };
+
+      console.log('🔍 Forcing DuckDuckGo engine selection...');
+      console.log(`📝 Testing with ${mockMetaPromptResult.search_strategy.search_keywords.length} keywords`);
+      console.log(`🎯 Engine: ${mockMetaPromptResult.search_strategy.source_engine.join(', ')}`);
+
+      const startTime = Date.now();
+
+      // Execute Stage 2 with forced DuckDuckGo
+      const serpResults = await this.serpExecutorService.executeSearchStrategy(searchRequest, mockMetaPromptResult);
+
+      const executionTime = Date.now() - startTime;
+
+      res.status(200).json({
+        success: true,
+        test_type: "forced_duckduckgo",
+        test_result: {
+          execution_time_ms: executionTime,
+          total_queries: serpResults.executionSummary.totalQueries,
+          successful_queries: serpResults.executionSummary.successfulQueries,
+          failed_queries: serpResults.executionSummary.failedQueries,
+          total_results: serpResults.executionSummary.totalResults,
+          engines_used: serpResults.executionSummary.enginesUsed,
+          engine_success_rates: serpResults.executionSummary.performanceMetrics?.engineSuccessRates,
+          duckduckgo_working: serpResults.executionSummary.enginesUsed.includes('duckduckgo'),
+          sample_results: serpResults.consolidatedResults.slice(0, 3).map(r => ({
+            title: r.title,
+            url: r.url,
+            snippet: r.snippet?.substring(0, 100) + '...'
+          }))
+        },
+        mock_strategy: mockMetaPromptResult.search_strategy,
+        message: 'DuckDuckGo force test completed'
+      });
+
+    } catch (error) {
+      console.error('❌ DuckDuckGo test failed:', error);
+
+      res.status(500).json({
+        success: false,
+        test_type: "forced_duckduckgo",
+        error: 'DuckDuckGo test failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        details: error instanceof Error ? error.stack : 'No stack trace available'
+      });
+    }
+  }
+
   // Helper endpoint to get workflow status and capabilities
   async getWorkflowInfo(req: Request, res: Response): Promise<void> {
     try {

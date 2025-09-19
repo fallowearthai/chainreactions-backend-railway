@@ -42,21 +42,26 @@ export interface SearchEngineConfig {
 export type SerpEngine = 'google' | 'duckduckgo' | 'yandex' | 'baidu' | 'yahoo' | 'naver';
 
 export interface MultiEngineSearchRequest {
-  query: string;
+  query?: string;  // Single query (backward compatibility)
+  queries?: string[];  // Multiple queries (new feature)
   engines?: SerpEngine[];
   location?: string;
   language?: string;
   country?: string;
-  results_per_engine?: number;
+  country_code?: string;  // Add country_code support
+  max_results_per_query?: number;  // Rename for clarity
+  results_per_engine?: number;  // Keep for backward compatibility
   time_filter?: string;
   safe_search?: 'strict' | 'moderate' | 'off';
 }
 
 export interface MultiEngineSearchResponse {
-  query: string;
+  query?: string;  // Single query (backward compatibility)
+  queries?: string[];  // Multiple queries (new feature)
   engines_used: SerpEngine[];
   results_by_engine: Record<string, BrightDataSerpResponse>;
-  aggregated_results: AggregatedResult[];
+  results: AggregatedResult[];  // Simplified name
+  aggregated_results: AggregatedResult[];  // Keep for backward compatibility
   metadata: {
     total_results: number;
     total_time: number;

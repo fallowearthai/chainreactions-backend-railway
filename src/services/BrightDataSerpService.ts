@@ -27,7 +27,7 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
 
     this.apiClient = axios.create({
       baseURL: 'https://api.brightdata.com',
-      timeout: 60000,
+      timeout: 90000, // Increased timeout for DuckDuckGo (from 60s to 90s)
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.apiKey}`,
@@ -167,7 +167,12 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
       console.log(`📡 Request URL: ${searchUrl}`);
       console.log(`📜 Request payload:`, JSON.stringify(request, null, 2));
 
-      const response = await this.apiClient.post('/request', request);
+      // DuckDuckGo specific timeout handling
+      const requestTimeout = engine === 'duckduckgo' ? 120000 : 90000; // 2 minutes for DuckDuckGo
+
+      const response = await this.apiClient.post('/request', request, {
+        timeout: requestTimeout
+      });
 
       console.log(`📨 ${engine.toUpperCase()} Response status:`, response.status);
       console.log(`📨 ${engine.toUpperCase()} Response headers:`, response.headers);
@@ -184,6 +189,17 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
         const message = error.response?.data?.error || error.response?.data?.message || error.message;
+
+        // Enhanced error logging for DuckDuckGo
+        if (engine === 'duckduckgo') {
+          console.error(`🦆 DuckDuckGo specific error details:`, {
+            status,
+            message,
+            timeout: error.code === 'ECONNABORTED',
+            responseData: error.response?.data
+          });
+        }
+
         console.error(`❌ Error details:`, error.response?.data);
         throw new Error(`Bright Data SERP API Error for ${engine} (${status}): ${message}`);
       }
@@ -448,6 +464,26 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
           console.warn(`⚠️ Google: No valid result arrays found in structured response`);
           console.log(`📋 Available fields in googleBody:`, Object.keys(googleBody));
         }
+      }
+    }
+
+    // Handle DuckDuckGo character array format (Bright Data specific format)
+    if (engine === 'duckduckgo' && data && typeof data === 'object' && !data.body && Object.keys(data).every(key => !isNaN(Number(key)))) {
+      console.log(`🦆 DuckDuckGo returned character array format with ${Object.keys(data).length} characters`);
+
+      // Reconstruct HTML string from character array
+      const maxIndex = Math.max(...Object.keys(data).map(Number));
+      let htmlContent = '';
+      for (let i = 0; i <= maxIndex; i++) {
+        htmlContent += data[i] || '';
+      }
+
+      console.log(`🔄 Reconstructed DuckDuckGo HTML content (${htmlContent.length} chars)`);
+      if (htmlContent.includes('<html')) {
+        return this.parseDuckDuckGoHtml(htmlContent, engine);
+      } else {
+        console.warn(`⚠️ Reconstructed content doesn't appear to be HTML`);
+        return this.parseGenericResponse(engine, data);
       }
     }
 
@@ -818,6 +854,12 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
   async searchMultipleEngines(request: MultiEngineSearchRequest): Promise<MultiEngineSearchResponse> {
     const startTime = Date.now();
 
+    // Extract queries (support both single query and multiple queries)
+    const queries = request.queries || (request.query ? [request.query] : []);
+    if (queries.length === 0) {
+      throw new Error('At least one query must be provided (query or queries field)');
+    }
+
     // Determine which engines to use
     const selectedEngines = request.engines || this.selectEngines(
       request.location || 'Global',
@@ -825,56 +867,79 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
       [request.language || 'en']
     ).engines;
 
-    console.log(`🔍 Multi-engine SERP search: "${request.query}" using [${selectedEngines.join(', ')}]`);
+    console.log(`🔍 Multi-engine SERP search: ${queries.length > 1 ? `${queries.length} queries` : `"${queries[0]}"`} using [${selectedEngines.join(', ')}]`);
 
     const resultsByEngine: Record<string, BrightDataSerpResponse> = {};
+    const allResults: AggregatedResult[] = [];
     const searchPromises: Promise<void>[] = [];
 
+    let totalQueries = 0;
+    let successfulQueries = 0;
     let enginesSucceeded = 0;
     let enginesFailed = 0;
 
-    // Execute searches in parallel
-    for (const engine of selectedEngines) {
-      const searchPromise = this.searchSingleEngine(engine, request.query, {
-        location: request.location,
-        language: request.language,
-        country: request.country,
-        num_results: request.results_per_engine || 20,
-        time_filter: request.time_filter,
-        safe_search: request.safe_search
-      })
-        .then(result => {
-          resultsByEngine[engine] = result;
-          enginesSucceeded++;
-          console.log(`✅ ${engine}: ${result.results.length} results`);
+    // Execute searches for each query across all engines
+    for (const query of queries) {
+      for (const engine of selectedEngines) {
+        totalQueries++;
+        const searchPromise = this.searchSingleEngine(engine, query, {
+          location: request.location,
+          language: request.language,
+          country: request.country_code || request.country,
+          num_results: request.max_results_per_query || request.results_per_engine || 10,
+          time_filter: request.time_filter,
+          safe_search: request.safe_search
         })
-        .catch(error => {
-          console.error(`❌ ${engine} search failed:`, error.message);
-          enginesFailed++;
-        });
+          .then(result => {
+            const engineKey = `${engine}_${query.substring(0, 20)}`;
+            resultsByEngine[engineKey] = result;
 
-      searchPromises.push(searchPromise);
+            // Add results to aggregated list
+            result.results.forEach((item, index) => {
+              allResults.push({
+                title: item.title || 'No title',
+                url: item.url || '',
+                snippet: item.snippet || '',
+                sources: [engine],
+                confidence_score: 1.0 - (index * 0.1), // Higher score for earlier results
+                position_avg: item.position || index + 1,
+                date: item.date
+              });
+            });
+
+            successfulQueries++;
+            console.log(`✅ ${engine}: ${result.results.length} results for "${query.substring(0, 30)}..."`);
+          })
+          .catch(error => {
+            console.error(`❌ ${engine} search failed for "${query.substring(0, 30)}...":`, error.message);
+            enginesFailed++;
+          });
+
+        searchPromises.push(searchPromise);
+      }
     }
 
     // Wait for all searches to complete
     await Promise.all(searchPromises);
 
-    // Aggregate results
-    const aggregatedResults = this.aggregateResults(resultsByEngine);
+    // Use the simplified aggregation or the traditional one
+    const aggregatedResults = allResults.length > 0 ? allResults : this.aggregateResults(resultsByEngine);
     const totalTime = Date.now() - startTime;
 
-    console.log(`🎯 Multi-engine SERP completed: ${enginesSucceeded}/${selectedEngines.length} engines succeeded, ${aggregatedResults.length} total results`);
+    console.log(`🎯 Multi-engine SERP completed: ${successfulQueries}/${totalQueries} queries succeeded, ${aggregatedResults.length} total results`);
 
     return {
-      query: request.query,
+      query: queries.length === 1 ? queries[0] : undefined,
+      queries: queries.length > 1 ? queries : undefined,
       engines_used: selectedEngines,
       results_by_engine: resultsByEngine,
-      aggregated_results: aggregatedResults,
+      results: aggregatedResults,  // Primary results field
+      aggregated_results: aggregatedResults,  // Backward compatibility
       metadata: {
         total_results: aggregatedResults.length,
         total_time: totalTime,
-        engines_succeeded: enginesSucceeded,
-        engines_failed: enginesFailed,
+        engines_succeeded: Math.floor(successfulQueries / queries.length),
+        engines_failed: Math.floor((totalQueries - successfulQueries) / queries.length),
         timestamp: new Date().toISOString()
       }
     };
