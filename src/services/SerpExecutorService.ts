@@ -264,7 +264,7 @@ export class SerpExecutorService {
 
   private async retryFailedTasks(failedTasks: SearchTask[]): Promise<SerpExecutionResult[]> {
     const retryResults: SerpExecutionResult[] = [];
-    const fallbackEngines = ['google', 'bing', 'duckduckgo'];
+    const fallbackEngines = ['google', 'duckduckgo', 'yandex'];
 
     for (const task of failedTasks) {
       // Try one alternative engine

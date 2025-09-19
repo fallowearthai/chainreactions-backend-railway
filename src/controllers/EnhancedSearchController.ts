@@ -251,7 +251,7 @@ export class EnhancedSearchController {
             description: "Analyze and integrate results into standard OSINT format"
           }
         ],
-        supported_engines: ["google", "bing", "baidu", "yandex", "duckduckgo"],
+        supported_engines: ["google", "baidu", "yandex", "duckduckgo"],
         endpoints: {
           enhanced_search: "/api/enhanced/search",
           strategy_only: "/api/enhanced/strategy",

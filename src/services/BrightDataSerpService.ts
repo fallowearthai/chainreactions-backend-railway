@@ -49,14 +49,6 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
         strengths: ['comprehensive', 'authoritative', 'real-time']
       },
       {
-        name: 'bing',
-        base_url: 'https://www.bing.com/search',
-        default_params: { mkt: 'en-US' },
-        supported_languages: ['en', 'zh', 'ru', 'ar', 'ja', 'ko', 'fr', 'de', 'es'],
-        geographic_focus: ['Global', 'China-accessible'],
-        strengths: ['balanced', 'accessible', 'china-friendly']
-      },
-      {
         name: 'baidu',
         base_url: 'https://www.baidu.com/s',
         default_params: {},
@@ -165,11 +157,6 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
     } = {}
   ): Promise<BrightDataSerpResponse> {
     try {
-      // Skip Bing due to persistent timeout issues with Bright Data API
-      if (engine === 'bing') {
-        console.warn(`⚠️ Bing search skipped - Bright Data API timeout issues detected`);
-        throw new Error(`Bing search engine not supported - API timeout issues`);
-      }
 
       // Use URL format for all supported engines (Google, Baidu, Yandex, DuckDuckGo)
       const searchUrl = this.buildSearchUrl(engine, query, options);
@@ -234,19 +221,6 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
         if (options.safe_search) params.set('safe', options.safe_search);
         break;
 
-      case 'bing':
-        params.set('q', query);
-        if (options.language && options.country) {
-          params.set('mkt', `${options.language}-${options.country.toUpperCase()}`);
-        } else {
-          params.set('mkt', 'en-US');
-        }
-        if (options.num_results) params.set('count', options.num_results.toString());
-        if (options.safe_search) {
-          const safeMap: Record<string, string> = { strict: 'Strict', moderate: 'Moderate', off: 'Off' };
-          params.set('safeSearch', safeMap[options.safe_search] || 'Moderate');
-        }
-        break;
 
       case 'baidu':
         params.set('wd', query); // Baidu uses 'wd' instead of 'q'
@@ -305,19 +279,19 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
 
     // Bright Data API returns data in {status_code, headers, body} format
     if (data && data.body && typeof data.body === 'string' && data.body.includes('<html')) {
-      console.log(`✅ ${engine} returned HTML content (${data.body.length} chars) with status ${data.status_code}`);
+      console.warn(`⚠️ ${engine} returned HTML content instead of structured data - skipping parse`);
+      console.log(`HTML response size: ${data.body.length} chars, status: ${data.status_code}`);
+
+      // Return empty results instead of fake data to preserve Stage 2 data integrity
       return {
         engine,
-        query: '', // We can't extract this from HTML easily
-        results: [{
-          type: 'organic',
-          position: 1,
-          title: `${engine} search completed successfully`,
-          url: `https://${engine}.com/search`,
-          snippet: `Search executed via Bright Data API - HTML response received (${data.body.length} chars)`,
-          displayed_url: `${engine}.com`
-        }],
-        total_results: 1
+        query: '',
+        results: [], // Empty results - don't create fake data
+        total_results: 0,
+        time_taken: 0,
+        related_searches: [],
+        knowledge_graph: null,
+        ads: []
       };
     }
 
@@ -507,7 +481,6 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
   private getEngineWeight(engine: SerpEngine): number {
     const weights: Record<SerpEngine, number> = {
       google: 1.0,
-      bing: 0.9,
       baidu: 0.8,
       yandex: 0.8,
       duckduckgo: 0.7,

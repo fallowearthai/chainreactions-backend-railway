@@ -1,0 +1,15 @@
+{
+  "test_metadata": {
+    "timestamp": "2025-09-19T01:05:19.982Z",
+    "test_request": {
+      "Target_institution": "NanoAcademic Technologies",
+      "Risk_Entity": "HongZhiWei",
+      "Location": "China"
+    }
+  },
+  "error": {
+    "message": "GEMINI_API_KEY is required",
+    "stack": "Error: GEMINI_API_KEY is required\n    at new GeminiService (/Users/kanbei/Code/gemini test/dist/services/GeminiService.js:13:19)\n    at new WebSearchMetaPromptService (/Users/kanbei/Code/gemini test/dist/services/WebSearchMetaPromptService.js:7:30)\n    at runStage2Test (/Users/kanbei/Code/gemini test/stage2-test.js:25:31)\n    at Object.<anonymous> (/Users/kanbei/Code/gemini test/stage2-test.js:168:3)\n    at Module._compile (node:internal/modules/cjs/loader:1688:14)\n    at Object..js (node:internal/modules/cjs/loader:1820:10)\n    at Module.load (node:internal/modules/cjs/loader:1423:32)\n    at Function._load (node:internal/modules/cjs/loader:1246:12)\n    at TracingChannel.traceSync (node:diagnostics_channel:322:14)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)",
+    "name": "Error"
+  }
+}
