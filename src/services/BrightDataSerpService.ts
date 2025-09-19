@@ -197,11 +197,28 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
     searchUrl: string,
     options: any
   ): any {
+    // Map restricted countries to allowed alternatives for Bright Data
+    const countryMapping: Record<string, string> = {
+      'ir': 'ae',   // Iran -> UAE (Middle East region)
+      'ru': 'us',   // Russia -> USA (if restricted)
+      'cn': 'hk',   // China -> Hong Kong (if needed)
+      // Add more mappings as needed
+    };
+
+    // Use mapped country if original is restricted
+    const originalCountry = options.country?.toLowerCase();
+    const effectiveCountry = countryMapping[originalCountry] || options.country || 'us';
+
+    // Log country mapping for debugging
+    if (countryMapping[originalCountry]) {
+      console.log(`🌍 Country mapping applied: ${originalCountry} -> ${effectiveCountry} for ${engine}`);
+    }
+
     const baseRequest = {
       zone: this.zone,
       url: searchUrl,
       method: 'GET',
-      country: options.country || 'us'
+      country: effectiveCountry
     };
 
     // Engine-specific API format configuration
@@ -214,8 +231,19 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
           data_format: 'parsed'
         };
 
-      case 'baidu':
       case 'yandex':
+        // Yandex requires format but doesn't support data_format
+        // Uses format: 'json' which returns HTML that we parse with cheerio
+        return {
+          zone: this.zone,
+          url: searchUrl,
+          method: 'GET',
+          country: effectiveCountry,
+          format: 'json'
+          // Note: No data_format parameter for Yandex, only format
+        };
+
+      case 'baidu':
       case 'duckduckgo':
         // Other engines use standard JSON format (returns HTML in body)
         return {
@@ -268,17 +296,38 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
 
       case 'yandex':
         params.set('text', query); // Yandex uses 'text' instead of 'q'
-        if (options.language === 'ru' || options.country === 'ru') {
-          params.set('lr', '213'); // Moscow region
-        } else if (options.country === 'us') {
-          params.set('lr', '84'); // USA
+
+        // Set language first, then region based on country/language
+        if (options.language) {
+          params.set('lang', options.language);
         }
-        if (options.language) params.set('lang', options.language);
+
+        // Map countries to Yandex region codes (based on official Yandex location codes)
+        const countryToLr: Record<string, string> = {
+          'ru': '225',    // Russia (Universal location code)
+          'us': '84',     // USA (keeping existing if working)
+          'ir': '1004',   // Middle East region (since Iran not specifically listed)
+          'cn': '134',    // China (confirmed)
+          'hk': '134',    // Hong Kong (use China region)
+          'uk': '102',    // United Kingdom (keeping existing)
+          'de': '96',     // Germany (keeping existing)
+          'fr': '124',    // France (keeping existing)
+          'moscow': '213', // Moscow specifically
+          'spb': '2',     // St. Petersburg
+        };
+
+        const regionCode = countryToLr[options.country?.toLowerCase()] || '84'; // Default to USA
+        params.set('lr', regionCode);
+
+        // Add pagination parameter
+        params.set('p', '0'); // Start from page 0
+
+        // Simplify time filter - only use supported values
         if (options.time_filter) {
           const timeMap: Record<string, string> = {
             'd': '77', // Past 24 hours
             'w': '1',  // Past 2 weeks
-            'm': '%pm' // Past month
+            'm': '1'   // Use 2 weeks instead of month for better compatibility
           };
           params.set('within', timeMap[options.time_filter] || '1');
         }
