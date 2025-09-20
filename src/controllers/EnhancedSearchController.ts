@@ -22,23 +22,74 @@ export class EnhancedSearchController {
       // Validate request
       const searchRequest = this.validateSearchRequest(req.body);
 
-      console.log(`Starting enhanced search for: ${searchRequest.Target_institution} vs ${searchRequest.Risk_Entity}`);
+      console.log(`🚀 Starting ENHANCED search for: ${searchRequest.Target_institution} vs ${searchRequest.Risk_Entity}`);
 
       // Stage 1: Generate search strategy using WebSearch meta-prompting
-      console.log('Stage 1: Generating search strategy with WebSearch...');
+      console.log('📋 Stage 1: Generating search strategy with WebSearch...');
       const metaPromptResult = await this.metaPromptService.generateSearchStrategy(searchRequest);
 
       console.log(`Generated ${metaPromptResult.search_strategy.search_keywords.length} keywords for ${metaPromptResult.search_strategy.source_engine.length} engines`);
       console.log(`Relationship likelihood: ${metaPromptResult.search_strategy.relationship_likelihood}`);
 
-      // Stage 2: Execute SERP searches based on strategy
-      console.log('Stage 2: Executing SERP searches...');
+      // Stage 2: Execute OPTIMIZED SERP searches with result optimization (NEW DEFAULT)
+      console.log('🔍 Stage 2: Executing OPTIMIZED SERP searches...');
+      const optimizedResults = await this.serpExecutorService.executeSearchStrategyOptimized(searchRequest, metaPromptResult);
+
+      console.log(`SERP optimization completed: ${optimizedResults.consolidatedResults.length} optimized results (${(optimizedResults.optimizationMetadata.compressionRatio * 100).toFixed(1)}% compression)`);
+
+      // Stage 3: Integrate optimized results and generate OSINT analysis (NEW DEFAULT)
+      console.log('🧠 Stage 3: Integrating OPTIMIZED results and generating analysis...');
+      const finalResult = await this.resultIntegrationService.integrateAndAnalyzeOptimized(
+        searchRequest,
+        metaPromptResult,
+        optimizedResults
+      );
+
+      const totalTime = Date.now() - startTime;
+
+      console.log(`✅ Enhanced search completed in ${(totalTime / 1000).toFixed(2)}s`);
+
+      res.status(200).json(finalResult);
+
+    } catch (error) {
+      console.error('❌ Enhanced search failed:', error);
+
+      res.status(500).json({
+        success: false,
+        error: 'Enhanced search process failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+
+  /**
+   * Legacy enhanced search without optimization (kept for backward compatibility)
+   */
+  async enhancedSearchLegacy(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      // Validate request
+      const searchRequest = this.validateSearchRequest(req.body);
+
+      console.log(`🔄 Starting LEGACY enhanced search for: ${searchRequest.Target_institution} vs ${searchRequest.Risk_Entity}`);
+
+      // Stage 1: Generate search strategy using WebSearch meta-prompting
+      console.log('📋 Stage 1: Generating search strategy with WebSearch...');
+      const metaPromptResult = await this.metaPromptService.generateSearchStrategy(searchRequest);
+
+      console.log(`Generated ${metaPromptResult.search_strategy.search_keywords.length} keywords for ${metaPromptResult.search_strategy.source_engine.length} engines`);
+      console.log(`Relationship likelihood: ${metaPromptResult.search_strategy.relationship_likelihood}`);
+
+      // Stage 2: Execute LEGACY SERP searches without optimization
+      console.log('🔍 Stage 2: Executing LEGACY SERP searches...');
       const serpResults = await this.serpExecutorService.executeSearchStrategy(searchRequest, metaPromptResult);
 
       console.log(`SERP execution completed: ${serpResults.executionSummary.totalResults} results from ${serpResults.executionSummary.enginesUsed.length} engines`);
 
-      // Stage 3: Integrate results and generate OSINT analysis
-      console.log('Stage 3: Integrating results and generating analysis...');
+      // Stage 3: Integrate results using LEGACY analysis
+      console.log('🧠 Stage 3: Integrating results with LEGACY analysis...');
       const finalResult = await this.resultIntegrationService.integrateAndAnalyze(
         searchRequest,
         metaPromptResult,
@@ -51,6 +102,7 @@ export class EnhancedSearchController {
       const enhancedResponse = {
         ...finalResult,
         workflow_metadata: {
+          optimization_applied: false,
           execution_time_ms: totalTime,
           relationship_likelihood: metaPromptResult.search_strategy.relationship_likelihood,
           serp_execution_summary: serpResults.executionSummary,
@@ -67,16 +119,16 @@ export class EnhancedSearchController {
         }
       };
 
-      console.log(`Enhanced search completed in ${(totalTime / 1000).toFixed(2)}s`);
+      console.log(`✅ LEGACY enhanced search completed in ${(totalTime / 1000).toFixed(2)}s`);
 
       res.status(200).json(enhancedResponse);
 
     } catch (error) {
-      console.error('Enhanced search failed:', error);
+      console.error('❌ Legacy enhanced search failed:', error);
 
       res.status(500).json({
         success: false,
-        error: 'Enhanced search process failed',
+        error: 'Legacy enhanced search process failed',
         message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString()
       });
@@ -228,88 +280,6 @@ export class EnhancedSearchController {
     }
   }
 
-  // Force test DuckDuckGo engine specifically
-  async testDuckDuckGo(req: Request, res: Response): Promise<void> {
-    try {
-      console.log('🦆 Testing DuckDuckGo engine forcefully...');
-
-      // Create a mock meta prompt result that forces DuckDuckGo usage
-      const mockMetaPromptResult = {
-        entity_a: {
-          original_name: "Test Company",
-          description: "Test company for DuckDuckGo verification",
-          sectors: ["Technology"]
-        },
-        entity_b: {
-          original_name: "Technology Partner",
-          description: "Test technology partner",
-          sectors: ["Technology"]
-        },
-        search_strategy: {
-          search_keywords: [
-            "\"Test Company\" \"Technology Partner\" partnership",
-            "\"Test Company\" collaboration technology",
-            "\"Test Company\" technology agreement"
-          ],
-          languages: ["en"],
-          country_code: "us",
-          source_engine: ["duckduckgo"], // Force DuckDuckGo only
-          search_operators: [], // Required field
-          relationship_likelihood: "medium"
-        }
-      };
-
-      const searchRequest: SearchRequest = {
-        Target_institution: "Test Company",
-        Risk_Entity: "Technology Partner",
-        Location: "United States"
-      };
-
-      console.log('🔍 Forcing DuckDuckGo engine selection...');
-      console.log(`📝 Testing with ${mockMetaPromptResult.search_strategy.search_keywords.length} keywords`);
-      console.log(`🎯 Engine: ${mockMetaPromptResult.search_strategy.source_engine.join(', ')}`);
-
-      const startTime = Date.now();
-
-      // Execute Stage 2 with forced DuckDuckGo
-      const serpResults = await this.serpExecutorService.executeSearchStrategy(searchRequest, mockMetaPromptResult);
-
-      const executionTime = Date.now() - startTime;
-
-      res.status(200).json({
-        success: true,
-        test_type: "forced_duckduckgo",
-        test_result: {
-          execution_time_ms: executionTime,
-          total_queries: serpResults.executionSummary.totalQueries,
-          successful_queries: serpResults.executionSummary.successfulQueries,
-          failed_queries: serpResults.executionSummary.failedQueries,
-          total_results: serpResults.executionSummary.totalResults,
-          engines_used: serpResults.executionSummary.enginesUsed,
-          engine_success_rates: serpResults.executionSummary.performanceMetrics?.engineSuccessRates,
-          duckduckgo_working: serpResults.executionSummary.enginesUsed.includes('duckduckgo'),
-          sample_results: serpResults.consolidatedResults.slice(0, 3).map(r => ({
-            title: r.title,
-            url: r.url,
-            snippet: r.snippet?.substring(0, 100) + '...'
-          }))
-        },
-        mock_strategy: mockMetaPromptResult.search_strategy,
-        message: 'DuckDuckGo force test completed'
-      });
-
-    } catch (error) {
-      console.error('❌ DuckDuckGo test failed:', error);
-
-      res.status(500).json({
-        success: false,
-        test_type: "forced_duckduckgo",
-        error: 'DuckDuckGo test failed',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        details: error instanceof Error ? error.stack : 'No stack trace available'
-      });
-    }
-  }
 
   // Helper endpoint to get workflow status and capabilities
   async getWorkflowInfo(req: Request, res: Response): Promise<void> {
@@ -334,7 +304,7 @@ export class EnhancedSearchController {
             description: "Analyze and integrate results into standard OSINT format"
           }
         ],
-        supported_engines: ["google", "baidu", "yandex", "duckduckgo"],
+        supported_engines: ["google", "baidu", "yandex"],
         endpoints: {
           enhanced_search: "/api/enhanced/search",
           strategy_only: "/api/enhanced/strategy",

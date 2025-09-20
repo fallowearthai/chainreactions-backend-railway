@@ -48,10 +48,10 @@ const enhancedSearchController = new EnhancedSearchController();
 
 // Routes - 3-Stage OSINT Workflow
 app.post('/api/enhanced/search', (req, res) => enhancedSearchController.enhancedSearch(req, res));
+app.post('/api/enhanced/search-legacy', (req, res) => enhancedSearchController.enhancedSearchLegacy(req, res));
 app.post('/api/enhanced/strategy', (req, res) => enhancedSearchController.getSearchStrategy(req, res));
 app.post('/api/enhanced/test-stage2', (req, res) => enhancedSearchController.testStage2Only(req, res));
 app.get('/api/enhanced/test', (req, res) => enhancedSearchController.testWorkflow(req, res));
-app.get('/api/enhanced/test-duckduckgo', (req, res) => enhancedSearchController.testDuckDuckGo(req, res));
 app.get('/api/enhanced/info', (req, res) => enhancedSearchController.getWorkflowInfo(req, res));
 
 // Health check endpoint

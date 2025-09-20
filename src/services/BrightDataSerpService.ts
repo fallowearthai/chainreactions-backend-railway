@@ -27,7 +27,7 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
 
     this.apiClient = axios.create({
       baseURL: 'https://api.brightdata.com',
-      timeout: 90000, // Increased timeout for DuckDuckGo (from 60s to 90s)
+      timeout: 90000, // Standard timeout for all engines
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.apiKey}`,
@@ -64,14 +64,6 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
         supported_languages: ['ru', 'en', 'uk', 'be'],
         geographic_focus: ['Russia', 'Eastern Europe', 'CIS'],
         strengths: ['russian-content', 'cyrillic', 'regional-eastern-europe']
-      },
-      {
-        name: 'duckduckgo',
-        base_url: 'https://duckduckgo.com',
-        default_params: {},
-        supported_languages: ['en', 'zh', 'ru', 'ar', 'fr', 'de', 'es'],
-        geographic_focus: ['Global', 'Uncensored'],
-        strengths: ['privacy', 'uncensored', 'neutral']
       }
     ];
 
@@ -100,22 +92,14 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
       selectedEngines.push('baidu');
       reasons.push('Baidu for native Chinese content and local sources');
 
-      selectedEngines.push('duckduckgo');
-      reasons.push('DuckDuckGo for uncensored China-related content');
     }
 
     if (['russia', 'belarus', 'kazakhstan', 'ukraine'].some(region => locationLower.includes(region))) {
       selectedEngines.push('yandex');
       reasons.push('Yandex for native Russian/Cyrillic content');
 
-      selectedEngines.push('duckduckgo');
-      reasons.push('DuckDuckGo for uncensored Eastern Europe content');
     }
 
-    if (['iran', 'syria', 'lebanon', 'iraq'].some(region => locationLower.includes(region))) {
-      selectedEngines.push('duckduckgo');
-      reasons.push('DuckDuckGo for uncensored Middle East content');
-    }
 
     // Risk category based additions
     if (riskCategory === 'academic' || riskCategory === 'technology') {
@@ -125,18 +109,11 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
       }
     }
 
-    if (riskCategory === 'government' || riskCategory === 'military') {
-      if (!selectedEngines.includes('duckduckgo')) {
-        selectedEngines.push('duckduckgo');
-        reasons.push('DuckDuckGo for sensitive government/military searches');
-      }
-    }
 
     // Default fallback for other regions
     if (selectedEngines.length === 1) {
       selectedEngines.push('yandex');
-      selectedEngines.push('duckduckgo');
-      reasons.push('Yandex and DuckDuckGo for additional coverage');
+      reasons.push('Yandex for additional coverage');
     }
 
     return {
@@ -167,8 +144,8 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
       console.log(`📡 Request URL: ${searchUrl}`);
       console.log(`📜 Request payload:`, JSON.stringify(request, null, 2));
 
-      // DuckDuckGo specific timeout handling
-      const requestTimeout = engine === 'duckduckgo' ? 120000 : 90000; // 2 minutes for DuckDuckGo
+      // Standard timeout for all engines
+      const requestTimeout = 90000;
 
       const response = await this.apiClient.post('/request', request, {
         timeout: requestTimeout
@@ -190,15 +167,6 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
         const status = error.response?.status;
         const message = error.response?.data?.error || error.response?.data?.message || error.message;
 
-        // Enhanced error logging for DuckDuckGo
-        if (engine === 'duckduckgo') {
-          console.error(`🦆 DuckDuckGo specific error details:`, {
-            status,
-            message,
-            timeout: error.code === 'ECONNABORTED',
-            responseData: error.response?.data
-          });
-        }
 
         console.error(`❌ Error details:`, error.response?.data);
         throw new Error(`Bright Data SERP API Error for ${engine} (${status}): ${message}`);
@@ -264,13 +232,6 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
         return {
           ...baseRequest,
           format: 'json'
-        };
-
-      case 'duckduckgo':
-        // DuckDuckGo requires format: 'raw' (not 'json')
-        return {
-          ...baseRequest,
-          format: 'raw'
         };
 
       default:
@@ -355,41 +316,6 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
         }
         break;
 
-      case 'duckduckgo':
-        params.set('q', query);
-
-        // Map country and language combinations to DuckDuckGo kl codes
-        const countryLangToKl: Record<string, string> = {
-          'cn-zh': 'cn-zh',       // China - Chinese
-          'cn-en': 'cn-zh',       // China fallback to Chinese
-          'ru-ru': 'ru-ru',       // Russia - Russian
-          'ru-en': 'ru-ru',       // Russia fallback to Russian
-          'ir-fa': 'xa-ar',       // Iran -> Saudi Arabia (Arabic, closest available)
-          'ir-en': 'xa-ar',       // Iran fallback
-          'us-en': 'us-en',       // US - English
-          'uk-en': 'uk-en',       // UK - English
-          'de-de': 'de-de',       // Germany - German
-          'fr-fr': 'fr-fr',       // France - French
-          'hk-zh': 'hk-tzh',      // Hong Kong - Traditional Chinese
-          'hk-en': 'hk-tzh',      // Hong Kong fallback
-        };
-
-        const countryLangKey = `${options.country || 'us'}-${options.language || 'en'}`;
-        const klValue = countryLangToKl[countryLangKey] || 'us-en';
-        params.set('kl', klValue);
-        if (options.safe_search) {
-          const safeMap: Record<string, string> = { strict: '1', moderate: '-1', off: '-2' };
-          params.set('kp', safeMap[options.safe_search] || '-1');
-        }
-        if (options.time_filter) {
-          const timeMap: Record<string, string> = {
-            'd': 'd',  // Past day
-            'w': 'w',  // Past week
-            'm': 'm'   // Past month
-          };
-          params.set('df', timeMap[options.time_filter] || 'd');
-        }
-        break;
     }
 
     return `${baseUrl}?${params.toString()}`;
@@ -467,37 +393,6 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
       }
     }
 
-    // Handle DuckDuckGo character array format (Bright Data specific format)
-    if (engine === 'duckduckgo' && data && typeof data === 'object' && !data.body && Object.keys(data).every(key => !isNaN(Number(key)))) {
-      console.log(`🦆 DuckDuckGo returned character array format with ${Object.keys(data).length} characters`);
-
-      // Reconstruct HTML string from character array
-      const maxIndex = Math.max(...Object.keys(data).map(Number));
-      let htmlContent = '';
-      for (let i = 0; i <= maxIndex; i++) {
-        htmlContent += data[i] || '';
-      }
-
-      console.log(`🔄 Reconstructed DuckDuckGo HTML content (${htmlContent.length} chars)`);
-      if (htmlContent.includes('<html')) {
-        return this.parseDuckDuckGoHtml(htmlContent, engine);
-      } else {
-        console.warn(`⚠️ Reconstructed content doesn't appear to be HTML`);
-        return this.parseGenericResponse(engine, data);
-      }
-    }
-
-    // Handle DuckDuckGo format: 'raw' response (direct HTML content)
-    if (engine === 'duckduckgo' && data && typeof data === 'string' && data.includes('<html')) {
-      console.log(`🦆 DuckDuckGo returned raw HTML content (${data.length} chars)`);
-      return this.parseDuckDuckGoHtml(data, engine);
-    }
-
-    // Handle DuckDuckGo format: 'raw' response (might be wrapped in status response)
-    if (engine === 'duckduckgo' && data && data.body && typeof data.body === 'string' && data.body.includes('<html')) {
-      console.log(`🦆 DuckDuckGo returned wrapped raw HTML content (${data.body.length} chars)`);
-      return this.parseDuckDuckGoHtml(data.body, engine);
-    }
 
     // Handle HTML content - parse for supported engines (format: 'json' responses)
     if (data && data.body && typeof data.body === 'string' && data.body.includes('<html')) {
@@ -512,9 +407,6 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
           console.log(`🔍 Parsing Yandex HTML content...`);
           return this.parseYandexHtml(data.body, engine);
 
-        case 'duckduckgo':
-          console.log(`🔍 Parsing DuckDuckGo HTML content...`);
-          return this.parseDuckDuckGoHtml(data.body, engine);
 
         default:
           console.warn(`⚠️ ${engine} HTML parsing not implemented - returning empty results`);
@@ -712,111 +604,6 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
     }
   }
 
-  private parseDuckDuckGoHtml(html: string, engine: SerpEngine): BrightDataSerpResponse {
-    console.log(`🔍 Parsing DuckDuckGo HTML content (${html.length} chars)...`);
-
-    try {
-      const $ = cheerio.load(html);
-      const results: any[] = [];
-
-      // Modern DuckDuckGo uses React and new CSS classes
-      // Try multiple selectors for different DuckDuckGo layouts
-      const selectors = [
-        '[data-testid="result"]',  // Modern DuckDuckGo React components
-        '.react-results .result',   // React result container
-        '.result',                  // Classic result class
-        '.web-result',             // Alternative class
-        '#links .result',          // Links container results
-        '.results .result',        // Results container
-        '[class*="result"]'        // Any class containing "result"
-      ];
-
-      for (const selector of selectors) {
-        $(selector).each((index, element) => {
-          const $element = $(element);
-
-          // Multiple title selector strategies
-          let titleElement = $element.find('h2 a, h3 a, .result__title a, .result__a, a[data-testid="result-title-a"]').first();
-
-          // If no title found, try broader selectors
-          if (!titleElement.length) {
-            titleElement = $element.find('a').first();
-          }
-
-          const title = titleElement.text().trim();
-          let url = titleElement.attr('href') || '';
-
-          // Handle DuckDuckGo redirect URLs
-          if (url.startsWith('/l/?uddg=') || url.startsWith('/l/?kh=')) {
-            // Extract real URL from DuckDuckGo redirect
-            const urlMatch = url.match(/uddg=([^&]+)/);
-            if (urlMatch) {
-              url = decodeURIComponent(urlMatch[1]);
-            }
-          }
-
-          // Multiple snippet selector strategies
-          let snippet = $element.find('.result__snippet, .result__body, .snippet, [data-testid="result-snippet"]').first().text().trim();
-
-          // If no snippet found, try broader selectors
-          if (!snippet) {
-            snippet = $element.find('span, p, div').not(':has(a)').first().text().trim();
-          }
-
-          // Only add if we have meaningful data
-          if (title && url && !results.find(r => r.url === url)) {
-            results.push({
-              type: 'organic' as const,
-              position: results.length + 1,
-              title: title,
-              url: url.startsWith('http') ? url : `https://duckduckgo.com${url}`,
-              snippet: snippet || '',
-              displayed_url: url
-            });
-          }
-        });
-
-        // Break if we found results
-        if (results.length > 0) {
-          console.log(`✅ DuckDuckGo: Found ${results.length} results using selector: ${selector}`);
-          break;
-        }
-      }
-
-      // Debug: Log HTML structure if no results found
-      if (results.length === 0) {
-        console.log(`⚠️ DuckDuckGo: No results found. Analyzing HTML structure...`);
-        console.log(`📋 Available classes:`, $('[class]').map((i, el) => $(el).attr('class')).get().slice(0, 20));
-        console.log(`🔗 Available links:`, $('a').map((i, el) => ({ text: $(el).text().trim().substring(0, 50), href: $(el).attr('href') })).get().slice(0, 10));
-      }
-
-      console.log(`✅ DuckDuckGo HTML parsing extracted ${results.length} results`);
-
-      return {
-        engine,
-        query: '',
-        results: results,
-        total_results: results.length,
-        time_taken: 0,
-        related_searches: [],
-        knowledge_graph: null,
-        ads: []
-      };
-
-    } catch (error) {
-      console.error(`❌ DuckDuckGo HTML parsing failed:`, error);
-      return {
-        engine,
-        query: '',
-        results: [],
-        total_results: 0,
-        time_taken: 0,
-        related_searches: [],
-        knowledge_graph: null,
-        ads: []
-      };
-    }
-  }
 
   private parseGenericResponse(engine: SerpEngine, data: any): BrightDataSerpResponse {
     // Generic parsing for other engines
@@ -988,7 +775,6 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
       google: 1.0,
       baidu: 0.8,
       yandex: 0.8,
-      duckduckgo: 0.7,
       yahoo: 0.6,
       naver: 0.6
     };

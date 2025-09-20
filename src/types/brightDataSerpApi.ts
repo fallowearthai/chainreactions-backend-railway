@@ -39,7 +39,7 @@ export interface SearchEngineConfig {
   strengths: string[];
 }
 
-export type SerpEngine = 'google' | 'duckduckgo' | 'yandex' | 'baidu' | 'yahoo' | 'naver';
+export type SerpEngine = 'google' | 'yandex' | 'baidu' | 'yahoo' | 'naver';
 
 export interface MultiEngineSearchRequest {
   query?: string;  // Single query (backward compatibility)

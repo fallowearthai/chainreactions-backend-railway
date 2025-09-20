@@ -1,5 +1,6 @@
 import { BrightDataSerpService } from './BrightDataSerpService';
 import { MetaPromptResult } from './WebSearchMetaPromptService';
+import { ResultOptimizationService, OptimizedSerpResults } from './ResultOptimizationService';
 import { SearchRequest } from '../types/gemini';
 
 export interface SerpExecutionResult {
@@ -48,9 +49,11 @@ interface SearchTask {
 
 export class SerpExecutorService {
   private serpService: BrightDataSerpService;
+  private optimizationService: ResultOptimizationService;
 
   constructor() {
     this.serpService = new BrightDataSerpService();
+    this.optimizationService = new ResultOptimizationService();
   }
 
   async executeSearchStrategy(
@@ -109,6 +112,34 @@ export class SerpExecutorService {
     } catch (error) {
       console.error('❌ SERP execution failed:', error);
       throw new Error(`SERP execution failed: ${error}`);
+    }
+  }
+
+  /**
+   * Execute search strategy and return optimized results
+   * This is the enhanced version that includes result optimization
+   */
+  async executeSearchStrategyOptimized(
+    request: SearchRequest,
+    metaPromptResult: MetaPromptResult
+  ): Promise<OptimizedSerpResults> {
+    try {
+      console.log('🚀 Starting optimized SERP execution workflow...');
+
+      // Step 1: Execute standard search strategy
+      const standardResults = await this.executeSearchStrategy(request, metaPromptResult);
+
+      // Step 2: Apply optimization
+      console.log('🔧 Applying result optimization...');
+      const optimizedResults = this.optimizationService.optimizeResults(standardResults);
+
+      console.log(`✅ Optimization complete: ${standardResults.allResults.reduce((sum, r) => sum + r.results.length, 0)} → ${optimizedResults.consolidatedResults.length} results`);
+
+      return optimizedResults;
+
+    } catch (error) {
+      console.error('❌ Optimized SERP execution failed:', error);
+      throw new Error(`Optimized SERP execution failed: ${error}`);
     }
   }
 
@@ -264,7 +295,7 @@ export class SerpExecutorService {
 
   private async retryFailedTasks(failedTasks: SearchTask[]): Promise<SerpExecutionResult[]> {
     const retryResults: SerpExecutionResult[] = [];
-    const fallbackEngines = ['google', 'duckduckgo', 'yandex'];
+    const fallbackEngines = ['google', 'yandex'];
 
     for (const task of failedTasks) {
       // Try one alternative engine

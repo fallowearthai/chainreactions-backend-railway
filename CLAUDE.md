@@ -67,7 +67,8 @@ src/
 ## API Endpoints
 
 ### Complete Workflow
-- **POST `/api/enhanced/search`** - Full 3-stage OSINT analysis
+- **POST `/api/enhanced/search`** - Full 3-stage OSINT analysis (OPTIMIZED - Default)
+- **POST `/api/enhanced/search-legacy`** - Legacy version without optimization
 - **POST `/api/enhanced/strategy`** - Stage 1 only (meta-prompting)
 - **GET `/api/enhanced/test`** - Test with sample data
 - **GET `/api/enhanced/info`** - Workflow information

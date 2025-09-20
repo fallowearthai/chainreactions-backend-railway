@@ -118,6 +118,15 @@ export interface SearchResult {
     methodology?: string;
   };
   sources?: string[];
+  workflow_metadata?: {
+    optimization_applied?: boolean;
+    optimization_stats?: any;
+    execution_time_ms?: number;
+    relationship_likelihood?: string;
+    serp_execution_summary?: any;
+    search_strategy?: any;
+    entity_info?: any;
+  };
   error?: string;
 }
 
