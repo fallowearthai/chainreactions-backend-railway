@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import { EnhancedSearchController } from './controllers/EnhancedSearchController';
 import dotenv from 'dotenv';
 
@@ -43,6 +44,9 @@ app.use((req, res, next) => {
   }
 });
 
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, '../public')));
+
 // Create controller instance
 const enhancedSearchController = new EnhancedSearchController();
 
@@ -50,6 +54,7 @@ const enhancedSearchController = new EnhancedSearchController();
 app.post('/api/enhanced/search', (req, res) => enhancedSearchController.enhancedSearch(req, res));
 app.post('/api/enhanced/search-legacy', (req, res) => enhancedSearchController.enhancedSearchLegacy(req, res));
 app.post('/api/enhanced/strategy', (req, res) => enhancedSearchController.getSearchStrategy(req, res));
+app.post('/api/enhanced/stage1-2', (req, res) => enhancedSearchController.getStage2Results(req, res));
 app.post('/api/enhanced/test-stage2', (req, res) => enhancedSearchController.testStage2Only(req, res));
 app.get('/api/enhanced/test', (req, res) => enhancedSearchController.testWorkflow(req, res));
 app.get('/api/enhanced/test-stage2-save', (req, res) => enhancedSearchController.testStage2SaveResults(req, res));
@@ -66,8 +71,8 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Root endpoint
-app.get('/', (req, res) => {
+// Root endpoint - serve the frontend interface
+app.get('/api', (req, res) => {
   res.json({
     message: '3-Stage OSINT Workflow API',
     version: '1.0.0',
@@ -112,6 +117,7 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`🚀 3-Stage OSINT Workflow API server running on port ${PORT}`);
+    console.log(`🎯 Frontend Interface: http://localhost:${PORT}`);
     console.log(`📖 Health check: http://localhost:${PORT}/api/health`);
     console.log(`🔍 Complete workflow: http://localhost:${PORT}/api/enhanced/search`);
     console.log(`🧠 Meta-prompting only: http://localhost:${PORT}/api/enhanced/strategy`);

@@ -49,7 +49,7 @@ export class ResultIntegrationService {
       }
 
       // Convert to the expected SearchResult format
-      return this.formatSearchResult(request, analysisResults, serpResults);
+      return this.formatSearchResult(analysisResults, serpResults);
 
     } catch (error) {
       console.error('Result integration failed:', error);
@@ -83,7 +83,7 @@ export class ResultIntegrationService {
       }
 
       // Convert to the expected SearchResult format using optimized structure
-      return this.formatSearchResultOptimized(request, analysisResults, optimizedResults);
+      return this.formatSearchResultOptimized(analysisResults, optimizedResults);
 
     } catch (error) {
       console.error('Optimized result integration failed:', error);
@@ -112,21 +112,65 @@ export class ResultIntegrationService {
       metaPromptResult
     );
 
+    const systemInstruction = {
+      parts: [{
+        text: `You are an expert OSINT analyst specializing in institutional relationship analysis. Your task is to analyze search results and determine relationships between target institutions and risk entities.
+
+RELATIONSHIP TYPE DEFINITIONS:
+- "Direct": Clear evidence of official partnership, contract, collaboration, or direct relationship
+- "Indirect": Relationship exists through intermediary organizations or third parties
+- "Significant Mention": Both entities mentioned together in meaningful context but no clear relationship
+- "No Evidence Found": No meaningful connection found in the available sources
+
+ANALYSIS REQUIREMENTS:
+1. Use numbered citations [1], [2] that correspond to the search results provided
+2. Include specific dates, amounts, or details when available
+3. Assess source credibility (official websites, news outlets, academic papers)
+4. Consider geographic and political context
+5. Be conservative - only claim "Direct" relationship with strong evidence
+6. For "Indirect" relationships, clearly identify the intermediary organization
+
+Return JSON with this EXACT structure:
+{
+  "relationship_type": "Direct|Indirect|Significant Mention|No Evidence Found",
+  "finding_summary": "Detailed summary with numbered citations [1], [2], etc. matching the search results",
+  "potential_intermediary_B": "Name of any intermediary organization if Indirect relationship",
+  "sources": ["List of relevant URLs from the search results"],
+  "confidence_score": 0.85,
+  "evidence_quality": "high|medium|low",
+  "key_evidence": ["Bullet points of strongest evidence found"]
+}
+
+Focus on factual, verifiable information with proper source attribution.`
+      }]
+    };
+
     try {
       const response = await this.geminiService.generateContent(
         [{
           parts: [{ text: analysisPrompt }]
         }],
-        undefined, // no system instruction
+        systemInstruction,
         undefined, // no tools
         {
-          temperature: 0.1, // Low temperature for consistent analysis
-          maxOutputTokens: 3000,
+          temperature: 0.0, // Maximum consistency for analysis
           responseMimeType: "application/json"
         }
       );
 
-      const analysis = JSON.parse(response.candidates[0].content.parts[0].text || '{}');
+      if (!response.candidates || !response.candidates[0] || !response.candidates[0].content || !response.candidates[0].content.parts || !response.candidates[0].content.parts[0]) {
+        throw new Error('Invalid Gemini API response structure: Missing candidates or content');
+      }
+
+      const rawResponse = response.candidates[0].content.parts[0].text;
+      if (!rawResponse) {
+        throw new Error('Empty response from Gemini API');
+      }
+
+      console.log(`📝 Raw Gemini response length: ${rawResponse.length} chars`);
+      console.log(`📝 Raw response preview: ${rawResponse.substring(0, 200)}...`);
+
+      const analysis = JSON.parse(rawResponse);
 
       return {
         risk_item: riskEntity,
@@ -160,12 +204,9 @@ export class ResultIntegrationService {
     optimizedResults: OptimizedSerpResults
   ): Promise<OSINTAnalysisResult> {
 
-    // Filter optimized results relevant to this specific risk entity
-    const relevantResults = this.filterOptimizedResults(
-      optimizedResults.consolidatedResults,
-      request.Target_institution,
-      riskEntity
-    );
+    // Use all optimized results - let AI handle entity relevance analysis
+    console.log(`🔍 Using all ${optimizedResults.consolidatedResults.length} optimized results for AI analysis of entity: ${riskEntity}`);
+    const relevantResults = optimizedResults.consolidatedResults;
 
     const analysisPrompt = this.buildOptimizedAnalysisPrompt(
       request,
@@ -174,21 +215,65 @@ export class ResultIntegrationService {
       metaPromptResult
     );
 
+    const systemInstruction = {
+      parts: [{
+        text: `You are an expert OSINT analyst specializing in institutional relationship analysis. Your task is to analyze search results and determine relationships between target institutions and risk entities.
+
+RELATIONSHIP TYPE DEFINITIONS:
+- "Direct": Clear evidence of official partnership, contract, collaboration, or direct relationship
+- "Indirect": Relationship exists through intermediary organizations or third parties
+- "Significant Mention": Both entities mentioned together in meaningful context but no clear relationship
+- "No Evidence Found": No meaningful connection found in the available sources
+
+ANALYSIS REQUIREMENTS:
+1. Use numbered citations [1], [2] that correspond to the search results provided
+2. Include specific dates, amounts, or details when available
+3. Assess source credibility (official websites, news outlets, academic papers)
+4. Consider geographic and political context
+5. Be conservative - only claim "Direct" relationship with strong evidence
+6. For "Indirect" relationships, clearly identify the intermediary organization
+
+Return JSON with this EXACT structure:
+{
+  "relationship_type": "Direct|Indirect|Significant Mention|No Evidence Found",
+  "finding_summary": "Detailed summary with numbered citations [1], [2], etc. matching the search results",
+  "potential_intermediary_B": "Name of any intermediary organization if Indirect relationship",
+  "sources": ["List of relevant URLs from the search results"],
+  "confidence_score": 0.85,
+  "evidence_quality": "high|medium|low",
+  "key_evidence": ["Bullet points of strongest evidence found"]
+}
+
+Focus on factual, verifiable information with proper source attribution.`
+      }]
+    };
+
     try {
       const response = await this.geminiService.generateContent(
         [{
           parts: [{ text: analysisPrompt }]
         }],
-        undefined, // no system instruction
+        systemInstruction,
         undefined, // no tools
         {
-          temperature: 0.1, // Low temperature for consistent analysis
-          maxOutputTokens: 3000,
+          temperature: 0.0, // Maximum consistency for analysis
           responseMimeType: "application/json"
         }
       );
 
-      const analysis = JSON.parse(response.candidates[0].content.parts[0].text || '{}');
+      if (!response.candidates || !response.candidates[0] || !response.candidates[0].content || !response.candidates[0].content.parts || !response.candidates[0].content.parts[0]) {
+        throw new Error('Invalid Gemini API response structure: Missing candidates or content');
+      }
+
+      const rawResponse = response.candidates[0].content.parts[0].text;
+      if (!rawResponse) {
+        throw new Error('Empty response from Gemini API');
+      }
+
+      console.log(`📝 Raw Gemini response length: ${rawResponse.length} chars`);
+      console.log(`📝 Raw response preview: ${rawResponse.substring(0, 200)}...`);
+
+      const analysis = JSON.parse(rawResponse);
 
       return {
         risk_item: riskEntity,
@@ -252,7 +337,6 @@ export class ResultIntegrationService {
   ): string {
 
     const resultsText = relevantResults
-      .slice(0, 20) // Limit to prevent token overflow
       .map((result, index) =>
         `[${index + 1}] ${result.title}\n${result.snippet}\nURL: ${result.url}\nEngine: ${result.searchMetadata?.engine}\n`
       ).join('\n');
@@ -261,9 +345,7 @@ export class ResultIntegrationService {
       ? `Focus on relationships within the timeframe ${request.Start_Date} to ${request.End_Date}.`
       : '';
 
-    return `You are an expert OSINT analyst. Analyze the search results to determine the relationship between the target institution and risk entity.
-
-TARGET INSTITUTION: ${request.Target_institution}
+    return `TARGET INSTITUTION: ${request.Target_institution}
 RISK ENTITY: ${riskEntity}
 GEOGRAPHIC CONTEXT: ${request.Location}
 ${timeConstraint}
@@ -276,34 +358,7 @@ ANALYSIS CONTEXT:
 - Search keywords used: ${metaPromptResult.search_strategy.search_keywords.join(', ')}
 - Sources analyzed: ${relevantResults.length}
 
-TASK: Determine the relationship type and provide detailed analysis.
-
-Return JSON with this exact structure:
-{
-  "relationship_type": "Direct|Indirect|Significant Mention|No Evidence Found",
-  "finding_summary": "Detailed summary with numbered citations [1], [2], etc. matching the search results above",
-  "potential_intermediary_B": "Name of any intermediary organization if Indirect relationship",
-  "sources": ["List of relevant URLs from the search results"],
-  "confidence_score": 0.85,
-  "evidence_quality": "high|medium|low",
-  "key_evidence": ["Bullet points of strongest evidence found"]
-}
-
-RELATIONSHIP TYPE DEFINITIONS:
-- "Direct": Clear evidence of official partnership, contract, collaboration, or direct relationship
-- "Indirect": Relationship exists through intermediary organizations or third parties
-- "Significant Mention": Both entities mentioned together in meaningful context but no clear relationship
-- "No Evidence Found": No meaningful connection found in the available sources
-
-ANALYSIS REQUIREMENTS:
-1. Use numbered citations [1], [2] that correspond to the search results above
-2. Include specific dates, amounts, or details when available
-3. Assess source credibility (official websites, news outlets, academic papers)
-4. Consider the geographic and political context of ${request.Location}
-5. Be conservative - only claim "Direct" relationship with strong evidence
-6. For "Indirect" relationships, clearly identify the intermediary organization
-
-Focus on factual, verifiable information with proper source attribution.`;
+TASK: Analyze the search results above and determine the relationship between the target institution and risk entity. Return your analysis as JSON following the structure defined in the system instruction.`;
   }
 
   private createFallbackAnalysis(
@@ -329,7 +384,6 @@ Focus on factual, verifiable information with proper source attribution.`;
   }
 
   private formatSearchResult(
-    request: SearchRequest,
     analysisResults: OSINTAnalysisResult[],
     serpResults: AggregatedSerpResults
   ): SearchResult {
@@ -414,7 +468,7 @@ Analysis Summary:
       const hasRiskEntity = riskTerms.some(term => text.includes(term));
 
       return hasInstitution && hasRiskEntity;
-    }).slice(0, 20); // Use top 20 since results are already scored and sorted
+    }); // Use all filtered results as requested
   }
 
   private buildOptimizedAnalysisPrompt(
@@ -433,9 +487,7 @@ Analysis Summary:
       ? `Focus on relationships within the timeframe ${request.Start_Date} to ${request.End_Date}.`
       : '';
 
-    return `You are an expert OSINT analyst. Analyze the pre-scored and optimized search results to determine the relationship between the target institution and risk entity.
-
-TARGET INSTITUTION: ${request.Target_institution}
+    return `TARGET INSTITUTION: ${request.Target_institution}
 RISK ENTITY: ${riskEntity}
 GEOGRAPHIC CONTEXT: ${request.Location}
 ${timeConstraint}
@@ -449,35 +501,7 @@ ANALYSIS CONTEXT:
 - Sources analyzed: ${relevantResults.length} (from ${relevantResults.reduce((sum, r) => sum + r.searchKeywords.length, 0)} search queries)
 - Results are pre-filtered and scored for relevance
 
-TASK: Determine the relationship type and provide detailed analysis.
-
-Return JSON with this exact structure:
-{
-  "relationship_type": "Direct|Indirect|Significant Mention|No Evidence Found",
-  "finding_summary": "Detailed summary with numbered citations [1], [2], etc. matching the search results above",
-  "potential_intermediary_B": "Name of any intermediary organization if Indirect relationship",
-  "sources": ["List of relevant URLs from the search results"],
-  "confidence_score": 0.85,
-  "evidence_quality": "high|medium|low",
-  "key_evidence": ["Bullet points of strongest evidence found"]
-}
-
-RELATIONSHIP TYPE DEFINITIONS:
-- "Direct": Clear evidence of official partnership, contract, collaboration, or direct relationship
-- "Indirect": Relationship exists through intermediary organizations or third parties
-- "Significant Mention": Both entities mentioned together in meaningful context but no clear relationship
-- "No Evidence Found": No meaningful connection found in the available sources
-
-ANALYSIS REQUIREMENTS:
-1. Use numbered citations [1], [2] that correspond to the search results above
-2. Consider the relevance scores - higher scores indicate more relevant results
-3. Include specific dates, amounts, or details when available
-4. Assess source credibility (official websites, news outlets, academic papers)
-5. Consider the geographic and political context of ${request.Location}
-6. Be conservative - only claim "Direct" relationship with strong evidence
-7. For "Indirect" relationships, clearly identify the intermediary organization
-
-Focus on factual, verifiable information with proper source attribution.`;
+TASK: Analyze the optimized search results above and determine the relationship between the target institution and risk entity. Consider the relevance scores when evaluating evidence. Return your analysis as JSON following the structure defined in the system instruction.`;
   }
 
   private createOptimizedFallbackAnalysis(
@@ -503,7 +527,6 @@ Focus on factual, verifiable information with proper source attribution.`;
   }
 
   private formatSearchResultOptimized(
-    request: SearchRequest,
     analysisResults: OSINTAnalysisResult[],
     optimizedResults: OptimizedSerpResults
   ): SearchResult {

@@ -491,4 +491,62 @@ export class EnhancedSearchController {
       });
     }
   }
+
+  async getStage2Results(req: Request, res: Response): Promise<void> {
+    try {
+      console.log('🔍 Frontend request for Stage 1+2 results...');
+
+      const searchRequest: SearchRequest = {
+        Target_institution: req.body.Target_institution,
+        Risk_Entity: req.body.Risk_Entity,
+        Location: req.body.Location,
+        Start_Date: req.body.Start_Date,
+        End_Date: req.body.End_Date
+      };
+
+      const startTime = Date.now();
+
+      // Execute Stage 1
+      console.log('🧠 Stage 1: Generating search strategy...');
+      const metaPromptResult = await this.metaPromptService.generateSearchStrategy(searchRequest);
+
+      // Execute Stage 2
+      console.log('🚀 Stage 2: Executing optimized SERP searches...');
+      const serpResults = await this.serpExecutorService.executeSearchStrategyOptimized(searchRequest, metaPromptResult);
+
+      const totalTime = Date.now() - startTime;
+
+      console.log(`✅ Stage 1+2 completed in ${(totalTime / 1000).toFixed(2)}s for frontend`);
+
+      res.status(200).json({
+        success: true,
+        stage1_result: metaPromptResult,
+        stage2_result: {
+          execution_summary: serpResults.executionSummary,
+          optimization_metadata: serpResults.optimizationMetadata,
+          consolidated_results: serpResults.consolidatedResults.map((result, index) => ({
+            id: index + 1,
+            title: result.title,
+            url: result.url,
+            snippet: result.snippet.substring(0, 200) + (result.snippet.length > 200 ? '...' : ''),
+            engine: result.engine,
+            relevance_score: result.relevanceScore,
+            search_keywords: result.searchKeywords
+          }))
+        },
+        execution_time_ms: totalTime,
+        execution_time: `${(totalTime / 1000).toFixed(2)}s`
+      });
+
+    } catch (error) {
+      console.error('❌ Stage 1+2 frontend request failed:', error);
+
+      res.status(500).json({
+        success: false,
+        error: 'Stage 1+2 execution failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
 }
