@@ -73,6 +73,7 @@ export class ResultOptimizationService {
         processingTime,
         filtersApplied: [
           'URL deduplication',
+          'Image search result filtering',
           'Minimal quality filtering',
           'Smart penalty scoring',
           'Relevance-based ranking',
@@ -196,8 +197,38 @@ export class ResultOptimizationService {
         return false;
       }
 
+      // Filter out image search results (Baidu image search, Google images, etc.)
+      if (this.isImageSearchResult(result.url)) {
+        return false;
+      }
+
       // Keep all other results - quality will be handled by scoring
       return true;
+    });
+  }
+
+  /**
+   * Check if a URL is an image search result that should be filtered out
+   */
+  private isImageSearchResult(url: string): boolean {
+    const imageSearchPatterns = [
+      'image.baidu.com/search', // Baidu image search
+      'images.google.com',      // Google image search
+      'www.google.com/search.*tbm=isch', // Google image search via tbm parameter
+      'yandex.com/images',      // Yandex image search
+      'search.yahoo.com/search.*&p=.*&fr=yfp-t&ei=UTF-8&fp=1', // Yahoo image search
+      '/imgres?', // Google image result redirects
+      'tn=baiduimage', // Baidu image search parameter
+    ];
+
+    return imageSearchPatterns.some(pattern => {
+      try {
+        const regex = new RegExp(pattern, 'i');
+        return regex.test(url);
+      } catch (error) {
+        // Fallback to simple string matching if regex fails
+        return url.toLowerCase().includes(pattern.toLowerCase());
+      }
     });
   }
 

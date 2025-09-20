@@ -225,6 +225,16 @@ curl -X GET http://localhost:3000/api/enhanced/test
 - **Type Safety**: Full TypeScript compatibility with proper result type definitions
 - **Extensible Framework**: Ready for additional search engines with minimal code changes
 
+### ✅ Image Search Result Filtering (September 2024)
+- **Problem Identified**: Image search results (e.g., Baidu image search) were contaminating OSINT analysis with non-useful content
+- **Solution Implemented**: Comprehensive image search URL filtering in both optimization and legacy pipelines
+- **Filter Coverage**: Baidu (`image.baidu.com/search`, `tn=baiduimage`), Google (`images.google.com`, `tbm=isch`), Yandex (`yandex.com/images`), and other major engines
+- **Implementation Locations**:
+  - `ResultOptimizationService.isImageSearchResult()` (src/services/ResultOptimizationService.ts:209-232)
+  - `SerpExecutorService.isImageSearchResult()` (src/services/SerpExecutorService.ts:454-477)
+- **Production Status**: ✅ ACTIVE - Image search results now filtered from all search workflows
+- **Quality Impact**: Eliminates irrelevant image search pages from AI analysis, improving result quality and token efficiency
+
 ### ✅ Yandex API Issues Resolution (September 2024)
 - **Problem**: Yandex searches were timing out and returning 400 "format is required" errors
 - **Root Cause**: Incorrect API parameter configuration - Yandex requires `format: 'json'` but does NOT support `data_format: 'parsed'`
@@ -239,38 +249,17 @@ curl -X GET http://localhost:3000/api/enhanced/test
 - **Google Implementation**: ✅ JSON string parsing working perfectly (10 results/search)
 - **Yandex Implementation**: ✅ HTML parsing working perfectly (30+ results/search)
 - **Baidu Implementation**: ✅ HTML parsing extracting 20+ results per search
-- **DuckDuckGo Implementation**: ✅ Raw HTML parsing working perfectly (10 results/search)
-- **Multi-Engine Support**: ✅ Google + Yandex + Baidu + DuckDuckGo fully operational
+- **Multi-Engine Support**: ✅ Google + Yandex + Baidu fully operational
 - **Stage 3 Readiness**: ✅ 100+ structured results available for AI analysis
 - **System Reliability**: ✅ 100% API success rate with robust error handling
 
-### ⚠️ DuckDuckGo API Investigation & Fix Attempt (September 2024)
-- **Problem Identified**: DuckDuckGo showing 0% success rate in production despite working HTML parsing
-- **Root Cause**: Bright Data API returns character array format `{"0": "char1", "1": "char2", ...}` instead of HTML string
-- **Fix Implemented**: Added character array detection and reconstruction logic in `parseEngineResponse()` method
-- **Code Location**: src/services/BrightDataSerpService.ts:470-488
-- **Test Results**: Fix validated with unit tests, but production still shows 0% success rate
-- **Status**: **MARKED FOR REMOVAL** - DuckDuckGo API consistently unreliable despite technical fixes
-
-#### 🔧 Character Array Fix Implementation
-```typescript
-// Handle DuckDuckGo character array format (Bright Data specific format)
-if (engine === 'duckduckgo' && data && typeof data === 'object' && !data.body && Object.keys(data).every(key => !isNaN(Number(key)))) {
-  const maxIndex = Math.max(...Object.keys(data).map(Number));
-  let htmlContent = '';
-  for (let i = 0; i <= maxIndex; i++) {
-    htmlContent += data[i] || '';
-  }
-  return this.parseDuckDuckGoHtml(htmlContent, engine);
-}
-```
-
-#### 📋 Next Steps - DuckDuckGo Removal Plan
-- **Planned Action**: Remove DuckDuckGo engine from supported engines list
-- **Reason**: Consistent 0% success rate despite multiple fix attempts (syntax errors, character array parsing)
-- **Alternative Strategy**: System will rely on Google + Baidu + Yandex (3-engine coverage provides excellent results)
-- **Impact**: No reduction in search quality - other engines provide comprehensive coverage
-- **Timing**: Next development cycle after current Stage 2 optimizations are stabilized
+### ✅ DuckDuckGo Engine Removal (September 2024)
+- **Problem**: DuckDuckGo consistently showed 0% success rate despite multiple fix attempts
+- **Issues Encountered**: Character array format parsing, syntax errors, API inconsistencies
+- **Decision**: Removed DuckDuckGo from supported engines list for production stability
+- **Current Support**: Google + Baidu + Yandex (3-engine coverage provides excellent results)
+- **Impact**: No reduction in search quality - remaining engines provide comprehensive coverage
+- **Status**: ✅ COMPLETE - DuckDuckGo references removed from all codebase and configurations
 
 # Development Principles
 
