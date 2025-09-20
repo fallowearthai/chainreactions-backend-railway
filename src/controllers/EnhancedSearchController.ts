@@ -3,6 +3,8 @@ import { SearchRequest, SearchResult } from '../types/gemini';
 import { WebSearchMetaPromptService } from '../services/WebSearchMetaPromptService';
 import { SerpExecutorService } from '../services/SerpExecutorService';
 import { ResultIntegrationService } from '../services/ResultIntegrationService';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export class EnhancedSearchController {
   private metaPromptService: WebSearchMetaPromptService;
@@ -324,6 +326,168 @@ export class EnhancedSearchController {
       res.status(500).json({
         success: false,
         error: 'Failed to get workflow info'
+      });
+    }
+  }
+
+  async testStage3FromSavedResults(req: Request, res: Response): Promise<void> {
+    try {
+      // Get stage2 result file path from query parameter
+      const filePath = req.query.filePath as string;
+      if (!filePath) {
+        res.status(400).json({
+          success: false,
+          error: 'Missing filePath query parameter'
+        });
+        return;
+      }
+
+      console.log(`🧠 Loading Stage 2 results from: ${filePath}`);
+
+      // Read the saved Stage 2 results
+      const fileContent = fs.readFileSync(filePath, 'utf8');
+      const savedResults = JSON.parse(fileContent);
+
+      console.log(`📋 Loaded saved results: ${savedResults.stage2_result.consolidatedResults.length} consolidated results`);
+
+      // Extract the components needed for Stage 3
+      const searchRequest: SearchRequest = {
+        Target_institution: savedResults.test_info.target_institution,
+        Risk_Entity: savedResults.test_info.risk_entity,
+        Location: savedResults.test_info.location
+      };
+
+      const metaPromptResult = savedResults.stage1_result;
+      const serpResults = savedResults.stage2_result;
+
+      const startTime = Date.now();
+
+      // Execute Stage 3 only
+      console.log('🧠 Stage 3: Analyzing saved Stage 2 results...');
+      console.log(`📊 Input: ${serpResults.consolidatedResults.length} consolidated results`);
+      const finalResult = await this.resultIntegrationService.integrateAndAnalyze(
+        searchRequest,
+        metaPromptResult,
+        serpResults
+      );
+
+      const executionTime = Date.now() - startTime;
+
+      console.log(`✅ Stage 3 analysis completed in ${(executionTime / 1000).toFixed(2)}s`);
+
+      res.status(200).json({
+        success: true,
+        message: 'Stage 3 analysis completed using saved Stage 2 results',
+        execution_time_ms: executionTime,
+        input_file: filePath,
+        stage3_result: finalResult,
+        input_summary: {
+          stage2_results: serpResults.consolidatedResults.length,
+          stage2_sources: serpResults.executionSummary.enginesUsed,
+          stage1_keywords: metaPromptResult.search_strategy.search_keywords.length
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Stage 3 test from saved results failed:', error);
+
+      res.status(500).json({
+        success: false,
+        error: 'Stage 3 test failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+
+  async testStage2SaveResults(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      // Get test number from query parameter
+      const testNumber = req.query.testNumber as string || '1';
+
+      // Use standard test case
+      const searchRequest: SearchRequest = {
+        Target_institution: "NanoAcademic Technologies",
+        Risk_Entity: "HongZhiWei",
+        Location: "China"
+      };
+
+      console.log(`🚀 Starting Stage 1+2 test #${testNumber} for: ${searchRequest.Target_institution} vs ${searchRequest.Risk_Entity}`);
+
+      // Stage 1: Generate search strategy
+      console.log('📋 Stage 1: Generating search strategy with WebSearch...');
+      const metaPromptResult = await this.metaPromptService.generateSearchStrategy(searchRequest);
+
+      console.log(`Generated ${metaPromptResult.search_strategy.search_keywords.length} keywords for ${metaPromptResult.search_strategy.source_engine.length} engines`);
+
+      // Stage 2: Execute SERP searches
+      console.log('🔍 Stage 2: Executing SERP searches...');
+      const serpResults = await this.serpExecutorService.executeSearchStrategy(searchRequest, metaPromptResult);
+
+      console.log(`SERP execution completed: ${serpResults.executionSummary.totalResults} results from ${serpResults.executionSummary.enginesUsed.length} engines`);
+
+      const totalTime = Date.now() - startTime;
+
+      // Create comprehensive result object
+      const testResult = {
+        test_info: {
+          test_number: testNumber,
+          timestamp: new Date().toISOString(),
+          execution_time_ms: totalTime,
+          target_institution: searchRequest.Target_institution,
+          risk_entity: searchRequest.Risk_Entity,
+          location: searchRequest.Location
+        },
+        stage1_result: metaPromptResult,
+        stage2_result: serpResults,
+        summary: {
+          stage1: {
+            keywords_generated: metaPromptResult.search_strategy.search_keywords.length,
+            engines_selected: metaPromptResult.search_strategy.source_engine,
+            relationship_likelihood: metaPromptResult.search_strategy.relationship_likelihood
+          },
+          stage2: {
+            total_queries: serpResults.executionSummary.totalQueries,
+            successful_queries: serpResults.executionSummary.successfulQueries,
+            total_results: serpResults.executionSummary.totalResults,
+            engines_used: serpResults.executionSummary.enginesUsed,
+            execution_time_ms: serpResults.executionSummary.executionTime
+          }
+        }
+      };
+
+      // Save to JSON file
+      const outputDir = path.join(process.cwd(), 'test_results');
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+
+      const filename = `stage2_test_${testNumber}_${Date.now()}.json`;
+      const filepath = path.join(outputDir, filename);
+
+      fs.writeFileSync(filepath, JSON.stringify(testResult, null, 2));
+
+      console.log(`✅ Test #${testNumber} completed in ${(totalTime / 1000).toFixed(2)}s - Results saved to ${filename}`);
+
+      res.status(200).json({
+        success: true,
+        message: `Stage 1+2 test #${testNumber} completed successfully`,
+        execution_time_ms: totalTime,
+        results_file: filename,
+        results_path: filepath,
+        summary: testResult.summary
+      });
+
+    } catch (error) {
+      console.error(`❌ Test #${req.query.testNumber || '1'} failed:`, error);
+
+      res.status(500).json({
+        success: false,
+        error: `Stage 1+2 test failed`,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
       });
     }
   }

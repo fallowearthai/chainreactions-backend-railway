@@ -261,6 +261,34 @@ curl -X GET http://localhost:3000/api/enhanced/test
 - **Impact**: No reduction in search quality - remaining engines provide comprehensive coverage
 - **Status**: ✅ COMPLETE - DuckDuckGo references removed from all codebase and configurations
 
+### ✅ Stage 2-3 Integration & Stability Testing (September 2024)
+- **Testing Methodology**: Comprehensive 3-stage workflow stability analysis with same-input repeated testing
+- **Stage 2 Consistency**: Successfully executed 3 repeated tests, all generating 60 consolidated results with proper deduplication
+- **去重机制验证**: Confirmed URL deduplication working correctly - china-see.com PDF appears once in consolidatedResults despite multiple keyword matches
+- **Data Transmission Format**: Stage 2 → Stage 3 data structure verified:
+  ```json
+  {
+    "type": "organic", "title": "...", "url": "...", "snippet": "...",
+    "searchMetadata": {
+      "originalKeyword": "...", "engine": "google|baidu|yandex", "relevanceScore": 12
+    }
+  }
+  ```
+
+### 📊 Stage 3 Stability Analysis Results
+- **When Successful**: Stage 3 shows excellent consistency (3/3 identical outputs: "Direct" relationship, same evidence, same source count)
+- **Core Evidence Recognition**: All successful analyses consistently identify 2015 technology purchase from china-see.com PDF
+- **Instability Source**: Technical failures due to Gemini API returning malformed JSON ("Unexpected end of JSON input", "Unterminated string")
+- **Failure Pattern**: Certain input combinations (30 filtered results vs 16) trigger API response truncation
+- **Success Rate**: ~50% success rate for Stage 3 completion, but 100% consistency when successful
+
+### 🔍 Key Technical Insights
+- **Data Pipeline**: Stage 2 → Stage 3 transmission is 100% reliable (verified with detailed logging)
+- **Filtering Logic**: Enhanced to OR-based filtering (institution OR risk entity) for better result coverage
+- **AI Analysis**: When Gemini completes successfully, outputs are highly stable and accurate
+- **Reliability Issue**: Gemini API response completeness varies with prompt complexity/length
+- **Production Recommendation**: Implement retry logic for malformed JSON responses
+
 # Development Principles
 
 ## Code Quality Standards

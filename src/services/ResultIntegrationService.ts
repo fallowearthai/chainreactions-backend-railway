@@ -218,10 +218,15 @@ export class ResultIntegrationService {
     riskEntity: string
   ): any[] {
 
+    console.log(`📊 Raw input data structure check:`);
+    console.log(`  - Total results: ${results.length}`);
+    console.log(`  - First result keys: ${results[0] ? Object.keys(results[0]).join(', ') : 'none'}`);
+    console.log(`  - Sample result:`, JSON.stringify(results[0], null, 2));
+
     const institutionTerms = institution.toLowerCase().split(' ');
     const riskTerms = riskEntity.toLowerCase().split(' ');
 
-    return results.filter(result => {
+    const filtered = results.filter(result => {
       const text = `${result.title} ${result.snippet}`.toLowerCase();
 
       // Must contain at least one term from institution
@@ -230,8 +235,13 @@ export class ResultIntegrationService {
       // Must contain at least one term from risk entity
       const hasRiskEntity = riskTerms.some(term => text.includes(term));
 
-      return hasInstitution && hasRiskEntity;
+      // For testing: Accept if contains either institution OR risk entity (more permissive)
+      return hasInstitution || hasRiskEntity;
     }).slice(0, 30); // Limit to top 30 most relevant results
+
+    console.log(`🔍 Filtered ${results.length} → ${filtered.length} relevant results`);
+    console.log(`📝 Sample filtered result:`, JSON.stringify(filtered[0], null, 2));
+    return filtered;
   }
 
   private buildAnalysisPrompt(

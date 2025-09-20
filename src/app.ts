@@ -52,6 +52,8 @@ app.post('/api/enhanced/search-legacy', (req, res) => enhancedSearchController.e
 app.post('/api/enhanced/strategy', (req, res) => enhancedSearchController.getSearchStrategy(req, res));
 app.post('/api/enhanced/test-stage2', (req, res) => enhancedSearchController.testStage2Only(req, res));
 app.get('/api/enhanced/test', (req, res) => enhancedSearchController.testWorkflow(req, res));
+app.get('/api/enhanced/test-stage2-save', (req, res) => enhancedSearchController.testStage2SaveResults(req, res));
+app.get('/api/enhanced/test-stage3-from-saved', (req, res) => enhancedSearchController.testStage3FromSavedResults(req, res));
 app.get('/api/enhanced/info', (req, res) => enhancedSearchController.getWorkflowInfo(req, res));
 
 // Health check endpoint
