@@ -68,7 +68,7 @@ export class SerpExecutorService {
       // Generate search tasks based on meta prompt strategy
       const searchTasks = this.generateSearchTasks(metaPromptResult);
 
-      console.log(`🚀 Executing ${searchTasks.length} optimized search tasks across ${metaPromptResult.search_strategy.source_engine.length} engines`);
+      console.log(`🚀 Executing ${searchTasks.length} optimized search tasks across ${searchTasks.length > 0 ? new Set(searchTasks.map(t => t.engine)).size : 0} engines`);
 
       // Execute searches with enhanced concurrency control
       const results = await this.executeSearchesWithConcurrency(searchTasks, 3);
@@ -85,7 +85,8 @@ export class SerpExecutorService {
         allResults.reduce((sum, r) => sum + r.metadata.searchTime, 0) / allResults.length : 0;
 
       const engineSuccessRates: Record<string, number> = {};
-      for (const engine of metaPromptResult.search_strategy.source_engine) {
+      const actualEngines = [...new Set(searchTasks.map(t => t.engine))];
+      for (const engine of actualEngines) {
         const engineTasks = searchTasks.filter(t => t.engine === engine).length;
         const engineSuccesses = successfulResults.filter(r => r.engine === engine).length;
         engineSuccessRates[engine] = engineTasks > 0 ? engineSuccesses / engineTasks : 0;
@@ -263,11 +264,19 @@ export class SerpExecutorService {
     const tasks: SearchTask[] = [];
     const { search_strategy } = metaPromptResult;
 
-    console.log(`📋 Generating search tasks for ${search_strategy.search_keywords.length} keywords across ${search_strategy.source_engine.length} engines`);
+    // Map and normalize search engines
+    const normalizedEngines = this.normalizeSearchEngines(search_strategy.source_engine);
+    console.log(`📋 Generating search tasks for ${search_strategy.search_keywords.length} keywords across ${normalizedEngines.length} engines`);
 
-    // Generate tasks for each keyword on each engine
+    // Generate tasks for each keyword on each normalized engine
     for (const keyword of search_strategy.search_keywords) {
-      for (const engine of search_strategy.source_engine) {
+      for (const engine of normalizedEngines) {
+        // Validate and format country code for each engine
+        const validatedCountry = this.validateAndFormatCountryCode(search_strategy.country_code, engine);
+        const validatedLanguage = search_strategy.languages && search_strategy.languages.length > 0
+          ? search_strategy.languages[0]
+          : 'en';
+
         tasks.push({
           keyword,
           engine,
@@ -275,8 +284,8 @@ export class SerpExecutorService {
           priority: this.calculateKeywordPriority(keyword, metaPromptResult),
           options: {
             num_results: 25, // Increased for better coverage
-            country: search_strategy.country_code || 'us',
-            language: search_strategy.languages[0] || 'en',
+            country: validatedCountry,
+            language: validatedLanguage,
           }
         });
       }
@@ -285,9 +294,81 @@ export class SerpExecutorService {
     // Sort by priority and return all tasks
     const sortedTasks = tasks.sort((a, b) => b.priority - a.priority);
 
-    console.log(`✅ Generated ${sortedTasks.length} search tasks (${search_strategy.search_keywords.length} keywords × ${search_strategy.source_engine.length} engines)`);
+    console.log(`✅ Generated ${sortedTasks.length} search tasks (${search_strategy.search_keywords.length} keywords × ${normalizedEngines.length} engines)`);
 
     return sortedTasks;
+  }
+
+  /**
+   * Normalize search engines from Stage 1 results to available engines
+   * Maps "google scholar" -> "google", "baidu scholar" -> "baidu", defaults to "google"
+   */
+  private normalizeSearchEngines(sourceEngines: string[]): string[] {
+    if (!sourceEngines || sourceEngines.length === 0) {
+      console.log('🔍 No engines specified, defaulting to google');
+      return ['google'];
+    }
+
+    const normalizedEngines = new Set<string>();
+
+    for (const engine of sourceEngines) {
+      const engineLower = engine.toLowerCase();
+
+      // Map scholar variants to base engines
+      if (engineLower.includes('google scholar') || engineLower.includes('google')) {
+        normalizedEngines.add('google');
+      } else if (engineLower.includes('baidu scholar') || engineLower.includes('baidu')) {
+        normalizedEngines.add('baidu');
+      } else if (engineLower.includes('yandex')) {
+        normalizedEngines.add('yandex');
+      } else {
+        // Default to google for unrecognized engines
+        console.log(`🔍 Unrecognized engine "${engine}", defaulting to google`);
+        normalizedEngines.add('google');
+      }
+    }
+
+    const result = Array.from(normalizedEngines);
+    console.log(`🔍 Engine mapping: ${JSON.stringify(sourceEngines)} -> ${JSON.stringify(result)}`);
+
+    return result;
+  }
+
+  /**
+   * Validate and format country codes for search engines
+   * Handles complex cases like "ca,lb" and ensures valid formats
+   */
+  private validateAndFormatCountryCode(countryCode: string | undefined, engine: string): string {
+    if (!countryCode) {
+      return 'us'; // Default to US
+    }
+
+    // Handle composite country codes (e.g., "ca,lb")
+    if (countryCode.includes(',')) {
+      const countries = countryCode.split(',').map(c => c.trim());
+      console.log(`🔍 Composite country code detected: ${countryCode} -> ${countries.join(', ')}`);
+
+      // For Google, use the first country or default to US
+      if (engine === 'google') {
+        const validCountry = countries[0] || 'us';
+        console.log(`🔍 Using first country for Google: ${validCountry}`);
+        return validCountry;
+      }
+
+      // For other engines, they might handle multiple countries differently
+      // For now, use the first country
+      return countries[0] || 'us';
+    }
+
+    // Validate single country code (basic validation)
+    const validCountryCodes = ['us', 'ca', 'gb', 'fr', 'de', 'jp', 'cn', 'ru', 'in', 'au', 'br', 'lb', 'sg', 'kr', 'it', 'es', 'nl', 'se', 'no', 'dk', 'fi', 'pl', 'tr', 'il', 'sa', 'ae', 'mx', 'ar', 'za', 'eg', 'ng', 'ke', 'my', 'th', 'vn', 'ph', 'id', 'pk', 'bd', 'lk', 'mm', 'kh', 'la', 'mm', 'np', 'bt', 'af', 'tj', 'kg', 'kz', 'uz', 'tm', 'ge', 'am', 'az', 'iq', 'ir', 'sy', 'jo', 'lb', 'cy', 'mt', 'gr', 'pt', 'hu', 'cz', 'sk', 'si', 'hr', 'ba', 'rs', 'me', 'mk', 'bg', 'ro', 'md', 'ua', 'by', 'lt', 'lv', 'ee', 'pl', 'ru', 'fi', 'se', 'no', 'dk', 'is', 'at', 'ch', 'li', 'lu', 'be', 'nl', 'gb', 'ie', 'fr', 'mc', 'ad', 'es', 'pt', 'it', 'sm', 'va', 'mt', 'de', 'lu', 'be', 'nl', 'fr', 'ch', 'li', 'at', 'sk', 'cz', 'pl', 'ua', 'by', 'ru', 'md', 'ro', 'bg', 'mk', 'al', 'gr', 'cy', 'tr', 'sy', 'lb', 'il', 'jo', 'iq', 'ir', 'af', 'pk', 'bd', 'lk', 'mv', 'np', 'bt', 'in', 'lk', 'mm', 'th', 'la', 'kh', 'vn', 'my', 'sg', 'id', 'ph', 'cn', 'hk', 'mo', 'tw', 'kr', 'jp', 'kp', 'mn', 'ru'];
+
+    if (validCountryCodes.includes(countryCode.toLowerCase())) {
+      return countryCode.toLowerCase();
+    }
+
+    console.log(`🔍 Invalid country code: ${countryCode}, defaulting to us`);
+    return 'us';
   }
 
   private calculateKeywordPriority(keyword: string, metaPromptResult: MetaPromptResult): number {

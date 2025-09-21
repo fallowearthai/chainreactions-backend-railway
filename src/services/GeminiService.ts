@@ -142,7 +142,7 @@ Return exactly one JSON object with this structure:
     "search_keywords": ["string"], // 5-8 targeted keyword combinations, including English and local language search terms
     "languages": ["string"], // Recommended search languages based on entity locations (e.g. en, zh, ja, ru, fr, de)
     "country_code": "string", // Target country code for search (e.g. us, cn, jp, ru, fr, de, uk)
-    "source_engine": ["string"], // Preferred source engines (e.g. google, baidu, yandex)
+    "source_engine": ["string"], // Intelligently selected search engines based on search content (google, baidu, yandex)
     "relationship_likelihood": "string" // Must be exactly one of: "high", "medium", "low"
   }
 }

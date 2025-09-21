@@ -121,7 +121,7 @@ export class EnhancedSearchController {
             keywords_count: metaPromptResult.search_strategy.search_keywords.length,
             engines: metaPromptResult.search_strategy.source_engine,
             relationship_likelihood: metaPromptResult.search_strategy.relationship_likelihood,
-            keywords: metaPromptResult.search_strategy.search_keywords.slice(0, 5) // Show first 5 keywords
+            keywords: metaPromptResult.search_strategy.search_keywords
           }
         }
       });
@@ -163,20 +163,20 @@ export class EnhancedSearchController {
             successful_queries: optimizedResults.optimizationMetadata.originalResults > 0 ? 'Success' : 'Failed',
             optimization_applied: true
           },
-          sample_results: optimizedResults.consolidatedResults.slice(0, 5).map(result => ({
+          sample_results: optimizedResults.consolidatedResults.map(result => ({
             title: result.title,
             url: result.url,
-            snippet: result.snippet.substring(0, 150) + '...',
+            snippet: result.snippet,
             relevance_score: result.relevanceScore || 0,
             engine: result.engine
           })),
-          top_sources: [...new Set(optimizedResults.consolidatedResults.slice(0, 10).map(r => {
+          top_sources: [...new Set(optimizedResults.consolidatedResults.map(r => {
             try {
               return new URL(r.url).hostname;
             } catch {
               return r.url;
             }
-          }))].slice(0, 5)
+          }))]
         }
       });
 

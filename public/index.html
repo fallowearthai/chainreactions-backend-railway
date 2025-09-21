@@ -347,18 +347,7 @@
                                     updateStageContent(1, data.message);
                                 } else if (data.status === 'completed') {
                                     updateStageStatus(1, 'completed');
-                                    updateStageContent(1, {
-                                        entity_analysis: {
-                                            entity_a: data.result.entity_a.name,
-                                            entity_b: data.result.entity_b.name,
-                                            relationship_likelihood: data.result.search_strategy.relationship_likelihood
-                                        },
-                                        search_strategy: {
-                                            keywords_count: data.result.search_strategy.keywords_count,
-                                            engines: data.result.search_strategy.engines,
-                                            sample_keywords: data.result.search_strategy.keywords
-                                        }
-                                    });
+                                    updateStageContent(1, data.result);
                                 }
                                 break;
 
@@ -370,16 +359,7 @@
                                     updateStageContent(2, data.message);
                                 } else if (data.status === 'completed') {
                                     updateStageStatus(2, 'completed');
-                                    updateStageContent(2, {
-                                        search_results: {
-                                            total_results: data.result.total_results,
-                                            compression_ratio: data.result.compression_ratio + '%',
-                                            engines_used: data.result.engines_used,
-                                            execution_status: data.result.execution_summary.successful_queries
-                                        },
-                                        sample_results: data.result.sample_results || [],
-                                        top_sources: data.result.top_sources || []
-                                    });
+                                    updateStageContent(2, data.result);
                                 }
                                 break;
 
@@ -395,15 +375,7 @@
                             case 'final':
                                 if (data.status === 'completed') {
                                     updateStageStatus(3, 'completed');
-                                    updateStageContent(3, {
-                                        analysis_results: data.result.analysis_results,
-                                        metadata: {
-                                            overall_confidence: data.result.metadata.overall_confidence,
-                                            total_sources: data.result.metadata.total_sources,
-                                            methodology: data.result.metadata.methodology,
-                                            execution_time: (data.result.metadata.execution_time_ms / 1000).toFixed(2) + 's'
-                                        }
-                                    });
+                                    updateStageContent(3, data.result);
                                 }
                                 if (!connectionClosed) {
                                     eventSource.close();
