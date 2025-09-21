@@ -34,6 +34,7 @@ export interface GeminiSystemInstruction {
 export interface GeminiTool {
   codeExecution?: {};
   googleSearch?: {};
+  urlContext?: {};
 }
 
 export interface GeminiGenerationConfig {

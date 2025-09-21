@@ -1,6 +1,5 @@
 import { GeminiService } from './GeminiService';
 import { SearchRequest, SearchResult, OSINTFinding } from '../types/gemini';
-import { AggregatedSerpResults } from './SerpExecutorService';
 import { MetaPromptResult } from './WebSearchMetaPromptService';
 import { OptimizedSerpResults, OptimizedSearchResult } from './ResultOptimizationService';
 
@@ -27,35 +26,6 @@ export class ResultIntegrationService {
     this.geminiService = new GeminiService();
   }
 
-  async integrateAndAnalyze(
-    request: SearchRequest,
-    metaPromptResult: MetaPromptResult,
-    serpResults: AggregatedSerpResults
-  ): Promise<SearchResult> {
-
-    try {
-      const riskEntities = request.Risk_Entity.split(',').map(entity => entity.trim());
-      const analysisResults: OSINTAnalysisResult[] = [];
-
-      // Analyze each risk entity separately
-      for (const riskEntity of riskEntities) {
-        const entityAnalysis = await this.analyzeEntityRelationship(
-          request,
-          riskEntity,
-          metaPromptResult,
-          serpResults
-        );
-        analysisResults.push(entityAnalysis);
-      }
-
-      // Convert to the expected SearchResult format
-      return this.formatSearchResult(analysisResults, serpResults);
-
-    } catch (error) {
-      console.error('Result integration failed:', error);
-      throw new Error(`Failed to integrate results: ${error}`);
-    }
-  }
 
   /**
    * Enhanced integration method that works with optimized SERP results
@@ -91,108 +61,6 @@ export class ResultIntegrationService {
     }
   }
 
-  private async analyzeEntityRelationship(
-    request: SearchRequest,
-    riskEntity: string,
-    metaPromptResult: MetaPromptResult,
-    serpResults: AggregatedSerpResults
-  ): Promise<OSINTAnalysisResult> {
-
-    // Filter results relevant to this specific risk entity
-    const relevantResults = this.filterRelevantResults(
-      serpResults.consolidatedResults,
-      request.Target_institution,
-      riskEntity
-    );
-
-    const analysisPrompt = this.buildAnalysisPrompt(
-      request,
-      riskEntity,
-      relevantResults,
-      metaPromptResult
-    );
-
-    const systemInstruction = {
-      parts: [{
-        text: `You are an expert OSINT analyst specializing in institutional relationship analysis. Your task is to analyze search results and determine relationships between target institutions and risk entities.
-
-RELATIONSHIP TYPE DEFINITIONS:
-- "Direct": Clear evidence of official partnership, contract, collaboration, or direct relationship
-- "Indirect": Relationship exists through intermediary organizations or third parties
-- "Significant Mention": Both entities mentioned together in meaningful context but no clear relationship
-- "No Evidence Found": No meaningful connection found in the available sources
-
-ANALYSIS REQUIREMENTS:
-1. Use numbered citations [1], [2] that correspond to the search results provided
-2. Include specific dates, amounts, or details when available
-3. Assess source credibility (official websites, news outlets, academic papers)
-4. Consider geographic and political context
-5. Be conservative - only claim "Direct" relationship with strong evidence
-6. For "Indirect" relationships, clearly identify the intermediary organization
-
-Return JSON with this EXACT structure:
-{
-  "relationship_type": "Direct|Indirect|Significant Mention|No Evidence Found",
-  "finding_summary": "Detailed summary with numbered citations [1], [2], etc. matching the search results",
-  "potential_intermediary_B": "Name of any intermediary organization if Indirect relationship",
-  "sources": ["List of relevant URLs from the search results"],
-  "confidence_score": 0.85,
-  "evidence_quality": "high|medium|low",
-  "key_evidence": ["Bullet points of strongest evidence found"]
-}
-
-Focus on factual, verifiable information with proper source attribution.`
-      }]
-    };
-
-    try {
-      const response = await this.geminiService.generateContent(
-        [{
-          parts: [{ text: analysisPrompt }]
-        }],
-        systemInstruction,
-        undefined, // no tools
-        {
-          temperature: 0.0, // Maximum consistency for analysis
-          responseMimeType: "application/json"
-        }
-      );
-
-      if (!response.candidates || !response.candidates[0] || !response.candidates[0].content || !response.candidates[0].content.parts || !response.candidates[0].content.parts[0]) {
-        throw new Error('Invalid Gemini API response structure: Missing candidates or content');
-      }
-
-      const rawResponse = response.candidates[0].content.parts[0].text;
-      if (!rawResponse) {
-        throw new Error('Empty response from Gemini API');
-      }
-
-      console.log(`📝 Raw Gemini response length: ${rawResponse.length} chars`);
-      console.log(`📝 Raw response preview: ${rawResponse.substring(0, 200)}...`);
-
-      const analysis = JSON.parse(rawResponse);
-
-      return {
-        risk_item: riskEntity,
-        institution_A: request.Target_institution,
-        relationship_type: analysis.relationship_type || 'No Evidence Found',
-        finding_summary: analysis.finding_summary || 'No significant evidence found.',
-        potential_intermediary_B: analysis.potential_intermediary_B,
-        sources: analysis.sources || [],
-        analysis_metadata: {
-          confidence_score: analysis.confidence_score || 0.1,
-          sources_analyzed: relevantResults.length,
-          search_keywords_used: metaPromptResult.search_strategy.search_keywords,
-          engines_used: serpResults.executionSummary.enginesUsed,
-          analysis_timestamp: new Date().toISOString()
-        }
-      };
-
-    } catch (error) {
-      console.warn(`Analysis failed for ${riskEntity}:`, error);
-      return this.createFallbackAnalysis(request, riskEntity, relevantResults);
-    }
-  }
 
   /**
    * Optimized version that works with pre-scored and filtered results
@@ -217,34 +85,32 @@ Focus on factual, verifiable information with proper source attribution.`
 
     const systemInstruction = {
       parts: [{
-        text: `You are an expert OSINT analyst specializing in institutional relationship analysis. Your task is to analyze search results and determine relationships between target institutions and risk entities.
+        text: `You are an expert OSINT analyst specializing in mapping institutional relationships and risk exposure. Your assignment is to examine search results and linked urls to determine the nature of relationships between specified target institutions and risk entities.
 
-RELATIONSHIP TYPE DEFINITIONS:
-- "Direct": Clear evidence of official partnership, contract, collaboration, or direct relationship
-- "Indirect": Relationship exists through intermediary organizations or third parties
-- "Significant Mention": Both entities mentioned together in meaningful context but no clear relationship
-- "No Evidence Found": No meaningful connection found in the available sources
-
-ANALYSIS REQUIREMENTS:
-1. Use numbered citations [1], [2] that correspond to the search results provided
-2. Include specific dates, amounts, or details when available
-3. Assess source credibility (official websites, news outlets, academic papers)
-4. Consider geographic and political context
-5. Be conservative - only claim "Direct" relationship with strong evidence
-6. For "Indirect" relationships, clearly identify the intermediary organization
-
-Return JSON with this EXACT structure:
+Instructions:
+1. Review all provided search result snippets and use the URL context tool to thoroughly examine linked website and PDF documents for relevant information.
+2. Categorize the relationship based on these definitions:
+   - Direct: Explicit evidence (e.g., contracts, partnerships, formal collaborations) between the target and risk entity.
+   - Indirect: Relationship exists via a clearly identified intermediary organization.
+   - Significant Mention: Both entities are referenced together in a context that suggests relevance, but no direct or indirect link is established.
+   - No Evidence Found: No meaningful connection identified in the sources.
+3. For each finding, include:
+   - Numbered inline citations in the finding_summary in [1], [2], etc., matching the search results.
+   - Specific details such as dates, transaction amounts, or named individuals when available.
+   - Assessment of source credibility (e.g., official site, reputable news, academic publication).
+   - Conservative classification: Only assign 'Direct' if there is unambiguous supporting evidence; for 'Indirect', name the intermediary.
+4. Structure your output as a JSON object with the following fields:
 {
   "relationship_type": "Direct|Indirect|Significant Mention|No Evidence Found",
-  "finding_summary": "Detailed summary with numbered citations [1], [2], etc. matching the search results",
-  "potential_intermediary_B": "Name of any intermediary organization if Indirect relationship",
-  "sources": ["List of relevant URLs from the search results"],
-  "confidence_score": 0.85,
+  "finding_summary": "Concise, evidence-based summary with numbered inline citations.",
+  "potential_affiliated_entity": "Name of intermediary if Indirect, else null",
+  "sources": ["List of URLs used as evidence"],
+  "confidence_score": Numeric value between 0 and 1 reflecting certainty,
   "evidence_quality": "high|medium|low",
-  "key_evidence": ["Bullet points of strongest evidence found"]
+  "key_evidence": ["Bullet points of the strongest supporting facts"]
 }
 
-Focus on factual, verifiable information with proper source attribution.`
+Prioritize factual accuracy, source attribution, and clarity in your analysis. Do not speculate or infer beyond the evidence presented.`
       }]
     };
 
@@ -254,10 +120,15 @@ Focus on factual, verifiable information with proper source attribution.`
           parts: [{ text: analysisPrompt }]
         }],
         systemInstruction,
-        undefined, // no tools
+        [{
+          urlContext: {}
+        }], // URL context tool for document analysis
         {
-          temperature: 0.0, // Maximum consistency for analysis
-          responseMimeType: "application/json"
+          temperature: 0,
+          responseMimeType: "application/json",
+          thinkingConfig: {
+            thinkingBudget: -1
+          }
         }
       );
 
@@ -265,7 +136,7 @@ Focus on factual, verifiable information with proper source attribution.`
         throw new Error('Invalid Gemini API response structure: Missing candidates or content');
       }
 
-      const rawResponse = response.candidates[0].content.parts[0].text;
+      let rawResponse = response.candidates[0].content.parts[0].text;
       if (!rawResponse) {
         throw new Error('Empty response from Gemini API');
       }
@@ -273,7 +144,54 @@ Focus on factual, verifiable information with proper source attribution.`
       console.log(`📝 Raw Gemini response length: ${rawResponse.length} chars`);
       console.log(`📝 Raw response preview: ${rawResponse.substring(0, 200)}...`);
 
-      const analysis = JSON.parse(rawResponse);
+      let analysis;
+      let retryCount = 0;
+      const maxRetries = 2;
+
+      while (retryCount <= maxRetries) {
+        try {
+          analysis = JSON.parse(rawResponse);
+          break; // Success, exit retry loop
+        } catch (parseError) {
+          retryCount++;
+          console.warn(`JSON parse failed (attempt ${retryCount}/${maxRetries + 1}):`, parseError);
+
+          if (retryCount > maxRetries) {
+            throw new Error(`Failed to parse JSON after ${maxRetries + 1} attempts: ${parseError}`);
+          }
+
+          console.log(`🔄 Retrying with thinking mode (attempt ${retryCount + 1})...`);
+
+          // Retry with same thinking mode configuration
+          const retryResponse = await this.geminiService.generateContent(
+            [{
+              parts: [{ text: analysisPrompt }]
+            }],
+            systemInstruction,
+            [{
+              urlContext: {}
+            }], // URL context tool for retry
+            {
+              temperature: 0,
+              responseMimeType: "application/json",
+              thinkingConfig: {
+                thinkingBudget: -1
+              }
+            }
+          );
+
+          if (!retryResponse.candidates || !retryResponse.candidates[0] || !retryResponse.candidates[0].content || !retryResponse.candidates[0].content.parts || !retryResponse.candidates[0].content.parts[0]) {
+            throw new Error(`Invalid Gemini API response structure on retry ${retryCount}`);
+          }
+
+          rawResponse = retryResponse.candidates[0].content.parts[0].text;
+          if (!rawResponse) {
+            throw new Error(`Empty response from Gemini API on retry ${retryCount}`);
+          }
+
+          console.log(`🔄 Retry ${retryCount} response length: ${rawResponse.length} chars`);
+        }
+      }
 
       return {
         risk_item: riskEntity,
@@ -297,130 +215,9 @@ Focus on factual, verifiable information with proper source attribution.`
     }
   }
 
-  private filterRelevantResults(
-    results: any[],
-    institution: string,
-    riskEntity: string
-  ): any[] {
 
-    console.log(`📊 Raw input data structure check:`);
-    console.log(`  - Total results: ${results.length}`);
-    console.log(`  - First result keys: ${results[0] ? Object.keys(results[0]).join(', ') : 'none'}`);
-    console.log(`  - Sample result:`, JSON.stringify(results[0], null, 2));
 
-    const institutionTerms = institution.toLowerCase().split(' ');
-    const riskTerms = riskEntity.toLowerCase().split(' ');
 
-    const filtered = results.filter(result => {
-      const text = `${result.title} ${result.snippet}`.toLowerCase();
-
-      // Must contain at least one term from institution
-      const hasInstitution = institutionTerms.some(term => text.includes(term));
-
-      // Must contain at least one term from risk entity
-      const hasRiskEntity = riskTerms.some(term => text.includes(term));
-
-      // For testing: Accept if contains either institution OR risk entity (more permissive)
-      return hasInstitution || hasRiskEntity;
-    }).slice(0, 30); // Limit to top 30 most relevant results
-
-    console.log(`🔍 Filtered ${results.length} → ${filtered.length} relevant results`);
-    console.log(`📝 Sample filtered result:`, JSON.stringify(filtered[0], null, 2));
-    return filtered;
-  }
-
-  private buildAnalysisPrompt(
-    request: SearchRequest,
-    riskEntity: string,
-    relevantResults: any[],
-    metaPromptResult: MetaPromptResult
-  ): string {
-
-    const resultsText = relevantResults
-      .map((result, index) =>
-        `[${index + 1}] ${result.title}\n${result.snippet}\nURL: ${result.url}\nEngine: ${result.searchMetadata?.engine}\n`
-      ).join('\n');
-
-    const timeConstraint = request.Start_Date && request.End_Date
-      ? `Focus on relationships within the timeframe ${request.Start_Date} to ${request.End_Date}.`
-      : '';
-
-    return `TARGET INSTITUTION: ${request.Target_institution}
-RISK ENTITY: ${riskEntity}
-GEOGRAPHIC CONTEXT: ${request.Location}
-${timeConstraint}
-
-SEARCH RESULTS TO ANALYZE:
-${resultsText}
-
-ANALYSIS CONTEXT:
-- Relationship likelihood: ${metaPromptResult.search_strategy.relationship_likelihood}
-- Search keywords used: ${metaPromptResult.search_strategy.search_keywords.join(', ')}
-- Sources analyzed: ${relevantResults.length}
-
-TASK: Analyze the search results above and determine the relationship between the target institution and risk entity. Return your analysis as JSON following the structure defined in the system instruction.`;
-  }
-
-  private createFallbackAnalysis(
-    request: SearchRequest,
-    riskEntity: string,
-    relevantResults: any[]
-  ): OSINTAnalysisResult {
-
-    return {
-      risk_item: riskEntity,
-      institution_A: request.Target_institution,
-      relationship_type: 'No Evidence Found',
-      finding_summary: `Analysis could not be completed due to technical issues. ${relevantResults.length} potentially relevant sources were identified but could not be properly analyzed.`,
-      sources: relevantResults.slice(0, 5).map(r => r.url).filter(url => url),
-      analysis_metadata: {
-        confidence_score: 0.1,
-        sources_analyzed: relevantResults.length,
-        search_keywords_used: [],
-        engines_used: [],
-        analysis_timestamp: new Date().toISOString()
-      }
-    };
-  }
-
-  private formatSearchResult(
-    analysisResults: OSINTAnalysisResult[],
-    serpResults: AggregatedSerpResults
-  ): SearchResult {
-
-    // Combine all findings into the expected format
-    const combinedFindings: OSINTFinding[] = analysisResults.map(result => ({
-      risk_item: result.risk_item,
-      institution_A: result.institution_A,
-      relationship_type: result.relationship_type,
-      finding_summary: result.finding_summary,
-      potential_intermediary_B: result.potential_intermediary_B,
-      sources: result.sources
-    }));
-
-    // Collect all unique sources
-    const allSources = [...new Set(
-      analysisResults.flatMap(result => result.sources)
-    )].filter(source => source);
-
-    // Calculate overall confidence
-    const avgConfidence = analysisResults.length > 0
-      ? analysisResults.reduce((sum, r) => sum + r.analysis_metadata.confidence_score, 0) / analysisResults.length
-      : 0.1;
-
-    return {
-      success: true,
-      data: combinedFindings,
-      metadata: {
-        total_risk_entities: analysisResults.length,
-        analysis_timestamp: new Date().toISOString(),
-        search_execution_summary: serpResults.executionSummary,
-        overall_confidence: avgConfidence,
-        methodology: 'WebSearch Meta-Prompt + Multi-Engine SERP + AI Analysis'
-      },
-      sources: allSources
-    };
-  }
 
   // Helper method to get analysis summary
   getAnalysisSummary(result: SearchResult): string {
@@ -449,27 +246,6 @@ Analysis Summary:
 
   // Helper methods for optimized workflow
 
-  private filterOptimizedResults(
-    results: OptimizedSearchResult[],
-    institution: string,
-    riskEntity: string
-  ): OptimizedSearchResult[] {
-
-    const institutionTerms = institution.toLowerCase().split(' ');
-    const riskTerms = riskEntity.toLowerCase().split(' ');
-
-    return results.filter(result => {
-      const text = `${result.title} ${result.snippet}`.toLowerCase();
-
-      // Must contain at least one term from institution
-      const hasInstitution = institutionTerms.some(term => text.includes(term));
-
-      // Must contain at least one term from risk entity
-      const hasRiskEntity = riskTerms.some(term => text.includes(term));
-
-      return hasInstitution && hasRiskEntity;
-    }); // Use all filtered results as requested
-  }
 
   private buildOptimizedAnalysisPrompt(
     request: SearchRequest,
@@ -495,13 +271,7 @@ ${timeConstraint}
 OPTIMIZED SEARCH RESULTS (Pre-scored by relevance):
 ${resultsText}
 
-ANALYSIS CONTEXT:
-- Relationship likelihood: ${metaPromptResult.search_strategy.relationship_likelihood}
-- Search keywords used: ${metaPromptResult.search_strategy.search_keywords.join(', ')}
-- Sources analyzed: ${relevantResults.length} (from ${relevantResults.reduce((sum, r) => sum + r.searchKeywords.length, 0)} search queries)
-- Results are pre-filtered and scored for relevance
-
-TASK: Analyze the optimized search results above and determine the relationship between the target institution and risk entity. Consider the relevance scores when evaluating evidence. Return your analysis as JSON following the structure defined in the system instruction.`;
+TASK: Analyze the search results above and determine the relationship between the target institution and risk entity. Return your analysis as JSON following the structure defined in the system instruction.`;
   }
 
   private createOptimizedFallbackAnalysis(
