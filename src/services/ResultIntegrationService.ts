@@ -61,6 +61,208 @@ export class ResultIntegrationService {
     }
   }
 
+  /**
+   * Enhanced integration method with progress callbacks for SSE
+   */
+  async integrateAndAnalyzeOptimizedWithProgress(
+    request: SearchRequest,
+    metaPromptResult: MetaPromptResult,
+    optimizedResults: OptimizedSerpResults,
+    progressCallback: (progress: string) => void
+  ): Promise<SearchResult> {
+
+    try {
+      console.log('🧠 Starting AI analysis with optimized results and progress...');
+      progressCallback('Preparing AI analysis of search results...');
+
+      const riskEntities = request.Risk_Entity.split(',').map(entity => entity.trim());
+      const analysisResults: OSINTAnalysisResult[] = [];
+
+      progressCallback(`Analyzing ${riskEntities.length} risk entities...`);
+
+      // Analyze each risk entity separately using optimized results
+      for (let i = 0; i < riskEntities.length; i++) {
+        const riskEntity = riskEntities[i];
+        progressCallback(`Analyzing entity ${i + 1}/${riskEntities.length}: ${riskEntity}`);
+
+        progressCallback(`AI analyzing relationship for ${riskEntity}...`);
+        const entityAnalysis = await this.analyzeEntityRelationshipOptimized(
+          request,
+          riskEntity,
+          metaPromptResult,
+          optimizedResults
+        );
+        progressCallback(`Completed analysis for ${riskEntity}`);
+        analysisResults.push(entityAnalysis);
+
+        progressCallback(`Completed analysis of entity ${i + 1}/${riskEntities.length}`);
+      }
+
+      progressCallback('Finalizing analysis results...');
+
+      // Convert to the expected SearchResult format using optimized structure
+      const finalResult = this.formatSearchResultOptimized(analysisResults, optimizedResults);
+
+      progressCallback('AI analysis complete');
+
+      return finalResult;
+
+    } catch (error) {
+      console.error('Optimized result integration failed:', error);
+      progressCallback(`Error during AI analysis: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Failed to integrate optimized results: ${error}`);
+    }
+  }
+
+  /**
+   * Analyze entity relationship with progress updates
+   */
+  private async analyzeEntityRelationshipOptimizedWithProgress(
+    request: SearchRequest,
+    riskEntity: string,
+    metaPromptResult: MetaPromptResult,
+    optimizedResults: OptimizedSerpResults,
+    progressCallback: (progress: string) => void
+  ): Promise<OSINTAnalysisResult> {
+
+    progressCallback(`Processing ${optimizedResults.consolidatedResults.length} search results for ${riskEntity}...`);
+
+    // Use all optimized results - let AI handle entity relevance analysis
+    console.log(`🔍 Using all ${optimizedResults.consolidatedResults.length} optimized results for AI analysis of entity: ${riskEntity}`);
+    const relevantResults = optimizedResults.consolidatedResults;
+
+    progressCallback(`Building analysis prompt with ${relevantResults.length} results...`);
+
+    const analysisPrompt = this.buildOptimizedAnalysisPrompt(
+      request,
+      riskEntity,
+      relevantResults,
+      metaPromptResult
+    );
+
+    progressCallback(`Sending analysis request to AI for ${riskEntity}...`);
+
+    const systemInstruction = {
+      parts: [{
+        text: `You are an expert OSINT analyst specializing in mapping institutional relationships and risk exposure. Your assignment is to examine search results and linked urls to determine the nature of relationships between specified target institutions and risk entities.
+
+Instructions:
+1. Review all provided search result snippets and use the URL context tool to thoroughly examine linked website and PDF documents for relevant information.
+2. Categorize the relationship based on these definitions:
+   - Direct: Explicit evidence (e.g., contracts, partnerships, formal collaborations) between the target and risk entity.
+   - Indirect: Relationship exists via a clearly identified intermediary organization.
+   - Significant Mention: Both entities are referenced together in a context that suggests relevance, but no direct or indirect link is established.
+   - No Evidence Found: No meaningful connection identified in the sources.
+3. For each finding, include:
+   - Numbered inline citations in the finding_summary in [1], [2], etc., matching the search results.
+   - Specific details such as dates, transaction amounts, or named individuals when available.
+   - Assessment of source credibility (e.g., official site, reputable news, academic publication).
+   - Conservative classification: Only assign 'Direct' if there is unambiguous supporting evidence; for 'Indirect', name the intermediary.
+4. Structure your output as a JSON object with the following fields:
+{
+  "relationship_type": "Direct|Indirect|Significant Mention|No Evidence Found",
+  "finding_summary": "Concise, evidence-based summary with numbered inline citations.",
+  "potential_affiliated_entity": "Name of intermediary if Indirect, else null",
+  "sources": ["List of URLs used as evidence"],
+  "confidence_score": Numeric value between 0 and 1 reflecting certainty,
+  "evidence_quality": "high|medium|low",
+  "key_evidence": ["Bullet points of the strongest supporting facts"]
+}
+
+Prioritize factual accuracy, source attribution, and clarity in your analysis. Do not speculate or infer beyond the evidence presented.`
+      }]
+    };
+
+    progressCallback(`AI processing relationship analysis for ${riskEntity}...`);
+
+    // Retry mechanism for robust analysis
+    let attempt = 1;
+    const maxAttempts = 3;
+
+    while (attempt <= maxAttempts) {
+      try {
+        progressCallback(`AI analysis attempt ${attempt}/${maxAttempts} for ${riskEntity}...`);
+
+        const response = await this.geminiService.generateContent(
+          [{
+            parts: [{ text: analysisPrompt }]
+          }],
+          systemInstruction,
+          [{
+            urlContext: {}
+          }], // URL context tool enabled (now limited to 20 URLs in Stage 2)
+          {
+            temperature: 0,
+            thinkingConfig: {
+              thinkingBudget: -1
+            }
+          }
+        );
+
+        progressCallback(`Processing AI response for ${riskEntity}...`);
+
+        if (!response.candidates || !response.candidates[0] || !response.candidates[0].content || !response.candidates[0].content.parts || !response.candidates[0].content.parts[0]) {
+          throw new Error('Invalid Gemini API response structure: Missing candidates or content');
+        }
+
+        let rawResponse = response.candidates[0].content.parts[0].text;
+        if (!rawResponse) {
+          throw new Error('Empty response from Gemini API');
+        }
+
+        console.log(`📝 Raw Gemini response length: ${rawResponse.length} chars`);
+        console.log(`📝 Raw response preview: ${rawResponse.substring(0, 200)}...`);
+
+        // Clean the response for JSON parsing
+        rawResponse = rawResponse.trim();
+        if (rawResponse.startsWith('```json')) {
+          rawResponse = rawResponse.substring(7);
+        }
+        if (rawResponse.endsWith('```')) {
+          rawResponse = rawResponse.substring(0, rawResponse.length - 3);
+        }
+        rawResponse = rawResponse.trim();
+
+        const analysisJson = JSON.parse(rawResponse);
+
+        progressCallback(`Successfully analyzed ${riskEntity}`);
+
+        return {
+          risk_item: riskEntity,
+          institution_A: request.Target_institution,
+          relationship_type: analysisJson.relationship_type || 'No Evidence Found',
+          finding_summary: analysisJson.finding_summary || 'No significant evidence found.',
+          potential_intermediary_B: analysisJson.potential_intermediary_B,
+          sources: analysisJson.sources || [],
+          analysis_metadata: {
+            confidence_score: analysisJson.confidence_score || 0.1,
+            sources_analyzed: relevantResults.length,
+            search_keywords_used: metaPromptResult.search_strategy.search_keywords,
+            engines_used: optimizedResults.executionSummary.enginesUsed,
+            analysis_timestamp: new Date().toISOString()
+          }
+        };
+
+      } catch (error) {
+        console.error(`Analysis attempt ${attempt} failed for ${riskEntity}:`, error);
+
+        if (attempt === maxAttempts) {
+          progressCallback(`Failed to analyze ${riskEntity} after ${maxAttempts} attempts`);
+          console.warn(`Optimized analysis failed for ${riskEntity}:`, error);
+          return this.createOptimizedFallbackAnalysis(request, riskEntity, relevantResults);
+        }
+
+        progressCallback(`Retrying analysis for ${riskEntity} (attempt ${attempt + 1}/${maxAttempts})...`);
+        attempt++;
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
+    // This should never be reached due to fallback in the catch block
+    console.warn(`Analysis failed for ${riskEntity} after ${maxAttempts} attempts`);
+    return this.createOptimizedFallbackAnalysis(request, riskEntity, relevantResults);
+  }
+
 
   /**
    * Optimized version that works with pre-scored and filtered results
@@ -144,54 +346,17 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
       console.log(`📝 Raw Gemini response length: ${rawResponse.length} chars`);
       console.log(`📝 Raw response preview: ${rawResponse.substring(0, 200)}...`);
 
-      let analysis;
-      let retryCount = 0;
-      const maxRetries = 2;
-
-      while (retryCount <= maxRetries) {
-        try {
-          analysis = JSON.parse(rawResponse);
-          break; // Success, exit retry loop
-        } catch (parseError) {
-          retryCount++;
-          console.warn(`JSON parse failed (attempt ${retryCount}/${maxRetries + 1}):`, parseError);
-
-          if (retryCount > maxRetries) {
-            throw new Error(`Failed to parse JSON after ${maxRetries + 1} attempts: ${parseError}`);
-          }
-
-          console.log(`🔄 Retrying with thinking mode (attempt ${retryCount + 1})...`);
-
-          // Retry with same thinking mode configuration
-          const retryResponse = await this.geminiService.generateContent(
-            [{
-              parts: [{ text: analysisPrompt }]
-            }],
-            systemInstruction,
-            [{
-              urlContext: {}
-            }], // URL context tool for retry
-            {
-              temperature: 0,
-              responseMimeType: "application/json",
-              thinkingConfig: {
-                thinkingBudget: -1
-              }
-            }
-          );
-
-          if (!retryResponse.candidates || !retryResponse.candidates[0] || !retryResponse.candidates[0].content || !retryResponse.candidates[0].content.parts || !retryResponse.candidates[0].content.parts[0]) {
-            throw new Error(`Invalid Gemini API response structure on retry ${retryCount}`);
-          }
-
-          rawResponse = retryResponse.candidates[0].content.parts[0].text;
-          if (!rawResponse) {
-            throw new Error(`Empty response from Gemini API on retry ${retryCount}`);
-          }
-
-          console.log(`🔄 Retry ${retryCount} response length: ${rawResponse.length} chars`);
-        }
+      // Clean the response for JSON parsing
+      rawResponse = rawResponse.trim();
+      if (rawResponse.startsWith('```json')) {
+        rawResponse = rawResponse.substring(7);
       }
+      if (rawResponse.endsWith('```')) {
+        rawResponse = rawResponse.substring(0, rawResponse.length - 3);
+      }
+      rawResponse = rawResponse.trim();
+
+      const analysis = JSON.parse(rawResponse);
 
       return {
         risk_item: riskEntity,

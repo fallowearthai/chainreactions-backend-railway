@@ -143,6 +143,122 @@ export class SerpExecutorService {
     }
   }
 
+  /**
+   * Execute optimized search strategy with progress callbacks for SSE
+   */
+  async executeSearchStrategyOptimizedWithProgress(
+    request: SearchRequest,
+    metaPromptResult: MetaPromptResult,
+    progressCallback: (progress: string, current?: number, total?: number) => void
+  ): Promise<OptimizedSerpResults> {
+    try {
+      console.log('🚀 Starting optimized SERP execution workflow with progress...');
+      progressCallback('Initializing search tasks...');
+
+      // Step 1: Execute standard search strategy with progress
+      const standardResults = await this.executeSearchStrategyWithProgress(request, metaPromptResult, progressCallback);
+
+      // Step 2: Apply optimization
+      progressCallback('Optimizing and consolidating results...');
+      console.log('🔧 Applying result optimization...');
+      const optimizedResults = this.optimizationService.optimizeResults(standardResults);
+
+      console.log(`✅ Optimization complete: ${standardResults.allResults.reduce((sum, r) => sum + r.results.length, 0)} → ${optimizedResults.consolidatedResults.length} results`);
+      progressCallback(`Optimization complete: ${optimizedResults.consolidatedResults.length} consolidated results`);
+
+      return optimizedResults;
+
+    } catch (error) {
+      console.error('❌ Optimized SERP execution failed:', error);
+      progressCallback(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Optimized SERP execution failed: ${error}`);
+    }
+  }
+
+  /**
+   * Execute search strategy with progress callbacks
+   */
+  private async executeSearchStrategyWithProgress(
+    request: SearchRequest,
+    metaPromptResult: MetaPromptResult,
+    progressCallback: (progress: string, current?: number, total?: number) => void
+  ): Promise<AggregatedSerpResults> {
+    const startTime = Date.now();
+    const tasks = this.generateSearchTasks(metaPromptResult);
+
+    progressCallback(`Generated ${tasks.length} search tasks`, 0, tasks.length);
+
+    const results: SerpExecutionResult[] = [];
+    const BATCH_SIZE = 3; // Process 3 searches concurrently
+    let completedTasks = 0;
+
+    // Process tasks in batches
+    for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
+      const batch = tasks.slice(i, i + BATCH_SIZE);
+
+      // Update progress for current batch
+      const batchStart = i + 1;
+      const batchEnd = Math.min(i + BATCH_SIZE, tasks.length);
+      progressCallback(`Executing searches ${batchStart}-${batchEnd} of ${tasks.length}...`, completedTasks, tasks.length);
+
+      // Execute batch of searches concurrently
+      const batchPromises = batch.map(async (task) => {
+        try {
+          const engineProgress = `Searching ${task.engine} for "${task.keyword}"...`;
+          progressCallback(engineProgress, completedTasks, tasks.length);
+
+          const result = await this.executeSingleSearch(task);
+          completedTasks++;
+
+          progressCallback(`Completed ${task.engine} search (${completedTasks}/${tasks.length})`, completedTasks, tasks.length);
+          return result;
+        } catch (error) {
+          completedTasks++;
+          console.error(`Search failed for ${task.keyword} on ${task.engine}:`, error);
+          progressCallback(`Failed ${task.engine} search (${completedTasks}/${tasks.length})`, completedTasks, tasks.length);
+          return null;
+        }
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+
+      // Add successful results
+      for (const result of batchResults) {
+        if (result) {
+          results.push(result);
+        }
+      }
+
+      // Small delay between batches to avoid overwhelming the API
+      if (i + BATCH_SIZE < tasks.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    progressCallback('Consolidating search results...', tasks.length, tasks.length);
+
+    // Consolidate results
+    const consolidatedResults = this.consolidateResults(results, metaPromptResult);
+    const executionTime = Date.now() - startTime;
+
+    const summary = {
+      totalQueries: tasks.length,
+      successfulQueries: results.length,
+      failedQueries: tasks.length - results.length,
+      totalResults: consolidatedResults.length,
+      enginesUsed: [...new Set(results.map(r => r.engine))],
+      executionTime
+    };
+
+    progressCallback(`Search execution complete: ${summary.successfulQueries}/${summary.totalQueries} successful`);
+
+    return {
+      allResults: results,
+      consolidatedResults,
+      executionSummary: summary
+    };
+  }
+
   private generateSearchTasks(metaPromptResult: MetaPromptResult): SearchTask[] {
     const tasks: SearchTask[] = [];
     const { search_strategy } = metaPromptResult;

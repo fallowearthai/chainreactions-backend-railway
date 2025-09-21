@@ -198,7 +198,8 @@
         </div>
 
         <div class="button-group">
-            <button id="runFullWorkflow">🚀 Run Full Workflow</button>
+            <button id="runFullWorkflow">🚀 Run SSE Workflow</button>
+            <button id="runLegacyWorkflow">⚡ Run Legacy Workflow</button>
             <button id="runStage1Only">🧠 Stage 1 Only</button>
             <button id="clearResults">🗑️ Clear Results</button>
         </div>
@@ -271,6 +272,12 @@
 
         // Clear all results
         function clearResults() {
+            // Close any existing SSE connection
+            if (window.currentEventSource) {
+                window.currentEventSource.close();
+                window.currentEventSource = null;
+            }
+
             for (let i = 1; i <= 3; i++) {
                 updateStageStatus(i, 'pending');
                 updateStageContent(i, i === 1 ? 'Waiting to start...' : `Waiting for Stage ${i-1}...`);
@@ -305,8 +312,143 @@
             }
         }
 
-        // Run full workflow with detailed Stage 2 results
-        async function runFullWorkflow() {
+        // Run full workflow with SSE streaming
+        function runFullWorkflow() {
+            try {
+                clearResults();
+
+                // Get input data and build query string
+                const inputData = getInputData();
+                const queryParams = new URLSearchParams({
+                    Target_institution: inputData.Target_institution,
+                    Risk_Entity: inputData.Risk_Entity,
+                    Location: inputData.Location,
+                    ...(inputData.Start_Date && { Start_Date: inputData.Start_Date }),
+                    ...(inputData.End_Date && { End_Date: inputData.End_Date })
+                }).toString();
+
+                // Initialize SSE connection
+                const eventSource = new EventSource(`${API_BASE}/search-stream?${queryParams}`);
+                let connectionClosed = false;
+
+                // Handle incoming SSE events
+                eventSource.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+
+                        switch(data.stage) {
+                            case 'connection':
+                                console.log('SSE connection established');
+                                break;
+
+                            case 1:
+                                if (data.status === 'running') {
+                                    updateStageStatus(1, 'running');
+                                    updateStageContent(1, data.message);
+                                } else if (data.status === 'completed') {
+                                    updateStageStatus(1, 'completed');
+                                    updateStageContent(1, {
+                                        entity_analysis: {
+                                            entity_a: data.result.entity_a.name,
+                                            entity_b: data.result.entity_b.name,
+                                            relationship_likelihood: data.result.search_strategy.relationship_likelihood
+                                        },
+                                        search_strategy: {
+                                            keywords_count: data.result.search_strategy.keywords_count,
+                                            engines: data.result.search_strategy.engines,
+                                            sample_keywords: data.result.search_strategy.keywords
+                                        }
+                                    });
+                                }
+                                break;
+
+                            case 2:
+                                if (data.status === 'running') {
+                                    updateStageStatus(2, 'running');
+                                    updateStageContent(2, data.message);
+                                } else if (data.status === 'progress') {
+                                    updateStageContent(2, data.message);
+                                } else if (data.status === 'completed') {
+                                    updateStageStatus(2, 'completed');
+                                    updateStageContent(2, {
+                                        search_results: {
+                                            total_results: data.result.total_results,
+                                            compression_ratio: data.result.compression_ratio + '%',
+                                            engines_used: data.result.engines_used,
+                                            execution_status: data.result.execution_summary.successful_queries
+                                        },
+                                        sample_results: data.result.sample_results || [],
+                                        top_sources: data.result.top_sources || []
+                                    });
+                                }
+                                break;
+
+                            case 3:
+                                if (data.status === 'running') {
+                                    updateStageStatus(3, 'running');
+                                    updateStageContent(3, data.message);
+                                } else if (data.status === 'progress') {
+                                    updateStageContent(3, data.message);
+                                }
+                                break;
+
+                            case 'final':
+                                if (data.status === 'completed') {
+                                    updateStageStatus(3, 'completed');
+                                    updateStageContent(3, {
+                                        analysis_results: data.result.analysis_results,
+                                        metadata: {
+                                            overall_confidence: data.result.metadata.overall_confidence,
+                                            total_sources: data.result.metadata.total_sources,
+                                            methodology: data.result.metadata.methodology,
+                                            execution_time: (data.result.metadata.execution_time_ms / 1000).toFixed(2) + 's'
+                                        }
+                                    });
+                                }
+                                if (!connectionClosed) {
+                                    eventSource.close();
+                                    connectionClosed = true;
+                                }
+                                break;
+
+                            case 'error':
+                                updateStageStatus(1, 'error');
+                                updateStageStatus(2, 'error');
+                                updateStageStatus(3, 'error');
+                                updateStageContent(3, `Error: ${data.message}`, true);
+                                if (!connectionClosed) {
+                                    eventSource.close();
+                                    connectionClosed = true;
+                                }
+                                break;
+                        }
+                    } catch (parseError) {
+                        console.error('Error parsing SSE data:', parseError);
+                        updateStageContent(3, 'Error parsing server response', true);
+                    }
+                };
+
+                // Handle SSE errors
+                eventSource.onerror = function(error) {
+                    console.error('SSE Error:', error);
+                    if (!connectionClosed) {
+                        updateStageContent(3, 'Connection error occurred', true);
+                        eventSource.close();
+                        connectionClosed = true;
+                    }
+                };
+
+                // Store event source for potential cleanup
+                window.currentEventSource = eventSource;
+
+            } catch (error) {
+                updateStageStatus(3, 'error');
+                updateStageContent(3, `Error: ${error.message}`, true);
+            }
+        }
+
+        // Legacy workflow (fallback)
+        async function runFullWorkflowLegacy() {
             try {
                 clearResults();
 
@@ -315,34 +457,6 @@
                 updateStageContent(1, 'Generating search strategy...');
                 updateStageStatus(2, 'running');
                 updateStageContent(2, 'Waiting for Stage 1 completion...');
-
-                const stage12Response = await fetch(`${API_BASE}/stage1-2`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(getInputData())
-                });
-
-                const stage12Result = await stage12Response.json();
-
-                if (!stage12Result.success) {
-                    updateStageStatus(1, 'error');
-                    updateStageContent(1, stage12Result.error || 'Stage 1+2 failed', true);
-                    updateStageStatus(2, 'error');
-                    updateStageContent(2, 'Failed due to Stage 1+2 error', true);
-                    return;
-                }
-
-                // Stage 1 completed
-                updateStageStatus(1, 'completed');
-                updateStageContent(1, stage12Result.stage1_result);
-
-                // Stage 2 completed with detailed results
-                updateStageStatus(2, 'completed');
-                updateStageContent(2, stage12Result.stage2_result);
-
-                // Stage 3 (AI Analysis)
-                updateStageStatus(3, 'running');
-                updateStageContent(3, 'Analyzing search results with AI...');
 
                 const stage3Response = await fetch(`${API_BASE}/search`, {
                     method: 'POST',
@@ -353,8 +467,13 @@
                 const stage3Result = await stage3Response.json();
 
                 if (stage3Result.success) {
-                    // Stage 3 completed
+                    // Mark all stages as completed
+                    updateStageStatus(1, 'completed');
+                    updateStageStatus(2, 'completed');
                     updateStageStatus(3, 'completed');
+
+                    updateStageContent(1, { message: 'Search strategy generated' });
+                    updateStageContent(2, { message: 'SERP execution completed' });
                     updateStageContent(3, {
                         analysis_results: stage3Result.data,
                         overall_confidence: stage3Result.metadata.overall_confidence,
@@ -362,8 +481,10 @@
                         methodology: stage3Result.metadata.methodology
                     });
                 } else {
+                    updateStageStatus(1, 'error');
+                    updateStageStatus(2, 'error');
                     updateStageStatus(3, 'error');
-                    updateStageContent(3, stage3Result.error || 'Stage 3 analysis failed', true);
+                    updateStageContent(3, stage3Result.error || 'Workflow failed', true);
                 }
             } catch (error) {
                 updateStageStatus(3, 'error');
@@ -373,12 +494,14 @@
 
         // Event listeners
         document.getElementById('runFullWorkflow').addEventListener('click', runFullWorkflow);
+        document.getElementById('runLegacyWorkflow').addEventListener('click', runFullWorkflowLegacy);
         document.getElementById('runStage1Only').addEventListener('click', runStage1Only);
         document.getElementById('clearResults').addEventListener('click', clearResults);
 
         // Disable buttons during execution
         function setButtonsEnabled(enabled) {
             document.getElementById('runFullWorkflow').disabled = !enabled;
+            document.getElementById('runLegacyWorkflow').disabled = !enabled;
             document.getElementById('runStage1Only').disabled = !enabled;
         }
 

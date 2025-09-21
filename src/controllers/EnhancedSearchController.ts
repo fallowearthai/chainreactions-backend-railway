@@ -63,6 +63,189 @@ export class EnhancedSearchController {
     }
   }
 
+  async enhancedSearchStream(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      // Set up SSE headers
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Cache-Control'
+      });
+
+      // Helper function to send SSE events
+      const sendEvent = (data: any) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      };
+
+      // Validate request from query parameters
+      const searchRequest = this.validateSearchRequest(req.query);
+
+      console.log(`🚀 Starting ENHANCED SSE search for: ${searchRequest.Target_institution} vs ${searchRequest.Risk_Entity}`);
+
+      // Send initial connection event
+      sendEvent({
+        stage: 'connection',
+        status: 'connected',
+        message: 'SSE connection established'
+      });
+
+      // Stage 1: Generate search strategy using WebSearch meta-prompting
+      sendEvent({
+        stage: 1,
+        status: 'running',
+        message: 'Generating search strategy with WebSearch...'
+      });
+
+      const metaPromptResult = await this.metaPromptService.generateSearchStrategy(searchRequest);
+
+      // Send Stage 1 completion
+      sendEvent({
+        stage: 1,
+        status: 'completed',
+        result: {
+          entity_a: {
+            name: metaPromptResult.entity_a.original_name,
+            description: metaPromptResult.entity_a.description,
+            sectors: metaPromptResult.entity_a.sectors
+          },
+          entity_b: {
+            name: metaPromptResult.entity_b.original_name,
+            description: metaPromptResult.entity_b.description,
+            sectors: metaPromptResult.entity_b.sectors
+          },
+          search_strategy: {
+            keywords_count: metaPromptResult.search_strategy.search_keywords.length,
+            engines: metaPromptResult.search_strategy.source_engine,
+            relationship_likelihood: metaPromptResult.search_strategy.relationship_likelihood,
+            keywords: metaPromptResult.search_strategy.search_keywords.slice(0, 5) // Show first 5 keywords
+          }
+        }
+      });
+
+      console.log(`Generated ${metaPromptResult.search_strategy.search_keywords.length} keywords for ${metaPromptResult.search_strategy.source_engine.length} engines`);
+
+      // Stage 2: Execute OPTIMIZED SERP searches with progress updates
+      sendEvent({
+        stage: 2,
+        status: 'running',
+        message: 'Starting multi-engine SERP searches...'
+      });
+
+      // Create progress callback for Stage 2
+      const stage2ProgressCallback = (progress: string, current?: number, total?: number) => {
+        sendEvent({
+          stage: 2,
+          status: 'progress',
+          message: progress,
+          progress: current && total ? { current, total } : undefined
+        });
+      };
+
+      const optimizedResults = await this.serpExecutorService.executeSearchStrategyOptimizedWithProgress(
+        searchRequest,
+        metaPromptResult,
+        stage2ProgressCallback
+      );
+
+      // Send Stage 2 completion
+      sendEvent({
+        stage: 2,
+        status: 'completed',
+        result: {
+          total_results: optimizedResults.consolidatedResults.length,
+          compression_ratio: (optimizedResults.optimizationMetadata.compressionRatio * 100).toFixed(1),
+          engines_used: metaPromptResult.search_strategy.source_engine,
+          execution_summary: {
+            successful_queries: optimizedResults.optimizationMetadata.originalResults > 0 ? 'Success' : 'Failed',
+            optimization_applied: true
+          },
+          sample_results: optimizedResults.consolidatedResults.slice(0, 5).map(result => ({
+            title: result.title,
+            url: result.url,
+            snippet: result.snippet.substring(0, 150) + '...',
+            relevance_score: result.relevanceScore || 0,
+            engine: result.engine
+          })),
+          top_sources: [...new Set(optimizedResults.consolidatedResults.slice(0, 10).map(r => {
+            try {
+              return new URL(r.url).hostname;
+            } catch {
+              return r.url;
+            }
+          }))].slice(0, 5)
+        }
+      });
+
+      console.log(`SERP optimization completed: ${optimizedResults.consolidatedResults.length} optimized results`);
+
+      // Stage 3: Integrate optimized results and generate OSINT analysis
+      sendEvent({
+        stage: 3,
+        status: 'running',
+        message: 'AI analyzing search results for relationship evidence...'
+      });
+
+      // Create progress callback for Stage 3
+      const stage3ProgressCallback = (progress: string) => {
+        sendEvent({
+          stage: 3,
+          status: 'progress',
+          message: progress
+        });
+      };
+
+      // Use stable non-SSE method with manual progress updates
+      stage3ProgressCallback('Starting AI analysis...');
+      const finalResult = await this.resultIntegrationService.integrateAndAnalyzeOptimized(
+        searchRequest,
+        metaPromptResult,
+        optimizedResults
+      );
+      stage3ProgressCallback('Analysis completed');
+
+      const totalTime = Date.now() - startTime;
+
+      // Send final completion
+      sendEvent({
+        stage: 'final',
+        status: 'completed',
+        result: {
+          analysis_results: finalResult.data,
+          metadata: {
+            overall_confidence: finalResult.metadata?.overall_confidence,
+            total_sources: finalResult.sources?.length,
+            methodology: finalResult.metadata?.methodology,
+            execution_time_ms: totalTime
+          },
+          sources: finalResult.sources
+        }
+      });
+
+      console.log(`✅ Enhanced SSE search completed in ${(totalTime / 1000).toFixed(2)}s`);
+
+      // Close the connection
+      res.end();
+
+    } catch (error) {
+      console.error('❌ Enhanced SSE search failed:', error);
+
+      // Send error event
+      res.write(`data: ${JSON.stringify({
+        stage: 'error',
+        status: 'failed',
+        error: 'Enhanced search process failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+
+      res.end();
+    }
+  }
+
 
   async getSearchStrategy(req: Request, res: Response): Promise<void> {
     try {
