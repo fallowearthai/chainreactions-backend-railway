@@ -22,6 +22,35 @@ export interface OSINTAnalysisResult {
 export class ResultIntegrationService {
   private geminiService: GeminiService;
 
+  // 统一的OSINT分析师System Prompt常量
+  private readonly OSINT_ANALYST_SYSTEM_PROMPT = `You are an expert OSINT analyst specializing in mapping institutional relationships and risk exposure. Your assignment is to examine search results and linked urls to determine the nature of relationships between specified target institutions and risk entities.
+CRITICAL: You must return a single JSON object with the exact structure specified below. No additional text, commentary, or multiple JSON objects.
+
+Instructions:
+1. Review all provided search result snippets and use the URL context tool to thoroughly examine linked website and PDF documents for relevant information.
+2. Categorize the relationship based on these definitions:
+   - Direct: Explicit evidence (e.g., contracts, partnerships, formal collaborations) between the target and risk entity.
+   - Indirect: Relationship exists via a clearly identified intermediary organization.
+   - Significant Mention: Both entities are referenced together in a context that suggests relevance, but no direct or indirect link is established.
+   - No Evidence Found: No meaningful connection identified in the sources.
+3. For each finding, include:
+   - Numbered inline citations in the finding_summary in [1], [2], etc., matching the search results.
+   - Specific details such as dates, transaction amounts, or named individuals when available.
+   - Assessment of source credibility (e.g., official site, reputable news, academic publication).
+   - Conservative classification: Only assign 'Direct' if there is unambiguous supporting evidence; for 'Indirect', name the intermediary.
+4. Structure your output as a JSON object with the following fields:
+{
+  "relationship_type": "Direct|Indirect|Significant Mention|No Evidence Found",
+  "finding_summary": "Concise, evidence-based summary with numbered inline citations.",
+  "potential_affiliated_entity": "Name of intermediary if Indirect, else null",
+  "sources": ["List of URLs used as evidence"],
+  "confidence_score": Numeric value between 0 and 1 reflecting certainty,
+  "evidence_quality": "high|medium|low",
+  "key_evidence": ["Bullet points of the strongest supporting facts"]
+}
+
+Prioritize factual accuracy, source attribution, and clarity in your analysis. Do not speculate or infer beyond the evidence presented.`;
+
   constructor() {
     this.geminiService = new GeminiService();
   }
@@ -144,32 +173,7 @@ export class ResultIntegrationService {
 
     const systemInstruction = {
       parts: [{
-        text: `You are an expert OSINT analyst specializing in mapping institutional relationships and risk exposure. Your assignment is to examine search results and linked urls to determine the nature of relationships between specified target institutions and risk entities.
-
-Instructions:
-1. Review all provided search result snippets and use the URL context tool to thoroughly examine linked website and PDF documents for relevant information.
-2. Categorize the relationship based on these definitions:
-   - Direct: Explicit evidence (e.g., contracts, partnerships, formal collaborations) between the target and risk entity.
-   - Indirect: Relationship exists via a clearly identified intermediary organization.
-   - Significant Mention: Both entities are referenced together in a context that suggests relevance, but no direct or indirect link is established.
-   - No Evidence Found: No meaningful connection identified in the sources.
-3. For each finding, include:
-   - Numbered inline citations in the finding_summary in [1], [2], etc., matching the search results.
-   - Specific details such as dates, transaction amounts, or named individuals when available.
-   - Assessment of source credibility (e.g., official site, reputable news, academic publication).
-   - Conservative classification: Only assign 'Direct' if there is unambiguous supporting evidence; for 'Indirect', name the intermediary.
-4. Structure your output as a JSON object with the following fields:
-{
-  "relationship_type": "Direct|Indirect|Significant Mention|No Evidence Found",
-  "finding_summary": "Concise, evidence-based summary with numbered inline citations.",
-  "potential_affiliated_entity": "Name of intermediary if Indirect, else null",
-  "sources": ["List of URLs used as evidence"],
-  "confidence_score": Numeric value between 0 and 1 reflecting certainty,
-  "evidence_quality": "high|medium|low",
-  "key_evidence": ["Bullet points of the strongest supporting facts"]
-}
-
-Prioritize factual accuracy, source attribution, and clarity in your analysis. Do not speculate or infer beyond the evidence presented.`
+        text: this.OSINT_ANALYST_SYSTEM_PROMPT
       }]
     };
 
@@ -248,8 +252,8 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
 
         if (attempt === maxAttempts) {
           progressCallback(`Failed to analyze ${riskEntity} after ${maxAttempts} attempts`);
-          console.warn(`Optimized analysis failed for ${riskEntity}:`, error);
-          return this.createOptimizedFallbackAnalysis(request, riskEntity, relevantResults);
+          console.error(`Optimized analysis failed for ${riskEntity} after ${maxAttempts} attempts:`, error);
+          throw new Error(`AI analysis failed for ${riskEntity} after ${maxAttempts} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
 
         progressCallback(`Retrying analysis for ${riskEntity} (attempt ${attempt + 1}/${maxAttempts})...`);
@@ -258,9 +262,9 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
       }
     }
 
-    // This should never be reached due to fallback in the catch block
-    console.warn(`Analysis failed for ${riskEntity} after ${maxAttempts} attempts`);
-    return this.createOptimizedFallbackAnalysis(request, riskEntity, relevantResults);
+    // This should never be reached as errors are thrown in the loop
+    console.error(`Analysis failed for ${riskEntity} after ${maxAttempts} attempts`);
+    throw new Error(`AI analysis failed for ${riskEntity} after ${maxAttempts} attempts`);
   }
 
 
@@ -287,32 +291,7 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
 
     const systemInstruction = {
       parts: [{
-        text: `You are an expert OSINT analyst specializing in mapping institutional relationships and risk exposure. Your assignment is to examine search results and linked urls to determine the nature of relationships between specified target institutions and risk entities.
-
-Instructions:
-1. Review all provided search result snippets and use the URL context tool to thoroughly examine linked website and PDF documents for relevant information.
-2. Categorize the relationship based on these definitions:
-   - Direct: Explicit evidence (e.g., contracts, partnerships, formal collaborations) between the target and risk entity.
-   - Indirect: Relationship exists via a clearly identified intermediary organization.
-   - Significant Mention: Both entities are referenced together in a context that suggests relevance, but no direct or indirect link is established.
-   - No Evidence Found: No meaningful connection identified in the sources.
-3. For each finding, include:
-   - Numbered inline citations in the finding_summary in [1], [2], etc., matching the search results.
-   - Specific details such as dates, transaction amounts, or named individuals when available.
-   - Assessment of source credibility (e.g., official site, reputable news, academic publication).
-   - Conservative classification: Only assign 'Direct' if there is unambiguous supporting evidence; for 'Indirect', name the intermediary.
-4. Structure your output as a JSON object with the following fields:
-{
-  "relationship_type": "Direct|Indirect|Significant Mention|No Evidence Found",
-  "finding_summary": "Concise, evidence-based summary with numbered inline citations.",
-  "potential_affiliated_entity": "Name of intermediary if Indirect, else null",
-  "sources": ["List of URLs used as evidence"],
-  "confidence_score": Numeric value between 0 and 1 reflecting certainty,
-  "evidence_quality": "high|medium|low",
-  "key_evidence": ["Bullet points of the strongest supporting facts"]
-}
-
-Prioritize factual accuracy, source attribution, and clarity in your analysis. Do not speculate or infer beyond the evidence presented.`
+        text: this.OSINT_ANALYST_SYSTEM_PROMPT
       }]
     };
 
@@ -327,7 +306,6 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
         }], // URL context tool for document analysis
         {
           temperature: 0,
-          responseMimeType: "application/json",
           thinkingConfig: {
             thinkingBudget: -1
           }
@@ -375,8 +353,8 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
       };
 
     } catch (error) {
-      console.warn(`Optimized analysis failed for ${riskEntity}:`, error);
-      return this.createOptimizedFallbackAnalysis(request, riskEntity, relevantResults);
+      console.error(`Optimized analysis failed for ${riskEntity}:`, error);
+      throw new Error(`AI analysis failed for ${riskEntity}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -439,28 +417,7 @@ ${resultsText}
 TASK: Analyze the search results above and determine the relationship between the target institution and risk entity. Return your analysis as JSON following the structure defined in the system instruction.`;
   }
 
-  private createOptimizedFallbackAnalysis(
-    request: SearchRequest,
-    riskEntity: string,
-    relevantResults: OptimizedSearchResult[]
-  ): OSINTAnalysisResult {
-
-    return {
-      risk_item: riskEntity,
-      institution_A: request.Target_institution,
-      relationship_type: 'No Evidence Found',
-      finding_summary: `Analysis could not be completed due to technical issues. ${relevantResults.length} potentially relevant sources were identified but could not be properly analyzed.`,
-      sources: relevantResults.slice(0, 5).map(r => r.url).filter(url => url),
-      analysis_metadata: {
-        confidence_score: 0.1,
-        sources_analyzed: relevantResults.length,
-        search_keywords_used: [],
-        engines_used: [],
-        analysis_timestamp: new Date().toISOString()
-      }
-    };
-  }
-
+  
   private formatSearchResultOptimized(
     analysisResults: OSINTAnalysisResult[],
     optimizedResults: OptimizedSerpResults

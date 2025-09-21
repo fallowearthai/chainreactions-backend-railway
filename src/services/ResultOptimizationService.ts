@@ -58,7 +58,7 @@ export class ResultOptimizationService {
     const scoredResults = this.calculateRelevanceScores(filteredResults);
 
     // Step 5: Sort by relevance and limit results
-    const finalResults = this.sortAndLimitResults(scoredResults, 40);
+    const finalResults = this.sortAndLimitResults(scoredResults, 20);
 
     const processingTime = Date.now() - startTime;
     const compressionRatio = originalCount > 0 ? finalResults.length / originalCount : 0;
@@ -77,7 +77,7 @@ export class ResultOptimizationService {
           'Minimal quality filtering',
           'Smart penalty scoring',
           'Relevance-based ranking',
-          'Top 40 selection'
+          'Top 20 selection'
         ]
       },
       consolidatedResults: finalResults,
