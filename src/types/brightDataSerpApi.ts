@@ -33,10 +33,6 @@ export interface BrightDataResult {
 export interface SearchEngineConfig {
   name: SerpEngine;
   base_url: string;
-  default_params: Record<string, string>;
-  supported_languages: string[];
-  geographic_focus: string[];
-  strengths: string[];
 }
 
 export type SerpEngine = 'google' | 'yandex' | 'baidu' | 'yahoo' | 'naver';

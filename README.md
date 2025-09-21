@@ -6,7 +6,7 @@ A powerful Node.js/TypeScript implementation of an OSINT (Open-Source Intelligen
 
 ### Enhanced Multi-Engine Architecture
 - **Meta Prompting System**: Two-stage AI analysis for intelligent search strategy generation
-- **Multi-Search Engine Integration**: Supports Bing, DuckDuckGo, and planned Baidu/Yandex engines
+- **Multi-Search Engine Integration**: Supports Google, Baidu, and Yandex engines
 - **Geographic Engine Selection**: Automatically selects appropriate engines based on location and risk category
 - **Result Aggregation**: Deduplicates and scores results from multiple search engines
 - **MCP Tools Integration**: Planned integration with specialized OSINT tools
@@ -22,7 +22,7 @@ A powerful Node.js/TypeScript implementation of an OSINT (Open-Source Intelligen
 - **Runtime**: Node.js with TypeScript
 - **Framework**: Express.js for REST API
 - **AI Integration**: Google Gemini 2.5 Flash
-- **Search Engines**: Bing, DuckDuckGo, Google (planned)
+- **Search Engines**: Google, Baidu, Yandex
 - **HTTP Client**: Axios
 - **Environment Management**: dotenv
 - **Testing**: Jest (planned)
@@ -58,7 +58,8 @@ All configuration is centralized in the `.env` file:
 
 ### Required API Keys
 - `GEMINI_API_KEY`: Google Gemini API key (required)
-- `BING_SEARCH_API_KEY`: Microsoft Bing Search API key (optional)
+- `BRIGHT_DATA_API_KEY`: Bright Data SERP API key for multi-engine search (required)
+- `BRIGHT_DATA_SERP_ZONE`: Bright Data SERP zone identifier (required)
 
 ### Optional Configuration
 - Search engine APIs, MCP tools, specialized engines
@@ -131,22 +132,18 @@ src/
 ## 🔍 Search Engine Support
 
 ### Currently Implemented
-- **DuckDuckGo**: Privacy-focused, uncensored search (no API key required)
-- **Bing**: Microsoft's search engine with global coverage (API key required)
-
-### Planned Implementation
-- **Baidu**: Chinese search engine for local content
-- **Yandex**: Russian search engine for Cyrillic content
-- **Google**: Direct Google Search API integration
+- **Google**: Global search engine with comprehensive coverage
+- **Baidu**: Chinese search engine for native Chinese content and sources
+- **Yandex**: Russian search engine for Cyrillic content and Eastern European sources
 
 ## 🌍 Geographic Intelligence
 
 The system automatically selects appropriate search engines based on location:
 
-- **China/Hong Kong/Taiwan**: DuckDuckGo (uncensored) + Bing + planned Baidu
-- **Russia/Eastern Europe**: DuckDuckGo + Bing + planned Yandex
-- **Middle East**: DuckDuckGo + Bing for comprehensive coverage
-- **Global**: Bing + DuckDuckGo for balanced results
+- **China/Hong Kong/Taiwan**: Google + Baidu for comprehensive coverage
+- **Russia/Eastern Europe**: Google + Yandex for native content access
+- **Other Regions**: Google + Yandex for global coverage
+- **Global**: Google baseline with regional engines based on context
 
 ## 🛡 Known Limitations
 

@@ -75,7 +75,7 @@ export class SerpExecutorService {
       allResults.push(...results);
 
       // Consolidate and deduplicate results with enhanced scoring
-      const consolidatedResults = this.consolidateResults(allResults);
+      const consolidatedResults = this.consolidateResults(allResults, metaPromptResult);
 
       const executionTime = Date.now() - startTime;
 
@@ -156,7 +156,7 @@ export class SerpExecutorService {
           keyword,
           engine,
           type: 'keyword',
-          priority: this.calculateKeywordPriority(keyword),
+          priority: this.calculateKeywordPriority(keyword, metaPromptResult),
           options: {
             num_results: 25, // Increased for better coverage
             country: search_strategy.country_code || 'us',
@@ -174,21 +174,43 @@ export class SerpExecutorService {
     return sortedTasks;
   }
 
-  private calculateKeywordPriority(keyword: string): number {
+  private calculateKeywordPriority(keyword: string, metaPromptResult: MetaPromptResult): number {
     let priority = 5;
+    const keywordLower = keyword.toLowerCase();
 
-    // Higher priority for entity names
-    if (keyword.toLowerCase().includes('nanoacademic') ||
-        keyword.toLowerCase().includes('hongzhiwei') ||
-        keyword.toLowerCase().includes('鸿之微')) {
+    // Extract entity names from Stage 1 results
+    const entityAName = metaPromptResult.entity_a.original_name.toLowerCase();
+    const entityBName = metaPromptResult.entity_b.original_name.toLowerCase();
+
+    // Higher priority for exact entity name matches
+    if (keywordLower.includes(entityAName) || keywordLower.includes(entityBName)) {
+      priority += 4;
+    }
+
+    // Higher priority for partial entity name matches (company name components)
+    const entityAWords = entityAName.split(/\s+/);
+    const entityBWords = entityBName.split(/\s+/);
+    const hasEntityWord = [...entityAWords, ...entityBWords].some(word =>
+      word.length > 3 && keywordLower.includes(word)
+    );
+    if (hasEntityWord) {
       priority += 3;
     }
 
-    // Higher priority for relationship keywords
-    if (keyword.toLowerCase().includes('partnership') ||
-        keyword.toLowerCase().includes('collaboration') ||
-        keyword.toLowerCase().includes('合作')) {
+    // Higher priority for relationship keywords (common patterns)
+    const relationshipTerms = [
+      'partnership', 'collaboration', 'cooperation', 'agreement', 'contract',
+      'deal', 'acquisition', 'merger', 'joint venture', 'alliance',
+      '合作', '伙伴', '协议', '合同', '收购', '并购', '联合'
+    ];
+    if (relationshipTerms.some(term => keywordLower.includes(term))) {
       priority += 2;
+    }
+
+    // Medium priority for sector-specific terms
+    const allSectors = [...metaPromptResult.entity_a.sectors, ...metaPromptResult.entity_b.sectors];
+    if (allSectors.some(sector => keywordLower.includes(sector.toLowerCase()))) {
+      priority += 1;
     }
 
     return priority;
@@ -359,7 +381,7 @@ export class SerpExecutorService {
     }
   }
 
-  private consolidateResults(serpResults: SerpExecutionResult[]): any[] {
+  private consolidateResults(serpResults: SerpExecutionResult[], metaPromptResult: MetaPromptResult): any[] {
     const resultMap = new Map<string, any>();
     const seenUrls = new Set<string>();
 
@@ -383,7 +405,7 @@ export class SerpExecutorService {
           searchMetadata: {
             originalKeyword: serpResult.searchKeyword,
             engine: serpResult.engine,
-            relevanceScore: this.calculateEnhancedRelevanceScore(result, serpResult)
+            relevanceScore: this.calculateEnhancedRelevanceScore(result, serpResult, metaPromptResult)
           }
         };
 
@@ -398,7 +420,7 @@ export class SerpExecutorService {
       .slice(0, 60);
   }
 
-  private calculateEnhancedRelevanceScore(result: any, serpResult: SerpExecutionResult): number {
+  private calculateEnhancedRelevanceScore(result: any, serpResult: SerpExecutionResult, metaPromptResult: MetaPromptResult): number {
     const keyword = serpResult.searchKeyword.toLowerCase();
     const title = (result.title || '').toLowerCase();
     const snippet = (result.snippet || '').toLowerCase();
@@ -407,7 +429,7 @@ export class SerpExecutorService {
     let score = 0;
 
     // Entity matching
-    if (this.containsEntityNames(title + ' ' + snippet)) score += 5;
+    if (this.containsEntityNames(title + ' ' + snippet, metaPromptResult)) score += 5;
 
     // Title relevance
     if (title.includes(keyword.split(' ')[0])) score += 3;
@@ -431,9 +453,24 @@ export class SerpExecutorService {
     return Math.max(score, 0);
   }
 
-  private containsEntityNames(content: string): boolean {
-    const entities = ['nanoacademic', 'hongzhiwei', '鸿之微', 'technologies'];
-    return entities.some(entity => content.includes(entity));
+  private containsEntityNames(content: string, metaPromptResult: MetaPromptResult): boolean {
+    // Extract entity names from Stage 1 results
+    const entityAName = metaPromptResult.entity_a.original_name.toLowerCase();
+    const entityBName = metaPromptResult.entity_b.original_name.toLowerCase();
+
+    // Create entity terms for matching
+    const entityTerms: string[] = [];
+
+    // Add full entity names
+    entityTerms.push(entityAName, entityBName);
+
+    // Add significant words from entity names (longer than 3 characters)
+    const entityAWords = entityAName.split(/\s+/).filter(word => word.length > 3);
+    const entityBWords = entityBName.split(/\s+/).filter(word => word.length > 3);
+    entityTerms.push(...entityAWords, ...entityBWords);
+
+    // Check if content contains any entity terms
+    return entityTerms.some(term => content.includes(term));
   }
 
   private normalizeUrl(url: string): string {

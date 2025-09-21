@@ -140,18 +140,3 @@ export interface OSINTFinding {
   sources: string[];
 }
 
-export interface FormattedSearchResult {
-  result: string;
-  urls: string;
-  raw_data: {
-    risk_item: string;
-    institution_A: string;
-    relationship_type: string;
-    finding_summary: string;
-    potential_intermediary_B: string[];
-    urls: string;
-    sources_count: number;
-    renderedContent?: string;
-    webSearchQueries?: string[];
-  };
-}

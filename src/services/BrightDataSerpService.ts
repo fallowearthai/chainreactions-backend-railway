@@ -43,27 +43,15 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
     const configs: SearchEngineConfig[] = [
       {
         name: 'google',
-        base_url: 'https://www.google.com/search',
-        default_params: { hl: 'en', gl: 'us' },
-        supported_languages: ['en', 'zh', 'ru', 'ar', 'ja', 'ko', 'fr', 'de', 'es'],
-        geographic_focus: ['Global', 'Worldwide'],
-        strengths: ['comprehensive', 'authoritative', 'real-time']
+        base_url: 'https://www.google.com/search'
       },
       {
         name: 'baidu',
-        base_url: 'https://www.baidu.com/s',
-        default_params: {},
-        supported_languages: ['zh', 'en'],
-        geographic_focus: ['China', 'Asia'],
-        strengths: ['chinese-content', 'local-china', 'government-sources']
+        base_url: 'https://www.baidu.com/s'
       },
       {
         name: 'yandex',
-        base_url: 'https://www.yandex.com/search',
-        default_params: {},
-        supported_languages: ['ru', 'en', 'uk', 'be'],
-        geographic_focus: ['Russia', 'Eastern Europe', 'CIS'],
-        strengths: ['russian-content', 'cyrillic', 'regional-eastern-europe']
+        base_url: 'https://www.yandex.com/search'
       }
     ];
 
@@ -77,7 +65,7 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
   selectEngines(
     location: string,
     riskCategory: string,
-    languages: string[]
+    _languages: string[]
   ): { engines: SerpEngine[]; reasoning: string } {
     const selectedEngines: SerpEngine[] = [];
     const reasons: string[] = [];
@@ -662,7 +650,6 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
 
     let totalQueries = 0;
     let successfulQueries = 0;
-    let enginesSucceeded = 0;
     let enginesFailed = 0;
 
     // Execute searches for each query across all engines
