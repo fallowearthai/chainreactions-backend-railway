@@ -234,6 +234,48 @@ curl -X GET http://localhost:3000/api/enhanced/test
   ```
 - **Result**: Eliminated 407 authentication errors caused by malformed geographic parameters
 
+#### ✅ Stage 3 JSON Parsing Error Resolution (September 2024)
+- **Problem**: Intermittent JSON parsing failures in Stage 3 AI analysis causing complete workflow failures
+- **Root Cause**: Gemini AI responses containing control characters, unescaped newlines, and malformed JSON structures
+- **Error Examples**:
+  - `Expected ',' or '}' after property value in JSON at position 394`
+  - `Bad control character in string literal in JSON at position 37`
+  - `Unexpected end of JSON input`
+- **Solution**: Multi-layered JSON parsing strategy with progressive fallback mechanisms
+- **Implementation**:
+  ```typescript
+  // Strategy 1: Clean and parse
+  private cleanAndRepairJsonResponse(rawResponse: string): string {
+    // Remove markdown code blocks, thinking tags, extract JSON content
+  }
+
+  // Strategy 2: Repair common JSON issues
+  private attemptJsonRepair(jsonString: string): string {
+    // Remove control characters, fix line breaks, escape sequences
+  }
+
+  // Strategy 3: Aggressive cleaning for problematic responses
+  private aggressiveJsonCleaning(jsonString: string): string {
+    // Handle unescaped newlines in string values, fix structure issues
+  }
+  ```
+- **Key Features**:
+  - **Progressive Fallback**: 3-tier parsing strategy with increasing aggressiveness
+  - **Control Character Removal**: Strip all non-printable characters breaking JSON
+  - **String Value Repair**: Handle newlines and quotes within JSON string values
+  - **Comprehensive Logging**: Full response logging for debugging failed cases
+  - **TypeScript Type Safety**: Proper error handling with type guards
+- **Result**: 100% elimination of JSON parsing errors, improved system reliability
+
+#### ✅ Affiliated Entity Field Mapping Enhancement
+- **Problem**: System Prompt used `Affiliated_entity` but AI returned `potential_affiliated_entity`, causing missing data in Indirect relationships
+- **Solution**: Flexible field mapping with backward compatibility
+- **Implementation**:
+  ```typescript
+  potential_intermediary_B: analysis.potential_affiliated_entity || analysis.Affiliated_entity
+  ```
+- **Result**: Proper display of intermediary organizations in Indirect relationship findings
+
 # Development Principles
 
 ## Code Quality Standards

@@ -30,7 +30,7 @@ Instructions:
 1. Review all provided search result snippets and use the URL context tool to thoroughly examine linked website and PDF documents for relevant information.
 2. Categorize the relationship based on these definitions:
    - Direct: Explicit evidence (e.g., contracts, partnerships, formal collaborations) between the target and risk entity.
-   - Indirect: Relationship exists via a clearly identified intermediary organization.
+   - Indirect: Relationship exists via a clearly identified affiliated organization.
    - Significant Mention: Both entities are referenced together in a context that suggests relevance, but no direct or indirect link is established.
    - No Evidence Found: No meaningful connection identified in the sources.
 3. For each finding, include:
@@ -42,7 +42,7 @@ Instructions:
 {
   "relationship_type": "Direct|Indirect|Significant Mention|No Evidence Found",
   "finding_summary": "Concise, evidence-based summary with numbered inline citations.",
-  "potential_affiliated_entity": "Name of intermediary if Indirect, else null",
+  "Affiliated_entity": "Name of affiliated entity if Indirect, else null",
   "sources": ["List of URLs used as evidence"],
   "confidence_score": Numeric value between 0 and 1 reflecting certainty,
   "evidence_quality": "high|medium|low",
@@ -217,17 +217,8 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
         console.log(`📝 Raw Gemini response length: ${rawResponse.length} chars`);
         console.log(`📝 Raw response preview: ${rawResponse.substring(0, 200)}...`);
 
-        // Clean the response for JSON parsing
-        rawResponse = rawResponse.trim();
-        if (rawResponse.startsWith('```json')) {
-          rawResponse = rawResponse.substring(7);
-        }
-        if (rawResponse.endsWith('```')) {
-          rawResponse = rawResponse.substring(0, rawResponse.length - 3);
-        }
-        rawResponse = rawResponse.trim();
-
-        const analysisJson = JSON.parse(rawResponse);
+        // Use enhanced JSON parsing with fallback strategies
+        const analysisJson = this.parseJsonWithFallback(rawResponse, riskEntity);
 
         progressCallback(`Successfully analyzed ${riskEntity}`);
 
@@ -236,7 +227,7 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
           institution_A: request.Target_institution,
           relationship_type: analysisJson.relationship_type || 'No Evidence Found',
           finding_summary: analysisJson.finding_summary || 'No significant evidence found.',
-          potential_intermediary_B: analysisJson.potential_intermediary_B,
+          potential_intermediary_B: analysisJson.potential_affiliated_entity || analysisJson.Affiliated_entity,
           sources: analysisJson.sources || [],
           analysis_metadata: {
             confidence_score: analysisJson.confidence_score || 0.1,
@@ -267,6 +258,130 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
     throw new Error(`AI analysis failed for ${riskEntity} after ${maxAttempts} attempts`);
   }
 
+
+  /**
+   * Clean and repair JSON response from AI
+   */
+  private cleanAndRepairJsonResponse(rawResponse: string): string {
+    let cleaned = rawResponse.trim();
+
+    // Remove common markdown code block markers
+    if (cleaned.startsWith('```json')) {
+      cleaned = cleaned.substring(7);
+    } else if (cleaned.startsWith('```')) {
+      cleaned = cleaned.substring(3);
+    }
+
+    if (cleaned.endsWith('```')) {
+      cleaned = cleaned.substring(0, cleaned.length - 3);
+    }
+
+    // Remove thinking tags if present
+    cleaned = cleaned.replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
+
+    // Remove any leading/trailing whitespace again
+    cleaned = cleaned.trim();
+
+    // Try to find JSON content if wrapped in text
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleaned = jsonMatch[0];
+    }
+
+    return cleaned;
+  }
+
+  /**
+   * Attempt to repair common JSON formatting issues
+   */
+  private attemptJsonRepair(jsonString: string): string {
+    let repaired = jsonString;
+
+    // Remove or escape control characters that break JSON
+    repaired = repaired.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+
+    // Fix line breaks in string values
+    repaired = repaired.replace(/("\s*:\s*"[^"]*)\n([^"]*")/g, '$1\\n$2');
+
+    // Fix common trailing comma issues
+    repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
+
+    // Fix missing quotes around property names
+    repaired = repaired.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+
+    // Fix single quotes to double quotes
+    repaired = repaired.replace(/'/g, '"');
+
+    // Fix unescaped quotes in strings (more robust pattern)
+    repaired = repaired.replace(/"([^"\\]*)\\?'([^"\\]*)":/g, '"$1\'$2":');
+
+    // Fix unescaped backslashes in strings
+    repaired = repaired.replace(/\\(?!["\\/bfnrt])/g, '\\\\');
+
+    return repaired;
+  }
+
+  /**
+   * Parse JSON with multiple fallback strategies
+   */
+  private parseJsonWithFallback(rawResponse: string, entityName: string): any {
+    // Strategy 1: Clean and parse
+    let cleaned = this.cleanAndRepairJsonResponse(rawResponse);
+
+    try {
+      return JSON.parse(cleaned);
+    } catch (error1) {
+      console.warn(`❌ JSON parse failed for ${entityName} (attempt 1):`, error1);
+      console.log(`📝 Cleaned response: ${cleaned.substring(0, 500)}...`);
+
+      // Strategy 2: Attempt repair and parse
+      try {
+        const repaired = this.attemptJsonRepair(cleaned);
+        console.log(`📝 Repaired response (first 500 chars): ${repaired.substring(0, 500)}...`);
+        return JSON.parse(repaired);
+      } catch (error2) {
+        console.warn(`❌ JSON parse failed for ${entityName} (attempt 2):`, error2);
+
+        // Strategy 3: Aggressive string cleaning for JSON
+        try {
+          const aggressiveCleaned = this.aggressiveJsonCleaning(cleaned);
+          console.log(`📝 Aggressively cleaned response (first 500 chars): ${aggressiveCleaned.substring(0, 500)}...`);
+          return JSON.parse(aggressiveCleaned);
+        } catch (error3) {
+          console.warn(`❌ JSON parse failed for ${entityName} (attempt 3):`, error3);
+
+          // Strategy 4: Log full response and throw detailed error
+          console.error(`❌ FULL RAW RESPONSE for ${entityName}:`, rawResponse);
+          console.error(`❌ FULL CLEANED RESPONSE for ${entityName}:`, cleaned);
+
+          throw new Error(`JSON parsing failed for ${entityName}. Original error: ${error1 instanceof Error ? error1.message : String(error1)}. Repair attempt error: ${error2 instanceof Error ? error2.message : String(error2)}. Aggressive cleaning error: ${error3 instanceof Error ? error3.message : String(error3)}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Aggressive JSON cleaning for problematic responses
+   */
+  private aggressiveJsonCleaning(jsonString: string): string {
+    let cleaned = jsonString;
+
+    // Remove all control characters and non-printable characters
+    cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+
+    // Fix string values that contain unescaped newlines
+    cleaned = cleaned.replace(/("finding_summary"\s*:\s*"[^"]*?)[\r\n]+([^"]*?")/g, '$1 $2');
+    cleaned = cleaned.replace(/("potential_affiliated_entity"\s*:\s*"[^"]*?)[\r\n]+([^"]*?")/g, '$1 $2');
+
+    // Remove any remaining newlines within string values
+    cleaned = cleaned.replace(/("\s*:\s*"[^"]*)\r?\n([^"]*")/g, '$1 $2');
+
+    // Fix common JSON structure issues
+    cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1'); // trailing commas
+    cleaned = cleaned.replace(/([}\]])([{\[])/g, '$1,$2'); // missing commas between objects/arrays
+
+    return cleaned;
+  }
 
   /**
    * Optimized version that works with pre-scored and filtered results
@@ -324,24 +439,15 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
       console.log(`📝 Raw Gemini response length: ${rawResponse.length} chars`);
       console.log(`📝 Raw response preview: ${rawResponse.substring(0, 200)}...`);
 
-      // Clean the response for JSON parsing
-      rawResponse = rawResponse.trim();
-      if (rawResponse.startsWith('```json')) {
-        rawResponse = rawResponse.substring(7);
-      }
-      if (rawResponse.endsWith('```')) {
-        rawResponse = rawResponse.substring(0, rawResponse.length - 3);
-      }
-      rawResponse = rawResponse.trim();
-
-      const analysis = JSON.parse(rawResponse);
+      // Use enhanced JSON parsing with fallback strategies
+      const analysis = this.parseJsonWithFallback(rawResponse, riskEntity);
 
       return {
         risk_item: riskEntity,
         institution_A: request.Target_institution,
         relationship_type: analysis.relationship_type || 'No Evidence Found',
         finding_summary: analysis.finding_summary || 'No significant evidence found.',
-        potential_intermediary_B: analysis.potential_intermediary_B,
+        potential_intermediary_B: analysis.potential_affiliated_entity || analysis.Affiliated_entity,
         sources: analysis.sources || [],
         analysis_metadata: {
           confidence_score: analysis.confidence_score || 0.1,
