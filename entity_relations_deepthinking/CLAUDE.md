@@ -278,6 +278,18 @@ curl -X GET http://localhost:3000/api/enhanced/test
 
 # Development Principles
 
+## Critical Development Rules
+
+### 🚨 NEVER Modify Prompts Without Permission
+- **RULE**: NEVER modify any system prompts, AI prompts, or prompt engineering logic without explicit user approval
+- **RATIONALE**: Prompts are carefully crafted for specific AI behavior and output formatting
+- **PROCESS**: Always ask for permission before making any prompt modifications
+- **INCLUDES**:
+  - System instructions in `ResultIntegrationService.ts`
+  - Meta-prompting logic in any service
+  - Prompt templates or prompt engineering code
+  - AI instruction modifications
+
 ## Code Quality Standards
 - **Be ashamed of guessing APIs in the dark; be proud of reading the docs carefully.**
 - **Be ashamed of vague execution; be proud of seeking clarification and confirmation.**
