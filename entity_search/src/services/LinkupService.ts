@@ -15,21 +15,13 @@ export class LinkupService {
   }
 
   private getDefaultExcludeDomains(): string[] {
-    // Default domains to exclude for better data quality
+    // Conservative list of low-quality domains to exclude
+    // (Linkup API may have limits on number of excluded domains)
     return [
       'wikipedia.org',
-      'wiki.fandom.com',
-      'wikimedia.org',
       'reddit.com',
       'quora.com',
-      'pinterest.com',
-      'twitter.com',
-      'facebook.com',
-      'instagram.com',
-      'linkedin.com', // Remove if we want professional network info
-      'youtube.com',
-      'tiktok.com',
-      'snapchat.com'
+      'pinterest.com'
     ];
   }
 
@@ -62,7 +54,6 @@ export class LinkupService {
         q: searchQuery,
         depth: "standard",
         outputType: "sourcedAnswer",
-        includeImages: "false",
         excludeDomains: uniqueExcludes
       };
 
@@ -84,6 +75,7 @@ export class LinkupService {
             'Content-Type': 'application/json',
           },
           timeout: 60000, // 60 second timeout for comprehensive search
+          proxy: false, // Disable proxy to avoid connection issues
         }
       );
 
@@ -128,6 +120,7 @@ export class LinkupService {
             'Authorization': `Bearer ${this.apiKey}`,
           },
           timeout: 10000, // 10 second timeout for test
+          proxy: false, // Disable proxy to avoid connection issues
         }
       );
 

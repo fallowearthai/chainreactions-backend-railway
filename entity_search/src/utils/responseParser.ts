@@ -141,9 +141,14 @@ export class ResponseParser {
    * Extract clean company data for frontend compatibility
    */
   static extractCleanData(parsedResponse: ParsedResponse): any[] {
-    // Return array format to match frontend expectations (useCompanySearch.ts line 55)
+    // Return N8N-compatible format with data.company_info structure
     if (parsedResponse.success && parsedResponse.data.company_info) {
-      return [parsedResponse.data.company_info];
+      return [{
+        data: {
+          company_info: parsedResponse.data.company_info,
+          sources: parsedResponse.data.sources
+        }
+      }];
     }
 
     // Return empty array for failed parsing to match N8N behavior
