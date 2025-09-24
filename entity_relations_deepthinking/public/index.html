@@ -430,11 +430,22 @@
                 updateStageStatus(2, 'running');
                 updateStageContent(2, 'Waiting for Stage 1 completion...');
 
+                // Set up timeout for the request
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes timeout
+
                 const stage3Response = await fetch(`${API_BASE}/search`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(getInputData())
+                    body: JSON.stringify(getInputData()),
+                    signal: controller.signal
                 });
+
+                clearTimeout(timeoutId);
+
+                if (!stage3Response.ok) {
+                    throw new Error(`HTTP error! status: ${stage3Response.status}`);
+                }
 
                 const stage3Result = await stage3Response.json();
 
@@ -444,13 +455,16 @@
                     updateStageStatus(2, 'completed');
                     updateStageStatus(3, 'completed');
 
-                    updateStageContent(1, { message: 'Search strategy generated' });
-                    updateStageContent(2, { message: 'SERP execution completed' });
+                    // Display complete results for all stages
+                    updateStageContent(1, stage3Result.data || { message: 'Search strategy completed' });
+                    updateStageContent(2, stage3Result.metadata?.search_execution_summary || { message: 'SERP execution completed' });
                     updateStageContent(3, {
                         analysis_results: stage3Result.data,
-                        overall_confidence: stage3Result.metadata.overall_confidence,
-                        total_sources: stage3Result.sources.length,
-                        methodology: stage3Result.metadata.methodology
+                        metadata: stage3Result.metadata,
+                        sources: stage3Result.sources,
+                        overall_confidence: stage3Result.metadata?.overall_confidence,
+                        total_sources: stage3Result.sources?.length,
+                        methodology: stage3Result.metadata?.methodology
                     });
                 } else {
                     updateStageStatus(1, 'error');
@@ -459,8 +473,20 @@
                     updateStageContent(3, stage3Result.error || 'Workflow failed', true);
                 }
             } catch (error) {
+                console.error('Workflow error:', error);
+                updateStageStatus(1, 'error');
+                updateStageStatus(2, 'error');
                 updateStageStatus(3, 'error');
-                updateStageContent(3, `Error: ${error.message}`, true);
+
+                // Try to get more detailed error information
+                let errorMessage = `Error: ${error.message}`;
+                if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                    errorMessage += ' (Network error - check if server is running)';
+                } else if (error.name === 'AbortError') {
+                    errorMessage += ' (Request timed out)';
+                }
+
+                updateStageContent(3, errorMessage, true);
             }
         }
 

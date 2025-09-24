@@ -138,5 +138,7 @@ export interface OSINTFinding {
   finding_summary: string;
   potential_intermediary_B?: string;
   sources: string[];
+  key_evidence?: string[];
+  evidence_quality?: 'high' | 'medium' | 'low';
 }
 

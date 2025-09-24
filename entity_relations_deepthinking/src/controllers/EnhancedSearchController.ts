@@ -316,7 +316,7 @@ export class EnhancedSearchController {
   }
 
   private validateSearchRequest(body: any): SearchRequest {
-    const required = ['Target_institution', 'Risk_Entity', 'Location'];
+    const required = ['Target_institution', 'Risk_Entity'];
 
     for (const field of required) {
       if (!body[field]) {
@@ -327,9 +327,9 @@ export class EnhancedSearchController {
     return {
       Target_institution: body.Target_institution,
       Risk_Entity: body.Risk_Entity,
-      Location: body.Location,
-      Start_Date: body.Start_Date,
-      End_Date: body.End_Date
+      Location: body.Location || '',  // Make Location optional with empty string default
+      Start_Date: body.Start_Date || '',
+      End_Date: body.End_Date || ''
     };
   }
 

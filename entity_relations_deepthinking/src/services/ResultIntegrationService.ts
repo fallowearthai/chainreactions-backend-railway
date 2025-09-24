@@ -10,6 +10,8 @@ export interface OSINTAnalysisResult {
   finding_summary: string;
   potential_intermediary_B?: string;
   sources: string[];
+  key_evidence: string[];
+  evidence_quality: 'high' | 'medium' | 'low';
   analysis_metadata: {
     confidence_score: number;
     sources_analyzed: number;
@@ -229,6 +231,8 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
           finding_summary: analysisJson.finding_summary || 'No significant evidence found.',
           potential_intermediary_B: analysisJson.potential_affiliated_entity || analysisJson.Affiliated_entity,
           sources: analysisJson.sources || [],
+          key_evidence: analysisJson.key_evidence || [],
+          evidence_quality: analysisJson.evidence_quality || 'medium',
           analysis_metadata: {
             confidence_score: analysisJson.confidence_score || 0.1,
             sources_analyzed: relevantResults.length,
@@ -449,6 +453,8 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
         finding_summary: analysis.finding_summary || 'No significant evidence found.',
         potential_intermediary_B: analysis.potential_affiliated_entity || analysis.Affiliated_entity,
         sources: analysis.sources || [],
+        key_evidence: analysis.key_evidence || [],
+        evidence_quality: analysis.evidence_quality || 'medium',
         analysis_metadata: {
           confidence_score: analysis.confidence_score || 0.1,
           sources_analyzed: relevantResults.length,
@@ -536,7 +542,9 @@ TASK: Analyze the search results above and determine the relationship between th
       relationship_type: result.relationship_type,
       finding_summary: result.finding_summary,
       potential_intermediary_B: result.potential_intermediary_B,
-      sources: result.sources
+      sources: result.sources,
+      key_evidence: result.key_evidence,
+      evidence_quality: result.evidence_quality
     }));
 
     // Collect all unique sources
