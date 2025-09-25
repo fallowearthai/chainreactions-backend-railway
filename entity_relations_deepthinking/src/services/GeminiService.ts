@@ -25,7 +25,7 @@ export class GeminiService {
       timeout: parseInt(process.env.API_TIMEOUT || '30000'),
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': this.apiKey,
+        'X-goog-api-key': this.apiKey,
       },
     });
   }
@@ -56,19 +56,41 @@ export class GeminiService {
         request.generationConfig = generationConfig;
       }
 
-      const response = await this.apiClient.post<GeminiResponse>(
-        `/models/${this.model}:generateContent`,
-        request
-      );
+      // Add retry logic for 502 errors
+      let lastError: any = null;
+      const maxRetries = 3;
 
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status;
-        const message = error.response?.data?.error?.message || error.message;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await this.apiClient.post<GeminiResponse>(
+            `/models/${this.model}:generateContent`,
+            request
+          );
 
-        throw new Error(`Gemini API Error (${status}): ${message}`);
+          return response.data;
+        } catch (error) {
+          lastError = error;
+
+          if (axios.isAxiosError(error)) {
+            const status = error.response?.status;
+            const message = error.response?.data?.error?.message || error.message;
+
+            // For 502 errors, retry with exponential backoff
+            if (status === 502 && attempt < maxRetries) {
+              const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
+              console.warn(`🔄 Gemini API 502 error (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              continue;
+            }
+
+            throw new Error(`Gemini API Error (${status}): ${message}`);
+          }
+          throw error;
+        }
       }
+
+      throw lastError;
+    } catch (error) {
       throw error;
     }
   }
