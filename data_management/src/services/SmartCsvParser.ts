@@ -249,13 +249,108 @@ export class SmartCsvParser {
       case 'last_seen':
       case 'last_change':
       case 'birth_date':
-        // 尝试解析日期
-        const date = new Date(trimmedValue);
-        return isNaN(date.getTime()) ? trimmedValue : date;
+        // 智能日期解析 - 支持多种格式
+        return SmartCsvParser.parseDate(trimmedValue);
 
       default:
         return trimmedValue;
     }
+  }
+
+  /**
+   * 智能日期解析 - 支持多种日期格式
+   */
+  private static parseDate(dateStr: string): Date | string {
+    if (!dateStr || dateStr.trim() === '') return dateStr;
+
+    const trimmed = dateStr.trim();
+
+    // 常见日期格式匹配
+    const patterns = [
+      // Japanese format: YYYY 年MM 月DD 日 (如 2025 年01 月10 日)
+      {
+        regex: /^(\d{4}) 年(\d{1,2}) 月(\d{1,2}) 日$/,
+        transform: (match: RegExpMatchArray) => {
+          const year = match[1];
+          const month = match[2].padStart(2, '0');
+          const day = match[3].padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        }
+      },
+      // Japanese format: YYYY年MM月DD日 (如 2025年01月10日)
+      {
+        regex: /^(\d{4})年(\d{1,2})月(\d{1,2})日$/,
+        transform: (match: RegExpMatchArray) => {
+          const year = match[1];
+          const month = match[2].padStart(2, '0');
+          const day = match[3].padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        }
+      },
+      // DD.MM.YY 格式 (如 13.07.20)
+      {
+        regex: /^(\d{1,2})\.(\d{1,2})\.(\d{2})$/,
+        transform: (match: RegExpMatchArray) => {
+          const day = match[1].padStart(2, '0');
+          const month = match[2].padStart(2, '0');
+          const year = `20${match[3]}`;
+          return `${year}-${month}-${day}`;
+        }
+      },
+      // DD.MM.YYYY 格式 (如 31.07.2024)
+      {
+        regex: /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/,
+        transform: (match: RegExpMatchArray) => {
+          const day = match[1].padStart(2, '0');
+          const month = match[2].padStart(2, '0');
+          const year = match[3];
+          return `${year}-${month}-${day}`;
+        }
+      },
+      // YYYY-MM-DD 格式 (标准ISO格式)
+      {
+        regex: /^(\d{4})-(\d{1,2})-(\d{1,2})$/,
+        transform: (match: RegExpMatchArray) => {
+          const year = match[1];
+          const month = match[2].padStart(2, '0');
+          const day = match[3].padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        }
+      }
+    ];
+
+    // 尝试匹配已知格式
+    for (const pattern of patterns) {
+      const match = trimmed.match(pattern.regex);
+      if (match) {
+        try {
+          const isoDateStr = pattern.transform(match);
+          const date = new Date(isoDateStr);
+
+          // 验证日期有效性
+          if (!isNaN(date.getTime())) {
+            return date;
+          }
+        } catch (error) {
+          // 继续尝试下一个格式
+          continue;
+        }
+      }
+    }
+
+    // 尝试直接解析
+    try {
+      const date = new Date(trimmed);
+      if (!isNaN(date.getTime())) {
+        return date;
+      }
+    } catch (error) {
+      // 忽略错误
+    }
+
+    // 如果所有格式都失败，返回原始字符串
+    console.warn(`Unable to parse date: "${dateStr}", keeping as string`);
+    return trimmed;
   }
 
   /**

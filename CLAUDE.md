@@ -15,6 +15,7 @@ The project consists of independent services running on separate ports:
 2. **Demo Request Email Service** (Port 3001) - Email handling service
 3. **Entity Search Service** (Port 3002) - Linkup API integration for entity search
 4. **Dataset Matching Service** (Port 3003) - Advanced entity matching algorithms
+5. **Data Management Service** (Port 3006) - CSV upload and intelligent parsing service
 
 ### Common Technology Stack
 - **Runtime**: Node.js with TypeScript
@@ -44,6 +45,7 @@ npm run type-check   # Run TypeScript type checking without compilation
 - `entity_search/` - Entity search via Linkup API
 - `demo_email/` - Email service for demo requests
 - `dataset_matching/` - Entity matching algorithms
+- `data_management/` - CSV upload and intelligent parsing service
 - `dataset_search/` - (Planned) Dataset search functionality
 
 ## Key Services Documentation
@@ -81,6 +83,15 @@ Advanced entity matching with multiple algorithms:
 - 6 match types: exact, alias, alias_partial, fuzzy, partial, core_match
 - Memory caching with 5-minute expiry
 - Batch processing support (up to 100 entities)
+
+### Data Management Service
+CSV upload and intelligent parsing with Supabase integration:
+- Smart CSV parser with automatic field mapping
+- Support for multiple CSV formats with high adaptability
+- Priority field detection: organization_name, aliases, countries
+- Metadata preservation for unmapped fields
+- Supabase database integration with dataset_entries table
+- Real-time upload progress and validation
 
 ### Demo Email Service
 Gmail SMTP integration for demo request handling:
@@ -142,6 +153,7 @@ All services provide health check endpoints:
 2. ✅ Entity Relations DeepThinking (with frontend integration)
 3. ✅ Entity Search Service
 4. ✅ Dataset Matching Service
+5. ✅ Data Management Service (CSV upload and intelligent parsing)
 
 ### Planned Development
 1. **Dataset Search Service** - Excel processing and relationship search
@@ -155,6 +167,13 @@ All services provide health check endpoints:
 - **Progressive Migration**: Gradual replacement of N8N workflows
 
 ## Critical Development Rules
+
+### Frontend Project Location
+**IMPORTANT**: The frontend project is located at `/Users/kanbei/Code/chainreactions_frontend_dev/`
+- **NEVER** start services from `entity_relations_deepthinking` as frontend
+- Frontend runs on port 8080+ (Vite will auto-increment if ports are busy)
+- Backend data management service runs on port 3006
+- Always use `cd /Users/kanbei/Code/chainreactions_frontend_dev && npm run dev` for frontend
 
 ### Entity Relations DeepThinking Service Rules
 - **NEVER modify system prompts** without explicit user approval

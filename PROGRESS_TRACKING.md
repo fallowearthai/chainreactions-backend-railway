@@ -1,6 +1,6 @@
 # ChainReactions 后端开发进度追踪
 
-> 更新时间：2025-09-25
+> 更新时间：2025-09-27
 >
 > 项目策略：模块化独立开发，每个功能单独成项目，最后统一整合
 
@@ -14,6 +14,7 @@
 | Company Relations DeepThinking | ✅ 完成 | 100% | 2024-09-25 |
 | Entity Search | ✅ 完成 | 100% | 2024-09-23 |
 | Dataset Matching | ✅ 完成 | 100% | 2024-09-25 |
+| Data Management Service | ✅ 完成 | 100% | 2025-09-27 |
 | Dataset Search | ⏳ 待开发 | 0% | - |
 | 统一API网关 | ⏳ 待开发 | 0% | - |
 
@@ -206,11 +207,68 @@
 - ✅ 服务统计：实时缓存和性能指标
 - ✅ 健康检查：所有组件运行正常
 
+### 5. ✅ Data Management Service
+
+**📍 路径**: `/data_management/`
+**🚀 状态**: 已完成并测试成功
+**⚡ 端口**: 3006
+
+#### 功能特性
+- ✅ 独立的 Express.js + Supabase 服务
+- ✅ 完整的 Canadian NRO CSV 数据导入支持（16字段格式）
+- ✅ 数据集完整 CRUD 操作 (增删查改)
+- ✅ 文件上传和处理 (CSV, XML, JSON 格式)
+- ✅ 批量数据导入，支持大型数据文件
+- ✅ 数据验证和错误处理
+- ✅ Supabase 数据库直接集成
+- ✅ 权限控制（系统数据集保护）
+- ✅ 与前端 DatasetManagement 组件完全集成
+
+#### API 端点
+- `GET /api/datasets` - 获取数据集列表
+- `GET /api/datasets/:id` - 获取单个数据集详情
+- `POST /api/datasets` - 创建新数据集
+- `PUT /api/datasets/:id` - 更新数据集
+- `DELETE /api/datasets/:id` - 删除数据集及其所有条目
+- `GET /api/datasets/:id/entries` - 获取数据集条目
+- `POST /api/datasets/:id/upload` - 文件上传和导入
+- `POST /api/import/nro-targets` - NRO 数据直接导入
+- `GET /api/health` - 健康检查
+
+#### 技术栈
+- **框架**: Express.js + Node.js
+- **数据库**: Supabase (PostgreSQL)
+- **文件处理**: Multer + csv-parser
+- **数据验证**: 内置验证机制
+
+#### 数据库架构扩展
+扩展了 Supabase `dataset_entries` 表以支持完整的 NRO 格式：
+- `external_id` - 外部ID (如 NK-xxx)
+- `schema_type` - 模式类型
+- `countries` - 国家数组
+- `addresses`, `identifiers`, `sanctions`, `phones`, `emails` - 详细信息字段
+- `program_ids`, `dataset_source`, `first_seen`, `last_seen`, `last_change` - 追踪字段
+
+#### 完成时间
+- **开发**: 2025-09-26
+- **数据库集成**: 2025-09-26 ✅
+- **CSV导入功能**: 2025-09-26 ✅
+- **前端集成**: 2025-09-26 ✅
+- **删除功能**: 2025-09-26 ✅
+- **代码清理**: 2025-09-26 ✅
+
+#### 测试结果
+- ✅ CSV导入：238条NRO记录成功导入
+- ✅ 文件上传：支持多格式文件处理
+- ✅ 数据集CRUD：完整的管理功能验证
+- ✅ 删除操作：级联删除数据集和相关条目
+- ✅ 前端集成：UI组件完全兼容
+
 ---
 
 ## ⏳ 待开发模块
 
-### 5. Dataset Search
+### 6. Dataset Search
 **📍 计划路径**: `/dataset_search/`
 **🎯 目标**: 替换 N8N Linkup 循环工作流
 
@@ -287,8 +345,51 @@
 
 ## 📝 开发日志
 
-### 2025-09-25 (更新)
-- ✅ **Dataset Matching 前端集成完成**
+### 2025-09-26 (最新更新)
+- 🔍 **Dataset Matching功能调查完成**
+  - **用户报告**: 搜索"Aerospace Research Institute"无匹配结果
+  - **技术验证**: Dataset Matching Service (端口3003) ✅ 运行正常
+  - **API测试**: 匹配算法正确返回空结果 (0 matches, 3.78秒响应)
+  - **根本原因**: 测试数据库缺少Canadian NRO完整数据
+- 📊 **数据库现状分析**
+  - Canadian Named Research Organizations 数据集存在
+  - 仅包含4个测试条目：Beihang University, Harbin Engineering University, Baghyatollah Medical Sciences University, Apple Inc
+  - 缺少"Aerospace Research Institute"及大部分实际NRO名单数据
+  - 匹配服务技术实现完全正确，问题在于数据完整性
+- 🎯 **优化机会识别**
+  - 需要完善数据集上传和解析机制
+  - 当前数据导入流程存在缺陷
+  - 应建立完整的Canadian NRO数据集
+- 📋 **下一步计划**:
+  1. 分析现有dataset management的上传机制
+  2. 检查数据解析和存储逻辑
+  3. 识别并修复数据导入流程问题
+  4. 导入完整的Canadian NRO名单数据
+
+### 2025-01-26 (历史记录)
+- ✅ **Supabase测试环境迁移完成**
+  - 成功从备份数据恢复到新测试数据库 `keacwlgxmxhbzskiximn`
+  - 创建管理员账户：admin@chainreactions.ai / TempAdmin123!
+  - 完成前端配置迁移：10+文件更新完成
+  - 验证数据库架构：6/13表存在，核心功能可用
+- ✅ **Dataset Matching功能端到端测试完成**
+  - Entity Search Service (端口3002) ✅ 运行正常
+  - Dataset Matching Service (端口3003) ✅ 运行正常
+  - 前端 (端口8082) ✅ 成功集成
+  - 测试用例：搜索"Beihang University"成功完成
+- ⚠️ **发现Dataset Matching核心问题**
+  - **问题1**: 数据库函数缺失 `find_dataset_matches_enhanced` (PGRST202错误)
+  - **问题2**: 匹配结果为空数组，无法找到任何匹配项
+  - **问题3**: API密钥错误导致增强功能失败，使用fallback模式
+  - **性能表现**: 响应速度优秀 (~15秒Entity Search + 快速Dataset Matching)
+- 🎯 **下一步任务**:
+  1. 修复数据库缺失函数 `find_dataset_matches_enhanced`
+  2. 验证测试数据是否包含"Beihang University"匹配项
+  3. 解决API密钥配置问题
+  4. 重新进行端到端匹配准确性测试
+
+### 2025-09-25 (历史记录)
+- ✅ **Dataset Matching 前端集成完成** (生产环境)
 - ✅ 配置 Dataset Matching 服务环境 (.env 设置 Supabase 连接)
 - ✅ 启动服务器并验证所有API端点正常工作
 - ✅ 测试单个实体匹配：Abu Sayyaf Group → Abu Sayyaf Group (ASG) (信心分数0.702)
@@ -298,12 +399,11 @@
   - 添加批量API支持：localhost:3003/api/dataset-matching/batch
   - 保持与原有数据结构的完全兼容性
   - 添加错误处理和Supabase fallback机制
-- ✅ 端到端测试验证通过
+- ✅ 端到端测试验证通过 (生产环境数据库)
   - 服务健康检查：正常
   - 数据库连接：正常
   - API响应时间：1.5-4秒（符合预期）
   - 缓存系统：6个条目，85%命中率
-- 🎯 **下一步**: Dataset Search 服务开发
 
 ### 2025-09-25 (原记录)
 - ✅ **Dataset Matching Service 完整实现**
@@ -383,20 +483,38 @@
 - **🎉 Milestone 2 (已达成)**: Entity Search 功能完全迁移 + 智能增强
 - **🎉 Milestone 3 (已达成)**: Entity Relations DeepThinking 前后端完全集成
 - **🎉 Milestone 4 (已达成)**: Dataset Matching 智能匹配服务完成
-- **🎯 Milestone 5 (进行中)**: Dataset Matching 前端集成 + 数据验证
+- **🎉 Milestone 5 (已达成)**: Data Management 完整数据管理服务
 - **🎯 Milestone 6 (目标)**: Dataset Search 功能迁移
 - **🎯 Milestone 7 (目标)**: 统一后端 API 架构
 - **🎯 Milestone 8 (目标)**: 生产环境部署
 
-### 当前重点：Dataset Matching前端集成 ✅ 已完成
-- **已完成**: Dataset Matching后端服务完全开发完成
-- **当前状态**: 前端集成完成，服务正常运行
+### 当前重点：Data Management前后端集成 ✅ 已完成
+- **已完成**: Data Management后端服务完全开发完成
+- **当前状态**: 前后端集成完成，CSV导入和数据管理功能正常运行
 - **完成项目**:
-  1. ✅ Supabase MCP集成，验证数据库数据状况
-  2. ✅ 更新前端 `useDatasetMatching` Hook调用后端API
-  3. ✅ 保持与现有前端组件的完全兼容性
-  4. ✅ 性能测试和端到端验证完成
-  5. ✅ 验证匹配算法效果和缓存系统
+  1. ✅ 完整的Canadian NRO CSV数据导入功能 (238条记录)
+  2. ✅ Supabase数据库schema扩展，支持16字段NRO格式
+  3. ✅ 数据集完整CRUD操作 (增删查改)
+  4. ✅ 文件上传和批量处理功能
+  5. ✅ 前端DatasetManagement组件完全重构和清理
+  6. ✅ 删除功能集成，支持级联删除
+  7. ✅ 代码清理，移除旧测试代码和冗余组件
+
+### 🆕 2025-09-27 重大更新：前后端一体化完成
+- **重要修复**: 解决了前端删除功能与后端数据库不同步的问题
+- **根本原因**: 前端直接调用Supabase，后端通过API操作，造成数据不一致
+- **解决方案**: 统一前端所有CRUD操作通过后端API
+- **具体修复**:
+  1. ✅ 修复useDatasets.ts中所有方法调用后端API而非直接Supabase
+  2. ✅ 移除硬编码的"Uploaded Dataset"自动创建逻辑
+  3. ✅ 增强SmartCsvParser支持日文日期格式解析
+  4. ✅ 完善错误处理和类型安全
+  5. ✅ 验证删除功能完全同步前后端数据状态
+- **技术改进**:
+  - 📊 **智能CSV解析**: 新增日文日期格式 (YYYY年MM月DD日)
+  - 🔄 **前后端同步**: 所有数据操作统一通过REST API
+  - 🧹 **代码清理**: 移除所有硬编码数据集创建逻辑
+  - ✅ **数据一致性**: 前端UI状态与数据库状态完全同步
 
 ### Credit系统重构计划 (后续)
 - **问题**: 当前credit系统是前后端混合架构，存在安全隐患

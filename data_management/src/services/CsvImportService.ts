@@ -680,15 +680,22 @@ export class CsvImportService {
     // 批量插入到数据库
     if (entries.length > 0) {
       try {
+        console.log(`🔄 Attempting to insert ${entries.length} entries into database...`);
+        console.log(`📝 Sample entry:`, JSON.stringify(entries[0], null, 2));
+
         await this.supabaseService.createDatasetEntries(entries);
         result.imported = entries.length;
-        console.log(`Successfully imported ${entries.length} entries`);
+        console.log(`✅ Successfully imported ${entries.length} entries`);
       } catch (error) {
+        console.error(`❌ Database insertion failed:`, error);
         result.skipped += entries.length;
         result.imported = 0;
         const errorMessage = error instanceof Error ? error.message : String(error);
         result.errors.push(`Batch insertion failed: ${errorMessage}`);
+        console.error(`❌ Error details:`, errorMessage);
       }
+    } else {
+      console.log(`⚠️ No entries to insert (entries.length = 0)`);
     }
 
     return result;

@@ -240,13 +240,15 @@ export class DataManagementController {
         return;
       }
 
-      // Use a default dataset configuration for now to bypass Supabase API issue
-      const dataset = {
-        id: id,
-        name: 'Uploaded Dataset',
-        description: 'Smart CSV Upload',
-        is_system: false
-      };
+      // Get the existing dataset information
+      const dataset = await this.supabaseService.getDatasetById(id);
+      if (!dataset) {
+        res.status(404).json({
+          success: false,
+          error: `Dataset with id ${id} not found`
+        });
+        return;
+      }
 
       let importResult;
 
