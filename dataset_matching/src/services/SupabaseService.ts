@@ -131,10 +131,22 @@ export class SupabaseService {
     }
   }
 
-  // Enhanced dataset matching using the database function
-  async findDatasetMatches(searchText: string): Promise<ServiceResponse<DatasetMatch[]>> {
+  // Enhanced dataset matching using the database function with optional geographic filtering
+  async findDatasetMatches(
+    searchText: string,
+    searchLocation?: string,
+    options?: {
+      prioritizeLocal?: boolean;
+      maxResults?: number;
+    }
+  ): Promise<ServiceResponse<DatasetMatch[]>> {
     try {
       const startTime = process.hrtime();
+
+      // If location is provided, use geographic-aware search
+      if (searchLocation) {
+        return this.findDatasetMatchesWithLocation(searchText, searchLocation, options);
+      }
 
       // Try the enhanced function first
       const { data, error } = await this.client.rpc('find_dataset_matches_enhanced', {
@@ -143,7 +155,7 @@ export class SupabaseService {
 
       if (error) {
         console.warn('Enhanced function failed, using optimized fallback:', error.message);
-        return this.findDatasetMatchesOptimized(searchText);
+        return this.findDatasetMatchesOptimized(searchText, undefined, options);
       }
 
       const processingTime = this.getProcessingTime(startTime);
@@ -188,8 +200,199 @@ export class SupabaseService {
     }
   }
 
+  // Geographic-aware dataset matching
+  private async findDatasetMatchesWithLocation(
+    searchText: string,
+    searchLocation: string,
+    options?: { prioritizeLocal?: boolean; maxResults?: number }
+  ): Promise<ServiceResponse<DatasetMatch[]>> {
+    try {
+      const startTime = process.hrtime();
+      const { CountryNormalizer } = await import('../utils/CountryNormalizer');
+      const countryNormalizer = CountryNormalizer.getInstance();
+
+      // Normalize the search location
+      const normalizedLocation = countryNormalizer.normalizeCountry(searchLocation);
+      if (!normalizedLocation) {
+        console.warn(`Could not normalize location: ${searchLocation}, falling back to text-only search`);
+        return this.findDatasetMatchesOptimized(searchText, undefined, options);
+      }
+
+      const searchLower = searchText.toLowerCase().trim();
+      const allMatches: DatasetMatch[] = [];
+      const maxResults = options?.maxResults || 20;
+
+      // Step 1: Search with geographic filtering (same country)
+      const { data: sameCountryMatches, error: sameCountryError } = await this.client
+        .from('dataset_entries')
+        .select(`
+          organization_name,
+          category,
+          aliases,
+          countries,
+          datasets!inner(name, updated_at, is_active)
+        `)
+        .eq('datasets.is_active', true)
+        .contains('countries', [normalizedLocation.canonical])
+        .or(`organization_name.ilike.%${searchText}%`)
+        .limit(maxResults);
+
+      if (sameCountryError) throw sameCountryError;
+
+      // Process same country matches with higher priority
+      if (sameCountryMatches && sameCountryMatches.length > 0) {
+        sameCountryMatches.forEach((entry: any) => {
+          const match = this.processMatchEntry(entry, searchText, searchLower, 1.2); // Geographic boost
+          if (match) allMatches.push(match);
+        });
+      }
+
+      // Step 2: If we need more results, search regional countries
+      if (allMatches.length < maxResults) {
+        const regionalCountries = countryNormalizer.getRegionalCountries(normalizedLocation.canonical);
+        const otherRegionalCountries = regionalCountries.filter(c => c !== normalizedLocation.canonical);
+
+        if (otherRegionalCountries.length > 0) {
+          const { data: regionalMatches, error: regionalError } = await this.client
+            .from('dataset_entries')
+            .select(`
+              organization_name,
+              category,
+              aliases,
+              countries,
+              datasets!inner(name, updated_at, is_active)
+            `)
+            .eq('datasets.is_active', true)
+            .overlaps('countries', otherRegionalCountries)
+            .or(`organization_name.ilike.%${searchText}%`)
+            .limit(maxResults - allMatches.length);
+
+          if (!regionalError && regionalMatches) {
+            regionalMatches.forEach((entry: any) => {
+              // Avoid duplicates
+              const isDuplicate = allMatches.some(existing =>
+                existing.organization_name === entry.organization_name &&
+                existing.dataset_name === entry.datasets.name
+              );
+
+              if (!isDuplicate) {
+                const match = this.processMatchEntry(entry, searchText, searchLower, 1.1); // Regional boost
+                if (match) allMatches.push(match);
+              }
+            });
+          }
+        }
+      }
+
+      // Step 3: If still need more results and not prioritizing local, get global results
+      if (allMatches.length < maxResults && !options?.prioritizeLocal) {
+        const { data: globalMatches, error: globalError } = await this.client
+          .from('dataset_entries')
+          .select(`
+            organization_name,
+            category,
+            aliases,
+            countries,
+            datasets!inner(name, updated_at, is_active)
+          `)
+          .eq('datasets.is_active', true)
+          .or(`organization_name.ilike.%${searchText}%`)
+          .limit(maxResults - allMatches.length);
+
+        if (!globalError && globalMatches) {
+          globalMatches.forEach((entry: any) => {
+            // Avoid duplicates
+            const isDuplicate = allMatches.some(existing =>
+              existing.organization_name === entry.organization_name &&
+              existing.dataset_name === entry.datasets.name
+            );
+
+            if (!isDuplicate) {
+              const match = this.processMatchEntry(entry, searchText, searchLower, 0.9); // Global penalty
+              if (match) allMatches.push(match);
+            }
+          });
+        }
+      }
+
+      const processingTime = this.getProcessingTime(startTime);
+
+      // Sort by confidence score
+      const sortedMatches = allMatches.sort((a, b) => (b.confidence_score || 0) - (a.confidence_score || 0));
+
+      return {
+        success: true,
+        data: sortedMatches.slice(0, maxResults),
+        metadata: {
+          processing_time_ms: processingTime,
+          cache_used: false,
+          algorithm_version: '1.0.0-geographic'
+        }
+      };
+
+    } catch (error: any) {
+      const dbError = createDatabaseError(
+        `Geographic dataset matching failed: ${error.message}`,
+        'SELECT dataset_entries (geographic)',
+        { search_text: searchText, location: searchLocation }
+      );
+
+      return {
+        success: false,
+        error: dbError
+      };
+    }
+  }
+
+  // Helper method to process match entries with geographic boost
+  private processMatchEntry(entry: any, searchText: string, searchLower: string, geographicBoost: number): DatasetMatch | null {
+    const orgNameLower = entry.organization_name.toLowerCase();
+    let matchType: DatasetMatch['match_type'] = 'partial';
+    let confidence = 0.6;
+
+    // Exact match
+    if (orgNameLower === searchLower) {
+      matchType = 'exact';
+      confidence = 1.0;
+    }
+    // Fuzzy match (remove spaces)
+    else if (orgNameLower.replace(/\s+/g, '') === searchLower.replace(/\s+/g, '')) {
+      matchType = 'fuzzy';
+      confidence = 0.9;
+    }
+    // Core match (remove parentheses and spaces)
+    else if (orgNameLower.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, '') === searchLower.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, '')) {
+      matchType = 'core_match';
+      confidence = 0.8;
+    }
+    // Partial match
+    else if (orgNameLower.includes(searchLower) || searchLower.includes(orgNameLower)) {
+      matchType = 'partial';
+      confidence = 0.6;
+    }
+    else {
+      return null; // No match
+    }
+
+    // Apply geographic boost
+    confidence *= geographicBoost;
+
+    return {
+      dataset_name: entry.datasets.name,
+      organization_name: entry.organization_name,
+      match_type: matchType,
+      category: entry.category,
+      confidence_score: Math.min(1.0, confidence),
+      last_updated: entry.datasets.updated_at
+    };
+  }
+
   // Optimized dataset matching using efficient direct queries
-  private async findDatasetMatchesOptimized(searchText: string): Promise<ServiceResponse<DatasetMatch[]>> {
+  private async findDatasetMatchesOptimized(
+    searchText: string,
+    searchLocation?: string,
+    options?: { maxResults?: number }
+  ): Promise<ServiceResponse<DatasetMatch[]>> {
     try {
       const startTime = process.hrtime();
       const searchLower = searchText.toLowerCase().trim();

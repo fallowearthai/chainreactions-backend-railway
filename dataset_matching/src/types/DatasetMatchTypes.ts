@@ -2,7 +2,7 @@
 export interface DatasetMatch {
   dataset_name: string;
   organization_name: string;
-  match_type: 'exact' | 'alias' | 'alias_partial' | 'fuzzy' | 'partial' | 'core_match';
+  match_type: 'exact' | 'alias' | 'alias_partial' | 'fuzzy' | 'partial' | 'core_match' | 'core_acronym' | 'word_match';
   category?: string | null;
   confidence_score?: number;
   last_updated?: string;
@@ -21,9 +21,13 @@ export interface QualityMetrics {
 export interface SingleMatchRequest {
   entity: string;
   context?: string;
+  location?: string;
   matchTypes?: string[];
   minConfidence?: number;
   forceRefresh?: boolean;
+  searchRadius?: 'local' | 'regional' | 'global';
+  prioritizeLocal?: boolean;
+  maxResults?: number;
 }
 
 export interface BatchMatchRequest {
@@ -33,6 +37,10 @@ export interface BatchMatchRequest {
     minConfidence?: number;
     forceRefresh?: boolean;
     context?: string;
+    location?: string;
+    searchRadius?: 'local' | 'regional' | 'global';
+    prioritizeLocal?: boolean;
+    maxResults?: number;
   };
 }
 
@@ -156,5 +164,9 @@ export interface ServiceResponse<T> {
     processing_time_ms: number;
     cache_used: boolean;
     algorithm_version: string;
+    matches_found?: number;
+    geographic_boost_applied?: boolean;
+    early_termination_applied?: boolean;
+    [key: string]: any;
   };
 }

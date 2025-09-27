@@ -31,9 +31,13 @@ export class DatasetMatchingController {
     const {
       entity,
       context,
+      location,
       matchTypes,
       minConfidence,
-      forceRefresh
+      forceRefresh,
+      searchRadius,
+      prioritizeLocal,
+      maxResults
     } = req.body as SingleMatchRequest;
 
     // Required validation
@@ -45,6 +49,10 @@ export class DatasetMatchingController {
       validateString(context, 'context', 0, 1000);
     }
 
+    if (location !== undefined) {
+      validateString(location, 'location', 1, 100);
+    }
+
     if (matchTypes !== undefined) {
       validateArray(matchTypes, 'matchTypes', 0, 10);
       matchTypes.forEach(type => validateString(type, 'matchType'));
@@ -54,11 +62,21 @@ export class DatasetMatchingController {
       validateNumber(minConfidence, 'minConfidence', 0, 1);
     }
 
-    // Call matching service
-    const result = await this.datasetMatchingService.findMatches(
+    if (maxResults !== undefined) {
+      validateNumber(maxResults, 'maxResults', 1, 100);
+    }
+
+    // Call enhanced matching service with geographic support
+    const result = await this.datasetMatchingService.findMatchesEnhanced(
       entity.trim(),
+      location?.trim(),
       context?.trim(),
-      forceRefresh || false
+      {
+        forceRefresh: forceRefresh || false,
+        searchRadius: searchRadius,
+        prioritizeLocal: prioritizeLocal,
+        maxResults: maxResults || 20
+      }
     );
 
     const processingTime = ResponseFormatter.formatProcessingTime(startTime);
@@ -124,13 +142,27 @@ export class DatasetMatchingController {
       if (options.context !== undefined) {
         validateString(options.context, 'context', 0, 1000);
       }
+
+      if (options.location !== undefined) {
+        validateString(options.location, 'location', 1, 100);
+      }
+
+      if (options.maxResults !== undefined) {
+        validateNumber(options.maxResults, 'maxResults', 1, 100);
+      }
     }
 
-    // Call batch matching service
+    // Call enhanced batch matching service with geographic support
     const result = await this.datasetMatchingService.findMatchesBatch(
       entities.map(e => e.trim()),
       options?.context?.trim(),
-      options?.forceRefresh || false
+      options?.forceRefresh || false,
+      {
+        location: options?.location?.trim(),
+        searchRadius: options?.searchRadius,
+        prioritizeLocal: options?.prioritizeLocal,
+        maxResults: options?.maxResults
+      }
     );
 
     const processingTime = ResponseFormatter.formatProcessingTime(startTime);
@@ -239,6 +271,35 @@ export class DatasetMatchingController {
       };
 
       ResponseFormatter.healthCheck(res, healthData);
+    }
+  });
+
+  /**
+   * Handle cache warmup
+   * POST /api/dataset-matching/cache/warmup
+   */
+  handleCacheWarmup = asyncHandler(async (req: Request, res: Response) => {
+    const startTime = process.hrtime();
+
+    const result = await this.datasetMatchingService.warmupCache();
+    const processingTime = ResponseFormatter.formatProcessingTime(startTime);
+
+    if (result.success) {
+      ResponseFormatter.success(
+        res,
+        {
+          message: 'Cache warmup completed',
+          warmed_queries: result.data!.warmed_queries,
+          processing_time_ms: processingTime
+        },
+        {
+          processing_time_ms: processingTime,
+          cache_used: false,
+          algorithm_version: '2.0.0-enhanced'
+        }
+      );
+    } else {
+      ResponseFormatter.error(res, result.error!, 500);
     }
   });
 

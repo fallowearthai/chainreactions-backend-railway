@@ -32,7 +32,58 @@ export class EntityNormalization {
   ]);
 
   /**
-   * Normalize text for matching purposes
+   * Extract bracketed content and abbreviations from text
+   */
+  static extractBracketedContent(text: string): { main: string; bracketed: string[]; abbreviations: string[] } {
+    if (!text) return { main: '', bracketed: [], abbreviations: [] };
+
+    const bracketed: string[] = [];
+    const abbreviations: string[] = [];
+
+    // Extract content in parentheses
+    const parenthesesMatches = text.match(/\(([^)]+)\)/g);
+    if (parenthesesMatches) {
+      parenthesesMatches.forEach(match => {
+        const content = match.replace(/[()]/g, '').trim();
+        bracketed.push(content);
+
+        // Check if it's likely an abbreviation (all caps, 2-8 characters)
+        if (/^[A-Z]{2,8}$/.test(content)) {
+          abbreviations.push(content);
+        }
+      });
+    }
+
+    // Remove parentheses for main text
+    const main = text.replace(/\s*\([^)]*\)/g, '').trim();
+
+    return { main, bracketed, abbreviations };
+  }
+
+  /**
+   * Generate abbreviation from text
+   */
+  static generateAbbreviation(text: string): string {
+    if (!text) return '';
+
+    const words = text
+      .trim()
+      .split(/\s+/)
+      .filter(word =>
+        word.length > 0 &&
+        !this.STOP_WORDS.has(word.toLowerCase()) &&
+        !this.GENERIC_TERMS.has(word.toLowerCase())
+      );
+
+    if (words.length < 2 || words.length > 6) return '';
+
+    return words
+      .map(word => word.charAt(0).toUpperCase())
+      .join('');
+  }
+
+  /**
+   * Normalize text for matching purposes with enhanced bracketed content handling
    */
   static normalizeText(text: string): string {
     if (!text) return '';
@@ -40,7 +91,7 @@ export class EntityNormalization {
     return text
       .toLowerCase()
       .trim()
-      // Remove parentheses and their contents completely
+      // Remove parentheses and their contents for base normalization
       .replace(/\s*\([^)]*\)/g, '')
       // Remove common organizational suffixes/prefixes
       .replace(/\b(university of|institute of|center for|centre for|the|inc|ltd|llc|corp|corporation|company|co|limited)\b/g, '')
@@ -106,7 +157,7 @@ export class EntityNormalization {
   }
 
   /**
-   * Generate search variations from the input text
+   * Generate comprehensive search variations from the input text
    */
   static generateSearchVariations(searchText: string): string[] {
     const variations = new Set<string>();
@@ -114,9 +165,36 @@ export class EntityNormalization {
     // Add original text
     variations.add(searchText);
 
+    // Extract bracketed content and abbreviations
+    const { main, bracketed, abbreviations } = this.extractBracketedContent(searchText);
+
+    // Add main text without brackets
+    if (main && main !== searchText) {
+      variations.add(main);
+    }
+
+    // Add bracketed content as separate variations
+    bracketed.forEach(content => {
+      variations.add(content);
+      variations.add(content.toLowerCase());
+    });
+
+    // Add extracted abbreviations
+    abbreviations.forEach(abbr => {
+      variations.add(abbr);
+      variations.add(abbr.toLowerCase());
+    });
+
+    // Generate abbreviation from main text
+    const generatedAbbr = this.generateAbbreviation(main || searchText);
+    if (generatedAbbr) {
+      variations.add(generatedAbbr);
+      variations.add(generatedAbbr.toLowerCase());
+    }
+
     // Add normalized version
     const normalized = this.normalizeText(searchText);
-    if (normalized !== searchText.toLowerCase()) {
+    if (normalized && normalized !== searchText.toLowerCase()) {
       variations.add(normalized);
     }
 
@@ -124,19 +202,6 @@ export class EntityNormalization {
     const core = this.getCoreText(searchText);
     if (core && core !== normalized) {
       variations.add(core);
-    }
-
-    // Add acronym variations if the text contains multiple words
-    const words = searchText.trim().split(/\s+/);
-    if (words.length > 1 && words.length <= 6) { // Reasonable limit for acronyms
-      const acronym = words
-        .map(word => word.charAt(0).toUpperCase())
-        .join('');
-
-      if (acronym.length > 1) {
-        variations.add(acronym);
-        variations.add(acronym.toLowerCase());
-      }
     }
 
     // Add variations without common organizational terms
@@ -297,5 +362,75 @@ export class EntityNormalization {
       )
       .filter((word, index, array) => array.indexOf(word) === index) // Remove duplicates
       .sort((a, b) => b.length - a.length); // Sort by length, longer first
+  }
+
+  /**
+   * Check if two entity names are likely the same considering brackets and abbreviations
+   */
+  static areEntitiesEquivalent(entity1: string, entity2: string): { isMatch: boolean; confidence: number; matchType: string } {
+    if (!entity1 || !entity2) {
+      return { isMatch: false, confidence: 0, matchType: 'none' };
+    }
+
+    // Extract bracketed content for both entities
+    const info1 = this.extractBracketedContent(entity1);
+    const info2 = this.extractBracketedContent(entity2);
+
+    // Check for exact matches
+    if (entity1.toLowerCase() === entity2.toLowerCase()) {
+      return { isMatch: true, confidence: 1.0, matchType: 'exact' };
+    }
+
+    // Check if main parts match
+    const main1Norm = this.normalizeText(info1.main);
+    const main2Norm = this.normalizeText(info2.main);
+
+    if (main1Norm === main2Norm && main1Norm.length > 2) {
+      return { isMatch: true, confidence: 0.95, matchType: 'main_match' };
+    }
+
+    // Check if one entity's main text matches the other's abbreviation
+    const abbr1 = this.generateAbbreviation(info1.main);
+    const abbr2 = this.generateAbbreviation(info2.main);
+
+    // Entity1 main vs Entity2 abbreviations
+    if (abbr2 && info1.abbreviations.includes(abbr2)) {
+      return { isMatch: true, confidence: 0.9, matchType: 'abbreviation_match' };
+    }
+
+    // Entity2 main vs Entity1 abbreviations
+    if (abbr1 && info2.abbreviations.includes(abbr1)) {
+      return { isMatch: true, confidence: 0.9, matchType: 'abbreviation_match' };
+    }
+
+    // Check if abbreviations match
+    for (const abbr1 of info1.abbreviations) {
+      for (const abbr2 of info2.abbreviations) {
+        if (abbr1.toLowerCase() === abbr2.toLowerCase()) {
+          return { isMatch: true, confidence: 0.85, matchType: 'abbr_to_abbr' };
+        }
+      }
+    }
+
+    // Check if generated abbreviations match
+    if (abbr1 && abbr2 && abbr1.toLowerCase() === abbr2.toLowerCase() && abbr1.length > 2) {
+      return { isMatch: true, confidence: 0.8, matchType: 'generated_abbr_match' };
+    }
+
+    // Check core text similarity for partial matches
+    const core1 = this.getCoreText(entity1);
+    const core2 = this.getCoreText(entity2);
+
+    if (core1 === core2 && core1.length > 3) {
+      return { isMatch: true, confidence: 0.75, matchType: 'core_match' };
+    }
+
+    // Check word overlap
+    const overlap = this.calculateWordOverlap(entity1, entity2);
+    if (overlap > 0.8) {
+      return { isMatch: true, confidence: overlap * 0.7, matchType: 'word_overlap' };
+    }
+
+    return { isMatch: false, confidence: 0, matchType: 'none' };
   }
 }

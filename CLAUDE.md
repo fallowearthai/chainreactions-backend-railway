@@ -40,6 +40,30 @@ npm run lint         # Run ESLint
 npm run type-check   # Run TypeScript type checking without compilation
 ```
 
+## 🔒 Port Configuration Rules (CRITICAL)
+
+**FIXED PORT ALLOCATION - DO NOT CHANGE**:
+- **Frontend**: `8080` (STRICT - no auto-increment allowed)
+- **Entity Relations DeepThinking**: `3000`
+- **Demo Email Service**: `3001`
+- **Entity Search Service**: `3002`
+- **Dataset Matching Service**: `3003`
+- **Data Management Service**: `3006`
+
+**Port Conflict Resolution**:
+```bash
+# Check port status
+lsof -i :PORT_NUMBER
+
+# Kill process occupying port
+kill PID_NUMBER
+
+# Always start services in order: Backend services first, then frontend
+```
+
+**CORS Configuration**: All backend services MUST allow `http://localhost:8080` origin
+**Testing Ports**: Use range `9000-9999` to avoid conflicts with production ports
+
 ### Service-Specific Directories
 - `entity_relations_deepthinking/` - Main OSINT analysis service
 - `entity_search/` - Entity search via Linkup API

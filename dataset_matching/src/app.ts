@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 3003;
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
     ? ['https://your-frontend-domain.com'] // Replace with actual frontend domain
-    : true, // Allow all origins in development
+    : ['http://localhost:8080'], // Fixed frontend port
   credentials: true
 }));
 
@@ -118,6 +118,16 @@ app.get('/api/dataset-matching/cache/clear', async (req, res) => {
     await controller.handleClearCache(req, res);
   } catch (error: any) {
     console.error('Cache clear endpoint error:', error);
+    ResponseFormatter.error(res, error.message, 500);
+  }
+});
+
+app.post('/api/dataset-matching/cache/warmup', async (req, res) => {
+  try {
+    const controller = await getController();
+    await controller.handleCacheWarmup(req, res);
+  } catch (error: any) {
+    console.error('Cache warmup endpoint error:', error);
     ResponseFormatter.error(res, error.message, 500);
   }
 });
