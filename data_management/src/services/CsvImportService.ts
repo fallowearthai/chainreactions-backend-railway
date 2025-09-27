@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as csv from 'csv-parser';
 import { SupabaseService } from './SupabaseService';
+import { SmartCsvParser } from './SmartCsvParser';
 import { CsvRow, ImportResult, DatasetEntry, ValidationResult } from '@/types/DataTypes';
 
 export class CsvImportService {
@@ -20,7 +21,119 @@ export class CsvImportService {
   }
 
   /**
-   * Import NRO CSV file into Supabase
+   * 智能导入CSV文件 - 自动检测字段格式
+   */
+  async importCsvFileSmart(
+    filePath: string,
+    datasetName: string,
+    description?: string,
+    isSystem: boolean = true
+  ): Promise<ImportResult> {
+    const startTime = process.hrtime.bigint();
+
+    const result: ImportResult = {
+      success: false,
+      totalRows: 0,
+      importedRows: 0,
+      skippedRows: 0,
+      duplicateRows: 0,
+      errors: [],
+      warnings: [],
+      processing_time_ms: 0,
+      file_info: {
+        filename: path.basename(filePath),
+        size: 0,
+        format: 'csv'
+      }
+    };
+
+    try {
+      // 验证文件存在
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`CSV file not found: ${filePath}`);
+      }
+
+      const stats = fs.statSync(filePath);
+      result.file_info.size = stats.size;
+
+      // 智能检测字段映射
+      console.log('🔍 Analyzing CSV structure...');
+      const fieldAnalysis = await SmartCsvParser.detectFieldMapping(filePath);
+
+      console.log('📊 Field mapping analysis:', {
+        confidence: fieldAnalysis.confidence,
+        prioritiesFound: fieldAnalysis.priorities.found,
+        prioritiesMissing: fieldAnalysis.priorities.missing,
+        totalFields: fieldAnalysis.headers.length
+      });
+
+      result.warnings.push(`Field detection confidence: ${fieldAnalysis.confidence}`);
+      result.warnings.push(`Priority fields found: ${fieldAnalysis.priorities.found.join(', ')}`);
+
+      if (fieldAnalysis.priorities.missing.length > 0) {
+        result.warnings.push(`Missing priority fields: ${fieldAnalysis.priorities.missing.join(', ')}`);
+      }
+
+      // 创建或获取数据集
+      const dataset = await this.getOrCreateDataset(datasetName, description, isSystem);
+      result.dataset_id = dataset.id;
+
+      // 解析CSV数据
+      console.log('📄 Parsing CSV data...');
+      const rows = await this.parseSmartCsvFile(filePath, fieldAnalysis.mapping);
+      result.totalRows = rows.length;
+
+      console.log(`Processing ${rows.length} rows with smart mapping...`);
+
+      // 验证解析质量
+      const qualityCheck = SmartCsvParser.validateParseResult(rows, fieldAnalysis.mapping);
+      console.log('✅ Data quality assessment:', qualityCheck);
+
+      result.warnings.push(`Data quality: ${qualityCheck.quality}`);
+      result.warnings.push(`Valid rows: ${qualityCheck.stats.validRows}/${qualityCheck.stats.totalRows}`);
+
+      // 批量处理数据
+      const batchSize = 50;
+      const duplicateTracker = new Set<string>();
+
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize);
+        const batchResult = await this.processSmartBatch(batch, dataset.id);
+
+        result.importedRows += batchResult.imported;
+        result.skippedRows += batchResult.skipped;
+        result.duplicateRows += batchResult.duplicates;
+        result.errors.push(...batchResult.errors);
+        result.warnings.push(...batchResult.warnings);
+
+        // 进度日志
+        if (i % (batchSize * 2) === 0) {
+          console.log(`Processed ${Math.min(i + batchSize, rows.length)}/${rows.length} rows`);
+        }
+      }
+
+      result.success = result.importedRows > 0;
+
+      const endTime = process.hrtime.bigint();
+      result.processing_time_ms = Number(endTime - startTime) / 1000000;
+
+      console.log(`✅ Smart import completed: ${result.importedRows}/${result.totalRows} rows imported`);
+
+      return result;
+
+    } catch (error) {
+      console.error('❌ Smart CSV import failed:', error);
+      result.errors.push(`Import failed: ${error instanceof Error ? error.message : String(error)}`);
+
+      const endTime = process.hrtime.bigint();
+      result.processing_time_ms = Number(endTime - startTime) / 1000000;
+
+      return result;
+    }
+  }
+
+  /**
+   * Import NRO CSV file into Supabase (Legacy method)
    */
   async importCsvFile(
     filePath: string,
@@ -124,7 +237,7 @@ export class CsvImportService {
       const rows: CsvRow[] = [];
 
       fs.createReadStream(filePath)
-        .pipe(csv())
+        .pipe(csv.default())
         .on('data', (row: any) => {
           // Convert to CsvRow type with proper field mapping
           const csvRow: CsvRow = {
@@ -160,7 +273,13 @@ export class CsvImportService {
     datasetId: string,
     duplicateTracker: Set<string>
   ): Promise<{ imported: number; skipped: number; duplicates: number; errors: string[]; warnings: string[] }> {
-    const result = { imported: 0, skipped: 0, duplicates: 0, errors: [], warnings: [] };
+    const result: { imported: number; skipped: number; duplicates: number; errors: string[]; warnings: string[] } = {
+      imported: 0,
+      skipped: 0,
+      duplicates: 0,
+      errors: [],
+      warnings: []
+    };
 
     for (const row of rows) {
       try {
@@ -210,7 +329,7 @@ export class CsvImportService {
   /**
    * Convert CSV row to DatasetEntry format
    */
-  private convertRowToEntry(row: CsvRow, datasetId: string): Partial<DatasetEntry> {
+  private convertRowToEntry(row: CsvRow, datasetId: string): any {
     // Parse aliases
     const aliases = row.aliases ?
       row.aliases.split(';').map(alias => alias.trim()).filter(alias => alias.length > 0) :
@@ -228,25 +347,13 @@ export class CsvImportService {
       return isNaN(date.getTime()) ? null : date;
     };
 
-    return {
+    const entry: any = {
       dataset_id: datasetId,
       external_id: row.id,
       organization_name: row.name,
-      aliases: aliases.length > 0 ? aliases : undefined,
+      aliases: aliases.length > 0 ? aliases : [],
       schema_type: row.schema || 'Organization',
-      birth_date: row.birth_date || undefined,
-      countries: countries.length > 0 ? countries : undefined,
-      addresses: row.addresses || undefined,
-      identifiers: row.identifiers || undefined,
-      sanctions: row.sanctions || undefined,
-      phones: row.phones || undefined,
-      emails: row.emails || undefined,
-      program_ids: row.program_ids || undefined,
-      dataset_source: row.dataset || undefined,
-      first_seen: parseDate(row.first_seen) || undefined,
-      last_seen: parseDate(row.last_seen) || undefined,
-      last_change: parseDate(row.last_change) || undefined,
-      category: undefined, // Can be enhanced later based on schema_type
+      countries: countries.length > 0 ? countries : [],
       metadata: {
         imported_at: new Date().toISOString(),
         source_file: path.basename(row.dataset || 'unknown'),
@@ -254,6 +361,21 @@ export class CsvImportService {
         schema_type: row.schema
       }
     };
+
+    // Only add non-empty optional fields
+    if (row.birth_date) entry.birth_date = row.birth_date;
+    if (row.addresses) entry.addresses = row.addresses;
+    if (row.identifiers) entry.identifiers = row.identifiers;
+    if (row.sanctions) entry.sanctions = row.sanctions;
+    if (row.phones) entry.phones = row.phones;
+    if (row.emails) entry.emails = row.emails;
+    if (row.program_ids) entry.program_ids = row.program_ids;
+    if (row.dataset) entry.dataset_source = row.dataset;
+    if (parseDate(row.first_seen)) entry.first_seen = parseDate(row.first_seen);
+    if (parseDate(row.last_seen)) entry.last_seen = parseDate(row.last_seen);
+    if (parseDate(row.last_change)) entry.last_change = parseDate(row.last_change);
+
+    return entry;
   }
 
   /**
@@ -329,8 +451,8 @@ export class CsvImportService {
       await new Promise<void>((resolve, reject) => {
         let rowCount = 0;
         fs.createReadStream(filePath)
-          .pipe(csv())
-          .on('data', (row) => {
+          .pipe(csv.default())
+          .on('data', (row: any) => {
             if (rowCount < 10) { // Check first 10 rows
               rows.push(row);
               rowCount++;
@@ -448,5 +570,127 @@ export class CsvImportService {
 
     // Combine header and rows
     return [header.join(','), ...rows.map(row => row.join(','))].join('\n');
+  }
+
+  /**
+   * 解析智能CSV文件
+   */
+  private async parseSmartCsvFile(filePath: string, mapping: Record<string, string>): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      const results: any[] = [];
+
+      fs.createReadStream(filePath)
+        .pipe(csv.default())
+        .on('data', (row) => {
+          try {
+            const transformedRow = SmartCsvParser.transformRowData(row, mapping);
+            if (transformedRow.organization_name && transformedRow.organization_name.trim()) {
+              results.push(transformedRow);
+            }
+          } catch (error) {
+            console.warn('Error transforming row:', error, row);
+          }
+        })
+        .on('end', () => {
+          console.log(`Smart CSV parsing completed: ${results.length} valid rows`);
+          resolve(results);
+        })
+        .on('error', (error) => {
+          console.error('Error parsing smart CSV:', error);
+          reject(error);
+        });
+    });
+  }
+
+  /**
+   * 处理智能批次数据
+   */
+  private async processSmartBatch(
+    batch: any[],
+    datasetId: string
+  ): Promise<{ imported: number; skipped: number; duplicates: number; errors: string[]; warnings: string[] }> {
+    const result: { imported: number; skipped: number; duplicates: number; errors: string[]; warnings: string[] } = {
+      imported: 0,
+      skipped: 0,
+      duplicates: 0,
+      errors: [],
+      warnings: []
+    };
+
+    const entries: Partial<DatasetEntry>[] = [];
+    const duplicateTracker = new Set<string>();
+
+    for (const row of batch) {
+      try {
+        // 验证必需字段
+        if (!row.organization_name || !row.organization_name.trim()) {
+          result.skipped++;
+          result.errors.push(`Row skipped: missing organization name`);
+          continue;
+        }
+
+        // 创建唯一标识符用于重复检测
+        const uniqueKey = row.external_id || row.organization_name.toLowerCase().trim();
+
+        if (duplicateTracker.has(uniqueKey)) {
+          result.duplicates++;
+          result.warnings.push(`Duplicate entry: ${uniqueKey}`);
+          continue;
+        }
+
+        duplicateTracker.add(uniqueKey);
+
+        // 转换为数据库条目格式
+        const entry: Partial<DatasetEntry> = {
+          dataset_id: datasetId,
+          organization_name: row.organization_name.trim(),
+          schema_type: row.schema_type || 'Organization',
+          metadata: {
+            imported_at: new Date().toISOString(),
+            smart_parsed: true,
+            ...row.metadata
+          }
+        };
+
+        // Only add non-null optional fields
+        if (row.external_id) entry.external_id = row.external_id;
+        if (row.aliases) entry.aliases = row.aliases;
+        if (row.birth_date) entry.birth_date = row.birth_date;
+        if (row.countries) entry.countries = row.countries;
+        if (row.addresses) entry.addresses = row.addresses;
+        if (row.identifiers) entry.identifiers = row.identifiers;
+        if (row.sanctions) entry.sanctions = row.sanctions;
+        if (row.phones) entry.phones = row.phones;
+        if (row.emails) entry.emails = row.emails;
+        if (row.program_ids) entry.program_ids = row.program_ids;
+        if (row.dataset_source) entry.dataset_source = row.dataset_source;
+        if (row.first_seen) entry.first_seen = row.first_seen;
+        if (row.last_seen) entry.last_seen = row.last_seen;
+        if (row.last_change) entry.last_change = row.last_change;
+
+        entries.push(entry);
+
+      } catch (error) {
+        result.skipped++;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        result.errors.push(`Row processing failed: ${errorMessage}`);
+      }
+    }
+
+    // 批量插入到数据库
+    if (entries.length > 0) {
+      try {
+        await this.supabaseService.createDatasetEntries(entries);
+        result.imported = entries.length;
+        console.log(`Successfully imported ${entries.length} entries`);
+      } catch (error) {
+        result.skipped += entries.length;
+        result.imported = 0;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        result.errors.push(`Batch insertion failed: ${errorMessage}`);
+      }
+    }
+
+    return result;
   }
 }

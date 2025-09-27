@@ -10,7 +10,13 @@ export class SupabaseService {
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Missing Supabase configuration');
+      console.error('Supabase configuration check:', {
+        SUPABASE_URL: !!supabaseUrl,
+        SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+        SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
+        NODE_ENV: process.env.NODE_ENV
+      });
+      throw new Error(`Missing Supabase configuration - URL: ${!!supabaseUrl}, Service Key: ${!!process.env.SUPABASE_SERVICE_ROLE_KEY}, Anon Key: ${!!process.env.SUPABASE_ANON_KEY}`);
     }
 
     this.client = createClient(supabaseUrl, supabaseKey);

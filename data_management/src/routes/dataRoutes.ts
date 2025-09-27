@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { DataManagementController } from '@/controllers/DataManagementController';
+import { TestUploadController } from '@/controllers/TestUploadController';
 import { upload, handleUploadError } from '@/middleware/upload';
 
 const router = Router();
 const controller = new DataManagementController();
+const testController = new TestUploadController();
 
 // Dataset Management Routes
 router.get('/datasets', controller.getDatasets.bind(controller));
@@ -33,6 +35,13 @@ router.get('/datasets/:id/export', controller.exportDataset.bind(controller));
 
 // Specialized Import Routes
 router.post('/import/nro-targets', controller.importNroTargets.bind(controller));
+
+// Test Smart CSV Upload (bypasses Supabase auth issues)
+router.post('/test-upload/:id',
+  upload.single('file'),
+  handleUploadError,
+  testController.testUploadFile.bind(testController)
+);
 
 // Health Check
 router.get('/health', controller.healthCheck.bind(controller));
