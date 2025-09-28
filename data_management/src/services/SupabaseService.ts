@@ -149,14 +149,25 @@ export class SupabaseService {
     page: number = 1,
     limit: number = 50
   ): Promise<{ entries: DatasetEntry[]; total: number }> {
-    const offset = (page - 1) * limit;
+    // Enforce reasonable limits to prevent excessive data transfer
+    const safeLimit = Math.min(limit, 100); // Max 100 records per page
+    const offset = (page - 1) * safeLimit;
 
+    // Select only essential fields for list view to reduce data transfer
     const { data, error, count } = await this.client
       .from('dataset_entries')
-      .select('*', { count: 'exact' })
+      .select(`
+        id,
+        dataset_id,
+        organization_name,
+        aliases,
+        countries,
+        created_at,
+        schema_type
+      `, { count: 'exact' })
       .eq('dataset_id', datasetId)
       .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .range(offset, offset + safeLimit - 1);
 
     if (error) {
       throw new Error(`Failed to fetch dataset entries: ${error.message}`);
@@ -283,73 +294,74 @@ export class SupabaseService {
     country_distribution: { [country: string]: { count: number; percentage: number } };
     last_updated: string;
   }> {
-    // Get total count
-    const { count: totalEntries, error: countError } = await this.client
-      .from('dataset_entries')
-      .select('*', { count: 'exact', head: true })
-      .eq('dataset_id', datasetId);
+    try {
+      // Get all stats in parallel queries - NO MORE PULLING ALL DATA!
+      const [totalCount, aliasesCount, lastUpdated, countryData] = await Promise.all([
+        this.client
+          .from('dataset_entries')
+          .select('*', { count: 'exact', head: true })
+          .eq('dataset_id', datasetId),
 
-    if (countError) {
-      throw new Error(`Failed to get entry count: ${countError.message}`);
-    }
+        this.client
+          .from('dataset_entries')
+          .select('*', { count: 'exact', head: true })
+          .eq('dataset_id', datasetId)
+          .not('aliases', 'is', null),
 
-    // Get entries with aliases
-    const { count: entriesWithAliases, error: aliasError } = await this.client
-      .from('dataset_entries')
-      .select('*', { count: 'exact', head: true })
-      .eq('dataset_id', datasetId)
-      .not('aliases', 'is', null);
+        this.client
+          .from('dataset_entries')
+          .select('created_at')
+          .eq('dataset_id', datasetId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single(),
 
-    if (aliasError) {
-      throw new Error(`Failed to get alias count: ${aliasError.message}`);
-    }
+        this.client
+          .from('dataset_entries')
+          .select('countries')
+          .eq('dataset_id', datasetId)
+      ]);
 
-    // Get countries and last updated
-    const { data: statsData, error: statsError } = await this.client
-      .from('dataset_entries')
-      .select('countries, created_at')
-      .eq('dataset_id', datasetId)
-      .order('created_at', { ascending: false });
+      if (totalCount.error) throw totalCount.error;
+      if (aliasesCount.error) throw aliasesCount.error;
+      if (lastUpdated.error) throw lastUpdated.error;
+      if (countryData.error) throw countryData.error;
 
-    if (statsError) {
-      throw new Error(`Failed to get stats: ${statsError.message}`);
-    }
+      // Process country distribution efficiently
+      const countries = new Set<string>();
+      const countryCount: { [country: string]: number } = {};
 
-    // Extract unique countries and calculate distribution
-    const countries = new Set<string>();
-    const countryCount: { [country: string]: number } = {};
-    let lastUpdated = '';
-
-    if (statsData && statsData.length > 0) {
-      lastUpdated = statsData[0].created_at;
-
-      statsData.forEach(entry => {
-        if (entry.countries) {
+      countryData.data?.forEach((entry: any) => {
+        if (entry.countries && Array.isArray(entry.countries)) {
           entry.countries.forEach((country: string) => {
             countries.add(country);
             countryCount[country] = (countryCount[country] || 0) + 1;
           });
         }
       });
-    }
 
-    // Calculate percentages
-    const countryDistribution: { [country: string]: { count: number; percentage: number } } = {};
-    const total = totalEntries || 0;
+      // Calculate percentages
+      const totalEntries = totalCount.count || 0;
+      const entriesWithAliases = aliasesCount.count || 0;
+      const countryDistribution: { [country: string]: { count: number; percentage: number } } = {};
 
-    Object.entries(countryCount).forEach(([country, count]) => {
-      countryDistribution[country] = {
-        count,
-        percentage: total > 0 ? Math.round((count / total) * 100) : 0
+      Object.entries(countryCount).forEach(([country, count]) => {
+        countryDistribution[country] = {
+          count,
+          percentage: totalEntries > 0 ? Math.round((count / totalEntries) * 100) : 0
+        };
+      });
+
+      return {
+        total_entries: totalEntries,
+        entries_with_aliases: entriesWithAliases,
+        countries: Array.from(countries),
+        country_distribution: countryDistribution,
+        last_updated: (lastUpdated.data as any)?.created_at || ''
       };
-    });
-
-    return {
-      total_entries: totalEntries || 0,
-      entries_with_aliases: entriesWithAliases || 0,
-      countries: Array.from(countries),
-      country_distribution: countryDistribution,
-      last_updated: lastUpdated
-    };
+    } catch (error) {
+      throw error;
+    }
   }
+
 }

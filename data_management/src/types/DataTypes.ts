@@ -57,6 +57,7 @@ export interface Dataset {
   id: string;
   name: string;
   description?: string;
+  publisher?: string;
   is_system: boolean;
   is_active: boolean;
   created_by?: string;
@@ -91,19 +92,23 @@ export interface DatasetEntry {
 export interface CreateDatasetRequest {
   name: string;
   description?: string;
+  publisher?: string;
   is_system?: boolean;
 }
 
 export interface UpdateDatasetRequest {
   name?: string;
   description?: string;
+  publisher?: string;
   is_active?: boolean;
 }
 
 export interface CreateDatasetEntryRequest {
-  dataset_id: string;
   organization_name: string;
   aliases?: string[];
+  countries?: string[];
+  schema_type?: string;
+  program_ids?: string;
   category?: string;
   metadata?: any;
 }
