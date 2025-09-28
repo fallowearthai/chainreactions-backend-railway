@@ -294,11 +294,13 @@ export class QualityAssessment {
    * Get match type priority (lower number = higher priority)
    */
   private static getMatchTypePriority(matchType: DatasetMatch['match_type']): number {
-    const priorities = {
+    const priorities: Record<string, number> = {
       exact: 1,
       alias: 2,
       alias_partial: 3,
       core_match: 4,
+      core_acronym: 3.5,
+      word_match: 4.5,
       fuzzy: 5,
       partial: 6
     };

@@ -321,13 +321,15 @@ export class GeographicMatching {
     for (const result of results) {
       if (result.countries && result.countries.length > 0) {
         const primaryCountry = result.countries[0];
-        const normalized = this.countryNormalizer.normalizeCountry(primaryCountry);
-        const key = normalized ? normalized.canonical : 'unknown';
+        if (primaryCountry) {
+          const normalized = this.countryNormalizer.normalizeCountry(primaryCountry);
+          const key = normalized ? normalized.canonical : 'unknown';
 
-        if (!countryBuckets[key]) {
-          countryBuckets[key] = [];
+          if (!countryBuckets[key]) {
+            countryBuckets[key] = [];
+          }
+          countryBuckets[key].push(result);
         }
-        countryBuckets[key].push(result);
       } else {
         if (!countryBuckets['unknown']) {
           countryBuckets['unknown'] = [];

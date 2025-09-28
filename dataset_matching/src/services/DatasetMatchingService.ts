@@ -461,7 +461,7 @@ export class DatasetMatchingService {
           dataset_name: candidate.dataset.name,
           organization_name: candidate.dataset_entry.organization_name,
           match_type: candidate.match_type,
-          category: candidate.dataset_entry.category || undefined,
+          category: candidate.dataset_entry.category ?? undefined,
           confidence_score: candidate.confidence_score,
           last_updated: candidate.dataset_entry.updated_at || undefined,
           quality_metrics: candidate.quality_metrics
@@ -655,15 +655,20 @@ export class DatasetMatchingService {
     context?: string,
     options?: any
   ): Promise<DatasetMatch[]> {
+    // Get strategies with safe defaults
     const strategies = this.configManager.getQueryStrategies();
     const timeouts = this.configManager.getTimeouts();
     const allMatches: DatasetMatch[] = [];
+
+    // Safe access with defaults
+    const exactMatchLimit = strategies?.exact_match_limit || 10;
+    const fuzzyMatchLimit = strategies?.fuzzy_match_limit || 20;
 
     // Strategy 1: Exact matches
     const exactMatches = await this.findExactMatches(entityName, searchLocation);
     allMatches.push(...exactMatches);
 
-    if (allMatches.length >= strategies.exact_match_limit) {
+    if (allMatches.length >= exactMatchLimit) {
       return this.rankAndDeduplicateMatches(allMatches, entityName, searchLocation, context);
     }
 
@@ -671,7 +676,7 @@ export class DatasetMatchingService {
     const fuzzyMatches = await this.findHighSimilarityMatches(entityName, searchLocation);
     allMatches.push(...fuzzyMatches);
 
-    if (allMatches.length >= strategies.fuzzy_match_limit) {
+    if (allMatches.length >= fuzzyMatchLimit) {
       return this.rankAndDeduplicateMatches(allMatches, entityName, searchLocation, context);
     }
 
@@ -704,7 +709,9 @@ export class DatasetMatchingService {
           entityCountries: [match.category || ''] // Using category as temporary country placeholder
         }
       );
-      return similarity.matchType === 'exact' || similarity.score >= 0.95;
+      return similarity.matchType === 'exact' ||
+             similarity.matchType === 'core_acronym' ||
+             similarity.score >= 0.95;
     });
   }
 
@@ -724,6 +731,9 @@ export class DatasetMatchingService {
     const matches: DatasetMatch[] = [];
     const thresholds = this.configManager.getSimilarityThresholds();
 
+    // Safe access with default
+    const goodSimilarityThreshold = thresholds?.good_similarity || 0.85;
+
     for (const match of result.data) {
       const similarity = this.configurableMatching.calculateAdvancedSimilarity(
         entityName,
@@ -734,7 +744,7 @@ export class DatasetMatchingService {
         }
       );
 
-      if (similarity.score >= thresholds.good_similarity) {
+      if (similarity.score >= goodSimilarityThreshold) {
         matches.push({
           ...match,
           match_type: similarity.matchType,
@@ -780,55 +790,22 @@ export class DatasetMatchingService {
     searchLocation?: string,
     context?: string
   ): DatasetMatch[] {
-    // Remove duplicates
-    const uniqueMatches = this.removeDuplicateMatches(matches.map(match => ({
-      dataset_entry: {
-        id: '',
-        dataset_id: '',
-        organization_name: match.organization_name,
-        aliases: [],
-        category: match.category,
-        created_at: '',
-        updated_at: match.last_updated || ''
-      },
-      dataset: {
-        id: '',
-        name: match.dataset_name,
-        is_active: true,
-        created_at: '',
-        updated_at: ''
-      },
-      match_type: match.match_type,
-      confidence_score: match.confidence_score || 0,
-      quality_metrics: match.quality_metrics
-    })));
+    // Simple deduplication by organization name
+    const uniqueMatches = new Map<string, DatasetMatch>();
 
-    // Convert back to DatasetMatch format and re-calculate scores
-    return uniqueMatches.map(candidate => {
-      const enhancedSimilarity = this.configurableMatching.calculateAdvancedSimilarity(
-        entityName,
-        candidate.dataset_entry.organization_name,
-        {
-          searchLocation,
-          entityCountries: candidate.dataset_entry.category ? [candidate.dataset_entry.category] : undefined
-        }
-      );
+    for (const match of matches) {
+      const key = match.organization_name.toLowerCase();
+      const existing = uniqueMatches.get(key);
 
-      return {
-        dataset_name: candidate.dataset.name,
-        organization_name: candidate.dataset_entry.organization_name,
-        match_type: enhancedSimilarity.matchType,
-        category: candidate.dataset_entry.category,
-        confidence_score: enhancedSimilarity.score,
-        last_updated: candidate.dataset_entry.updated_at,
-        quality_metrics: {
-          specificity_score: enhancedSimilarity.components.jaro_winkler || 0,
-          length_ratio: enhancedSimilarity.components.levenshtein || 0,
-          word_count_ratio: enhancedSimilarity.components.word_level || 0,
-          match_coverage: enhancedSimilarity.score
-        }
-      };
-    }).sort((a, b) => (b.confidence_score || 0) - (a.confidence_score || 0));
+      // Keep the match with higher confidence
+      if (!existing || (match.confidence_score || 0) > (existing.confidence_score || 0)) {
+        uniqueMatches.set(key, match);
+      }
+    }
+
+    // Convert back to array and sort by confidence
+    return Array.from(uniqueMatches.values())
+      .sort((a, b) => (b.confidence_score || 0) - (a.confidence_score || 0));
   }
 
   /**

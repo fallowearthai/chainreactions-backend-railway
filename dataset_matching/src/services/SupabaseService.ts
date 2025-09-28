@@ -398,8 +398,18 @@ export class SupabaseService {
       const searchLower = searchText.toLowerCase().trim();
       const allMatches: DatasetMatch[] = [];
 
+      // Extract the base name if there are parentheses with acronyms
+      let searchQueries = [searchText];
+      const acronymPattern = /(.+?)\s*\(([A-Z]{2,})\)/;
+      const acronymMatch = searchText.match(acronymPattern);
+      if (acronymMatch && acronymMatch[1] && acronymMatch[2]) {
+        const baseName = acronymMatch[1].trim();
+        const acronym = acronymMatch[2].trim();
+        searchQueries = [searchText, baseName, acronym];
+      }
+
       // Strategy 1: Exact and partial name matches (fastest - uses index)
-      const { data: exactMatches, error: exactError } = await this.client
+      let query = this.client
         .from('dataset_entries')
         .select(`
           organization_name,
@@ -407,9 +417,17 @@ export class SupabaseService {
           aliases,
           datasets!inner(name, updated_at, is_active)
         `)
-        .eq('datasets.is_active', true)
-        .or(`organization_name.ilike.%${searchText}%`)
-        .limit(20);
+        .eq('datasets.is_active', true);
+
+      // Apply search conditions for all query variations
+      if (searchQueries.length === 1) {
+        query = query.ilike('organization_name', `%${searchQueries[0]}%`);
+      } else {
+        const orConditions = searchQueries.map(q => `organization_name.ilike.%${q}%`).join(',');
+        query = query.or(orConditions);
+      }
+
+      const { data: exactMatches, error: exactError } = await query.limit(20);
 
       if (exactError) throw exactError;
 
@@ -454,7 +472,7 @@ export class SupabaseService {
 
       // Strategy 2: Partial name matches (if no exact matches)
       if (allMatches.length === 0) {
-        const { data: partialMatches, error: partialError } = await this.client
+        let partialQuery = this.client
           .from('dataset_entries')
           .select(`
             organization_name,
@@ -462,9 +480,17 @@ export class SupabaseService {
             aliases,
             datasets!inner(name, updated_at, is_active)
           `)
-          .eq('datasets.is_active', true)
-          .or(`organization_name.ilike.%${searchText}%`)
-          .limit(20);
+          .eq('datasets.is_active', true);
+
+        // Apply same search logic as Strategy 1
+        if (searchQueries.length === 1) {
+          partialQuery = partialQuery.ilike('organization_name', `%${searchQueries[0]}%`);
+        } else {
+          const orConditions = searchQueries.map(q => `organization_name.ilike.%${q}%`).join(',');
+          partialQuery = partialQuery.or(orConditions);
+        }
+
+        const { data: partialMatches, error: partialError } = await partialQuery.limit(20);
 
         if (partialError) throw partialError;
 
@@ -521,16 +547,22 @@ export class SupabaseService {
           allEntries.forEach((entry: any) => {
             if (entry.aliases && Array.isArray(entry.aliases)) {
               for (const alias of entry.aliases) {
-                if (alias && alias.toLowerCase() === searchLower) {
-                  allMatches.push({
-                    dataset_name: entry.datasets.name,
-                    organization_name: entry.organization_name,
-                    match_type: 'alias',
-                    category: entry.category,
-                    confidence_score: 0.95,
-                    last_updated: entry.datasets.updated_at
-                  });
-                  break; // Found exact alias match, no need to check more
+                if (alias) {
+                  const aliasLower = alias.toLowerCase();
+                  // Check against all search queries (original, base name, acronym)
+                  for (const query of searchQueries) {
+                    if (aliasLower === query.toLowerCase()) {
+                      allMatches.push({
+                        dataset_name: entry.datasets.name,
+                        organization_name: entry.organization_name,
+                        match_type: 'alias',
+                        category: entry.category,
+                        confidence_score: 0.95,
+                        last_updated: entry.datasets.updated_at
+                      });
+                      return; // Found alias match, no need to check more entries
+                    }
+                  }
                 }
               }
             }

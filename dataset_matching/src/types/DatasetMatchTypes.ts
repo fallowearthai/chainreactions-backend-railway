@@ -75,7 +75,7 @@ export interface DatasetEntry {
   dataset_id: string;
   organization_name: string;
   aliases?: string[];
-  category?: string;
+  category?: string | null;
   created_at: string;
   updated_at: string;
 }

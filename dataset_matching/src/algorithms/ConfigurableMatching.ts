@@ -92,16 +92,16 @@ export class ConfigurableMatching {
     const algorithms = config.algorithms;
 
     if (components.jaro_winkler !== undefined) {
-      weightedScore += components.jaro_winkler * algorithms.jaro_winkler.weight;
+      weightedScore += components.jaro_winkler * (algorithms.jaro_winkler?.weight || 0.4);
     }
     if (components.levenshtein !== undefined) {
-      weightedScore += components.levenshtein * algorithms.levenshtein.weight;
+      weightedScore += components.levenshtein * (algorithms.levenshtein?.weight || 0.3);
     }
     if (components.word_level !== undefined) {
-      weightedScore += components.word_level * algorithms.word_level_similarity.weight;
+      weightedScore += components.word_level * (algorithms.word_level_similarity?.weight || 0.2);
     }
     if (components.character_ngram !== undefined) {
-      weightedScore += components.character_ngram * algorithms.character_ngram.weight;
+      weightedScore += components.character_ngram * (algorithms.character_ngram?.weight || 0.1);
     }
 
     // 5. Apply context boosts
@@ -186,7 +186,7 @@ export class ConfigurableMatching {
 
       // Check if target has acronym pattern
       const targetMatch = targetText.match(regex);
-      if (targetMatch) {
+      if (targetMatch && targetMatch[1] && targetMatch[2]) {
         const fullName = targetMatch[1].trim();
         const acronym = targetMatch[2].trim();
 
@@ -208,7 +208,7 @@ export class ConfigurableMatching {
 
       // Check if search has acronym pattern
       const searchMatch = searchText.match(regex);
-      if (searchMatch) {
+      if (searchMatch && searchMatch[1] && searchMatch[2]) {
         const fullName = searchMatch[1].trim();
         const acronym = searchMatch[2].trim();
 
@@ -265,7 +265,7 @@ export class ConfigurableMatching {
     const boosts: { geographic_boost?: number; context_boost?: number } = {};
 
     // Geographic boost
-    if (context?.searchLocation && context?.entityCountries) {
+    if (context?.searchLocation && context?.entityCountries && context.entityCountries[0]) {
       const relationship = this.countryNormalizer.calculateGeographicRelationship(
         context.searchLocation,
         context.entityCountries[0] // Use first country
@@ -310,26 +310,33 @@ export class ConfigurableMatching {
     thresholds: Record<string, number>,
     components: any
   ): { type: DatasetMatch['match_type']; explanation: string } {
-    if (score >= thresholds.exact_match) {
+    // Safe access with defaults
+    const exactMatchThreshold = thresholds.exact_match || 0.95;
+    const highSimilarityThreshold = thresholds.high_similarity || 0.85;
+    const goodSimilarityThreshold = thresholds.good_similarity || 0.75;
+    const moderateSimilarityThreshold = thresholds.moderate_similarity || 0.65;
+    const lowSimilarityThreshold = thresholds.low_similarity || 0.55;
+
+    if (score >= exactMatchThreshold) {
       return { type: 'exact', explanation: 'Perfect or near-perfect match' };
     }
 
-    if (score >= thresholds.high_similarity) {
+    if (score >= highSimilarityThreshold) {
       return { type: 'fuzzy', explanation: 'High similarity across multiple algorithms' };
     }
 
-    if (score >= thresholds.good_similarity) {
+    if (score >= goodSimilarityThreshold) {
       if (components.word_level > 0.8) {
         return { type: 'word_match', explanation: 'Strong word-level similarity' };
       }
       return { type: 'fuzzy', explanation: 'Good overall similarity' };
     }
 
-    if (score >= thresholds.moderate_similarity) {
+    if (score >= moderateSimilarityThreshold) {
       return { type: 'core_match', explanation: 'Moderate similarity, likely core match' };
     }
 
-    if (score >= thresholds.low_similarity) {
+    if (score >= lowSimilarityThreshold) {
       return { type: 'partial', explanation: 'Partial match detected' };
     }
 
@@ -352,9 +359,11 @@ export class ConfigurableMatching {
     results.sort((a, b) => b.score - a.score);
 
     // Apply early termination if configured
-    const earlyTermination = this.configManager.getSimilarityWeights().performance_tuning.early_termination;
-    if (earlyTermination.enable) {
-      const highConfidenceIndex = results.findIndex(r => r.score >= earlyTermination.confidence_threshold);
+    const performanceTuning = this.configManager.getSimilarityWeights().performance_tuning;
+    const earlyTermination = performanceTuning?.early_termination;
+    if (earlyTermination?.enable) {
+      const confidenceThreshold = earlyTermination.confidence_threshold || 0.9;
+      const highConfidenceIndex = results.findIndex(r => r.score >= confidenceThreshold);
       if (highConfidenceIndex >= 0 && highConfidenceIndex < (limit || results.length)) {
         return results.slice(0, Math.max(3, highConfidenceIndex + 1));
       }
@@ -385,13 +394,14 @@ export class ConfigurableMatching {
    */
   public getPerformanceMetrics() {
     const config = this.configManager.getSimilarityWeights();
-    const totalWeight = Object.values(config.algorithms).reduce((sum, alg) => sum + alg.weight, 0);
+    const algorithms = config.algorithms || {};
+    const totalWeight = Object.values(algorithms).reduce((sum, alg) => sum + (alg?.weight || 0), 0);
 
     return {
       algorithm_weights_sum: totalWeight,
       weights_valid: Math.abs(totalWeight - 1.0) < 0.01,
-      acronym_detection_enabled: config.special_patterns.acronym_detection.enable,
-      early_termination_enabled: config.performance_tuning.early_termination.enable,
+      acronym_detection_enabled: config.special_patterns?.acronym_detection?.enable || false,
+      early_termination_enabled: config.performance_tuning?.early_termination?.enable || false,
       supported_countries: this.countryNormalizer.getAllSupportedCountries().length
     };
   }

@@ -104,9 +104,12 @@ Linkup API integration for professional business intelligence:
 Advanced entity matching with multiple algorithms:
 - Jaro-Winkler, Levenshtein, N-gram similarity algorithms
 - Quality assessment system with false positive filtering
-- 6 match types: exact, alias, alias_partial, fuzzy, partial, core_match
+- 8 match types: exact, alias, alias_partial, fuzzy, partial, core_match, core_acronym, word_match
 - Memory caching with 5-minute expiry
 - Batch processing support (up to 100 entities)
+- Intelligent bracket processing for entity names with acronyms (e.g., "National University of Defense Technology (NUDT)")
+- Geographic matching and regional boosting algorithms
+- Configurable similarity thresholds and algorithm weights
 
 ### Data Management Service
 CSV upload and intelligent parsing with Supabase integration:
