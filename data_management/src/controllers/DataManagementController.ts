@@ -226,7 +226,7 @@ export class DataManagementController {
       }
 
       const file = req.file;
-      console.log(`Processing uploaded file: ${file.originalname} (${file.size} bytes)`);
+      // Processing uploaded file
 
       // Validate file type
       const allowedExtensions = ['.csv', '.xml', '.json', '.js'];

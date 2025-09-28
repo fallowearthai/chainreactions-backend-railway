@@ -52,12 +52,18 @@ export interface ImportResult {
   };
 }
 
+// Publisher Types
+export interface Publisher {
+  organization: string;
+  source_url: string;
+}
+
 // Dataset Types
 export interface Dataset {
   id: string;
   name: string;
   description?: string;
-  publisher?: string;
+  publisher?: Publisher;
   is_system: boolean;
   is_active: boolean;
   created_by?: string;
@@ -92,14 +98,14 @@ export interface DatasetEntry {
 export interface CreateDatasetRequest {
   name: string;
   description?: string;
-  publisher?: string;
+  publisher?: Publisher;
   is_system?: boolean;
 }
 
 export interface UpdateDatasetRequest {
   name?: string;
   description?: string;
-  publisher?: string;
+  publisher?: Publisher;
   is_active?: boolean;
 }
 

@@ -90,6 +90,7 @@ export class SupabaseService {
       .insert({
         name: dataset.name,
         description: dataset.description,
+        publisher: dataset.publisher,
         is_system: dataset.is_system || false,
         is_active: true
       })
@@ -174,7 +175,7 @@ export class SupabaseService {
     }
 
     return {
-      entries: data || [],
+      entries: (data as DatasetEntry[]) || [],
       total: count || 0
     };
   }
@@ -331,7 +332,7 @@ export class SupabaseService {
       const countries = new Set<string>();
       const countryCount: { [country: string]: number } = {};
 
-      countryData.data?.forEach((entry: any) => {
+      (countryData.data as any[])?.forEach((entry: any) => {
         if (entry.countries && Array.isArray(entry.countries)) {
           entry.countries.forEach((country: string) => {
             countries.add(country);
