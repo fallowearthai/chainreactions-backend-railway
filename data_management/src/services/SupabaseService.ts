@@ -280,6 +280,7 @@ export class SupabaseService {
     total_entries: number;
     entries_with_aliases: number;
     countries: string[];
+    country_distribution: { [country: string]: { count: number; percentage: number } };
     last_updated: string;
   }> {
     // Get total count
@@ -314,8 +315,9 @@ export class SupabaseService {
       throw new Error(`Failed to get stats: ${statsError.message}`);
     }
 
-    // Extract unique countries
+    // Extract unique countries and calculate distribution
     const countries = new Set<string>();
+    const countryCount: { [country: string]: number } = {};
     let lastUpdated = '';
 
     if (statsData && statsData.length > 0) {
@@ -323,15 +325,30 @@ export class SupabaseService {
 
       statsData.forEach(entry => {
         if (entry.countries) {
-          entry.countries.forEach((country: string) => countries.add(country));
+          entry.countries.forEach((country: string) => {
+            countries.add(country);
+            countryCount[country] = (countryCount[country] || 0) + 1;
+          });
         }
       });
     }
+
+    // Calculate percentages
+    const countryDistribution: { [country: string]: { count: number; percentage: number } } = {};
+    const total = totalEntries || 0;
+
+    Object.entries(countryCount).forEach(([country, count]) => {
+      countryDistribution[country] = {
+        count,
+        percentage: total > 0 ? Math.round((count / total) * 100) : 0
+      };
+    });
 
     return {
       total_entries: totalEntries || 0,
       entries_with_aliases: entriesWithAliases || 0,
       countries: Array.from(countries),
+      country_distribution: countryDistribution,
       last_updated: lastUpdated
     };
   }
