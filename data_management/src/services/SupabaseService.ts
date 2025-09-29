@@ -125,8 +125,8 @@ export class SupabaseService {
   async updateDataset(id: string, updates: UpdateDatasetRequest): Promise<Dataset> {
     // Prepare updates with proper publisher serialization
     const processedUpdates: any = { ...updates };
-    if (processedUpdates.publisher !== undefined) {
-      processedUpdates.publisher = processedUpdates.publisher ? JSON.stringify(processedUpdates.publisher) : null;
+    if (updates.publisher !== undefined) {
+      processedUpdates.publisher = updates.publisher ? JSON.stringify(updates.publisher) : null;
     }
 
     const { data, error } = await this.client

@@ -370,15 +370,19 @@ export class DataManagementController {
   async exportDataset(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const { format = 'csv' } = req.query;
+      const { format = 'user-friendly' } = req.query;
 
-      if (format !== 'csv') {
+      // Support both user-friendly and technical formats
+      if (!['user-friendly', 'technical', 'csv'].includes(format as string)) {
         res.status(400).json({
           success: false,
-          error: 'Only CSV export is currently supported'
+          error: 'Format must be "user-friendly" or "technical"'
         });
         return;
       }
+
+      // Normalize 'csv' to 'user-friendly' for backward compatibility
+      const csvFormat: 'user-friendly' | 'technical' = format === 'csv' ? 'user-friendly' : format as 'user-friendly' | 'technical';
 
       // Get dataset info
       const dataset = await this.supabaseService.getDatasetById(id);
@@ -395,7 +399,7 @@ export class DataManagementController {
       const filename = `${dataset.name.replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}.csv`;
       const tempPath = path.join(process.env.UPLOAD_PATH || './uploads', filename);
 
-      const success = await this.csvImportService.exportDatasetToCsv(id, tempPath);
+      const success = await this.csvImportService.exportDatasetToCsv(id, tempPath, csvFormat);
 
       if (!success) {
         res.status(500).json({

@@ -519,14 +519,17 @@ export class CsvImportService {
   /**
    * Export dataset to CSV format
    */
-  async exportDatasetToCsv(datasetId: string, outputPath: string): Promise<boolean> {
+  async exportDatasetToCsv(datasetId: string, outputPath: string, format: 'user-friendly' | 'technical' = 'user-friendly'): Promise<boolean> {
     try {
       const { entries } = await this.supabaseService.getDatasetEntries(datasetId, 1, 10000); // Get all entries
 
-      const csvContent = this.convertEntriesToCsv(entries);
+      const csvContent = format === 'user-friendly'
+        ? this.convertEntriesToUserFriendlyCsv(entries)
+        : this.convertEntriesToCsv(entries);
+
       fs.writeFileSync(outputPath, csvContent, 'utf8');
 
-      console.log(`Exported ${entries.length} entries to ${outputPath}`);
+      console.log(`Exported ${entries.length} entries to ${outputPath} in ${format} format`);
       return true;
 
     } catch (error) {
@@ -536,7 +539,28 @@ export class CsvImportService {
   }
 
   /**
-   * Convert entries to CSV format
+   * Convert entries to user-friendly CSV format (4 columns)
+   */
+  private convertEntriesToUserFriendlyCsv(entries: DatasetEntry[]): string {
+    if (entries.length === 0) return '';
+
+    // CSV header - user-friendly format
+    const header = ['Entity Name', 'Country', 'Type', 'Aliases'];
+
+    // Convert entries to CSV rows
+    const rows = entries.map(entry => [
+      `"${entry.organization_name}"`,
+      entry.countries && entry.countries.length > 0 ? entry.countries.join(', ') : 'N/A',
+      entry.schema_type || 'Organization',
+      entry.aliases && entry.aliases.length > 0 ? `"${entry.aliases.join('; ')}"` : 'No aliases'
+    ]);
+
+    // Combine header and rows
+    return [header.join(','), ...rows.map(row => row.join(','))].join('\n');
+  }
+
+  /**
+   * Convert entries to technical CSV format (15 columns)
    */
   private convertEntriesToCsv(entries: DatasetEntry[]): string {
     if (entries.length === 0) return '';

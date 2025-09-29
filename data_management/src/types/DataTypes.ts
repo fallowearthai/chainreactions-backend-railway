@@ -105,7 +105,7 @@ export interface CreateDatasetRequest {
 export interface UpdateDatasetRequest {
   name?: string;
   description?: string;
-  publisher?: Publisher;
+  publisher?: Publisher | null;
   is_active?: boolean;
 }
 
