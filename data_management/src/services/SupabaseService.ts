@@ -29,6 +29,24 @@ export class SupabaseService {
     return SupabaseService.instance;
   }
 
+  // Helper method to parse publisher JSON string
+  private parseDatasetPublisher(dataset: any): any {
+    if (dataset && typeof dataset.publisher === 'string') {
+      try {
+        dataset.publisher = JSON.parse(dataset.publisher);
+      } catch (error) {
+        console.warn('Failed to parse publisher JSON:', dataset.publisher);
+        dataset.publisher = null;
+      }
+    }
+    return dataset;
+  }
+
+  // Helper method to parse multiple datasets
+  private parseDatasets(datasets: any[]): any[] {
+    return datasets.map(dataset => this.parseDatasetPublisher(dataset));
+  }
+
   // Dataset Management
   async getDatasets(page: number = 1, limit: number = 20): Promise<{ datasets: Dataset[]; total: number }> {
     const offset = (page - 1) * limit;
@@ -45,7 +63,7 @@ export class SupabaseService {
     }
 
     return {
-      datasets: data || [],
+      datasets: this.parseDatasets(data || []),
       total: count || 0
     };
   }
@@ -64,7 +82,7 @@ export class SupabaseService {
       throw new Error(`Failed to fetch dataset: ${error.message}`);
     }
 
-    return data;
+    return this.parseDatasetPublisher(data);
   }
 
   async findDatasetByName(name: string): Promise<Dataset | null> {
@@ -81,7 +99,7 @@ export class SupabaseService {
       throw new Error(`Failed to find dataset: ${error.message}`);
     }
 
-    return data;
+    return this.parseDatasetPublisher(data);
   }
 
   async createDataset(dataset: CreateDatasetRequest): Promise<Dataset> {
@@ -90,7 +108,7 @@ export class SupabaseService {
       .insert({
         name: dataset.name,
         description: dataset.description,
-        publisher: dataset.publisher,
+        publisher: dataset.publisher ? JSON.stringify(dataset.publisher) : null,
         is_system: dataset.is_system || false,
         is_active: true
       })
@@ -101,14 +119,20 @@ export class SupabaseService {
       throw new Error(`Failed to create dataset: ${error.message}`);
     }
 
-    return data;
+    return this.parseDatasetPublisher(data);
   }
 
   async updateDataset(id: string, updates: UpdateDatasetRequest): Promise<Dataset> {
+    // Prepare updates with proper publisher serialization
+    const processedUpdates: any = { ...updates };
+    if (processedUpdates.publisher !== undefined) {
+      processedUpdates.publisher = processedUpdates.publisher ? JSON.stringify(processedUpdates.publisher) : null;
+    }
+
     const { data, error } = await this.client
       .from('datasets')
       .update({
-        ...updates,
+        ...processedUpdates,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
@@ -119,7 +143,7 @@ export class SupabaseService {
       throw new Error(`Failed to update dataset: ${error.message}`);
     }
 
-    return data;
+    return this.parseDatasetPublisher(data);
   }
 
   async deleteDataset(id: string): Promise<void> {
@@ -293,11 +317,12 @@ export class SupabaseService {
     entries_with_aliases: number;
     countries: string[];
     country_distribution: { [country: string]: { count: number; percentage: number } };
+    entity_types: { [type: string]: { count: number; percentage: number } };
     last_updated: string;
   }> {
     try {
       // Get all stats in parallel queries - NO MORE PULLING ALL DATA!
-      const [totalCount, aliasesCount, lastUpdated, countryData] = await Promise.all([
+      const [totalCount, aliasesCount, lastUpdated, countryData, entityTypesData] = await Promise.all([
         this.client
           .from('dataset_entries')
           .select('*', { count: 'exact', head: true })
@@ -320,6 +345,11 @@ export class SupabaseService {
         this.client
           .from('dataset_entries')
           .select('countries')
+          .eq('dataset_id', datasetId),
+
+        this.client
+          .from('dataset_entries')
+          .select('schema_type')
           .eq('dataset_id', datasetId)
       ]);
 
@@ -327,27 +357,59 @@ export class SupabaseService {
       if (aliasesCount.error) throw aliasesCount.error;
       if (lastUpdated.error) throw lastUpdated.error;
       if (countryData.error) throw countryData.error;
+      if (entityTypesData.error) throw entityTypesData.error;
 
-      // Process country distribution efficiently
+      // Process country distribution efficiently (including unknown)
       const countries = new Set<string>();
       const countryCount: { [country: string]: number } = {};
+      let unknownCountryCount = 0;
 
       (countryData.data as any[])?.forEach((entry: any) => {
-        if (entry.countries && Array.isArray(entry.countries)) {
+        if (entry.countries && Array.isArray(entry.countries) && entry.countries.length > 0) {
           entry.countries.forEach((country: string) => {
-            countries.add(country);
-            countryCount[country] = (countryCount[country] || 0) + 1;
+            if (country && country.trim() && country.toLowerCase() !== 'n/a') {
+              countries.add(country);
+              countryCount[country] = (countryCount[country] || 0) + 1;
+            } else {
+              unknownCountryCount++;
+            }
           });
+        } else {
+          unknownCountryCount++;
         }
+      });
+
+      // Add unknown category if there are any unknown countries
+      if (unknownCountryCount > 0) {
+        countries.add('Unknown');
+        countryCount['Unknown'] = unknownCountryCount;
+      }
+
+      // Process entity types distribution
+      const entityTypesCount: { [type: string]: number } = {};
+      const entityTypesSet = new Set<string>();
+
+      (entityTypesData.data as any[])?.forEach((entry: any) => {
+        const entityType = entry.schema_type || 'Organization';
+        entityTypesSet.add(entityType);
+        entityTypesCount[entityType] = (entityTypesCount[entityType] || 0) + 1;
       });
 
       // Calculate percentages
       const totalEntries = totalCount.count || 0;
       const entriesWithAliases = aliasesCount.count || 0;
-      const countryDistribution: { [country: string]: { count: number; percentage: number } } = {};
 
+      const countryDistribution: { [country: string]: { count: number; percentage: number } } = {};
       Object.entries(countryCount).forEach(([country, count]) => {
         countryDistribution[country] = {
+          count,
+          percentage: totalEntries > 0 ? Math.round((count / totalEntries) * 100) : 0
+        };
+      });
+
+      const entityTypesDistribution: { [type: string]: { count: number; percentage: number } } = {};
+      Object.entries(entityTypesCount).forEach(([type, count]) => {
+        entityTypesDistribution[type] = {
           count,
           percentage: totalEntries > 0 ? Math.round((count / totalEntries) * 100) : 0
         };
@@ -358,6 +420,7 @@ export class SupabaseService {
         entries_with_aliases: entriesWithAliases,
         countries: Array.from(countries),
         country_distribution: countryDistribution,
+        entity_types: entityTypesDistribution,
         last_updated: (lastUpdated.data as any)?.created_at || ''
       };
     } catch (error) {
