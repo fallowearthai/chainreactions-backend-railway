@@ -86,10 +86,39 @@ export class LinkupSearchService {
   }
 
   /**
+   * Get default exclude domains for higher quality results
+   */
+  private getDefaultExcludeDomains(): string[] {
+    // Conservative list of low-quality domains to exclude
+    // (Based on entity_search service configuration)
+    return [
+      'wikipedia.org',
+      'reddit.com',
+      'quora.com',
+      'pinterest.com'
+    ];
+  }
+
+  /**
    * Build the OSINT prompt for relationship analysis
    */
   private buildOSINTPrompt(institutionA: string, riskEntity: string, country: string): string {
-    return `Find relationships between "${institutionA}" and "${riskEntity}" in ${country}. Search for partnerships, collaborations, business relationships, personnel connections, and any significant associations. Provide a comprehensive analysis with sources.`;
+    return `You are a skilled Research Security Analyst specializing in open-source intelligence (OSINT) investigations. Your assignment is to systematically identify and document institutional connections between Institution A and Risk Item C.
+
+Goal: For entity in Risk Item C, determine the existence and nature of any relationship with Institution A, focusing on both direct (e.g., formal collaborations, joint research, funding) and indirect (e.g., via intermediary organizations) connections, as well as notable co-mentions in risk or security-related contexts.
+
+Scope: Conduct comprehensive web searches across authoritative sources, including official institutional websites, reputable news outlets, academic publications, and government reports. Search in both English and the primary language(s) of the entity's country (e.g., Chinese for China-based entities). Prioritize official and high-credibility sources.
+
+Criteria/Method: For each entity in Risk Item C:
+- Formulate targeted search queries combining Institution A and the risk item name.
+- Identify and classify the relationship as one of: 'Direct', 'Indirect', 'Significant Mention', 'Unknown', or 'No Evidence Found'.
+- For 'Direct', 'Indirect', or 'Significant Mention', provide a concise summary of findings and list any intermediary organizations involved.
+- Always include source URLs for verification.
+- Ensure findings are supported by both English and local-language sources where available.
+
+Format: Return a JSON array, where each object contains: risk_item, relationship_type, finding_summary (if applicable), intermediary_organizations (if any), and source_urls.
+
+User Query: Investigate and report on the relationship between '${institutionA}' (Institution A) and '${riskEntity}' (Risk Item C, location: ${country}) using the above methodology. Return your findings in the specified JSON format.`;
   }
 
   /**
@@ -104,13 +133,26 @@ export class LinkupSearchService {
   ): Promise<LinkupApiResponse> {
     const prompt = this.buildOSINTPrompt(institutionA, riskEntity, country);
 
+    // Debug: Log the exact prompt being sent to API
+    console.log(`🔍 API ${apiIndex + 1} sending prompt to Linkup API:`);
+    console.log(`--- START PROMPT ---`);
+    console.log(prompt);
+    console.log(`--- END PROMPT ---`);
+    console.log(`Variables: institutionA="${institutionA}", riskEntity="${riskEntity}", country="${country}"`);
+
     // Wait for rate limit token for specific API
     await this.waitForToken(apiIndex);
+
+    // Get default exclude domains for higher quality results
+    const excludeDomains = this.getDefaultExcludeDomains();
 
     const requestData = {
       q: prompt,
       depth: "standard", // Changed from "deep" to "standard" for better performance
-      outputType: "sourcedAnswer"
+      outputType: "sourcedAnswer",
+      includeImages: "false",
+      includeInlineCitations: false,
+      excludeDomains: excludeDomains
     };
 
     try {

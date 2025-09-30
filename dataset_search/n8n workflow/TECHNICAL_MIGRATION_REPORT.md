@@ -357,12 +357,12 @@ Criteria/Method: For each entity in Risk List C:
 
 Format: Return a JSON array, where each object contains: risk_item, relationship_type, finding_summary (if applicable), intermediary_organizations (if any), and source_urls.
 
-User Query: Investigate and report on the relationship between '{Institution A}' (Institution A) and '{Risk Entity}' (Risk List C, location: {Country}) using the above methodology. Return your findings in the specified JSON format.
+User Query: Investigate and report on the relationship between '{Institution A}' (Institution A) and '{Risk Item}' (Risk List C, location: {Country}) using the above methodology. Return your findings in the specified JSON format.
 ```
 
 **动态变量替换逻辑**:
 - `{Institution A}` → 用户输入的公司名称
-- `{Risk Entity}` → Canadian NRO组织名称
+- `{Risk Item}` → Canadian NRO组织名称
 - `{Country}` → 组织所在国家
 
 #### Linkup API响应格式 (实际格式)

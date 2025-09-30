@@ -230,6 +230,12 @@ All services provide health check endpoints:
 - 🎯 **SSE Issues Resolution**: Fixed "undefined - undefined" events and executionId extraction
 - 📡 **Optimized Search Parameters**: Changed depth from "deep" to "standard" for better performance
 - 🔧 **CORS Configuration**: Updated to support local HTML file testing alongside frontend server
+- 🔍 **Critical JSON Response Fix**: Successfully resolved Linkup API response format issues
+  - **excludeDomains Implementation**: Added domain filtering matching entity_search service success pattern
+  - **Optimized OSINT Prompts**: Updated terminology (Risk Item C, risk item) and simplified JSON format requirements
+  - **Structured JSON Responses**: Now consistently receiving properly parsed structured data from Linkup API
+  - **High-Quality Sources**: Automatic filtering of low-quality domains (Wikipedia, Reddit, Quora, Pinterest)
+  - **API Configuration Alignment**: Matched successful entity_search service parameter configuration
 
 ### Previous Achievements (Sept 28, 2025)
 - 🔧 **Fixed Dataset Matching Critical Bug**: Resolved entity matching failure for bracketed names like "National University of Defense Technology (NUDT)"

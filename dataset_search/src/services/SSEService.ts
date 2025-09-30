@@ -117,7 +117,8 @@ export class SSEService {
       total,
       data: {
         ...result,
-        apiIndex: apiIndex !== undefined ? apiIndex + 1 : undefined
+        apiIndex: apiIndex !== undefined ? apiIndex + 1 : undefined,
+        raw_response: result.raw_response // Include raw API response for debugging
       }
     };
 

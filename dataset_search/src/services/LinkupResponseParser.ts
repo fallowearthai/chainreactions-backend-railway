@@ -1,9 +1,17 @@
 import { LinkupApiResponse, ParsedSearchResult, DatasetSearchError } from '../types/DatasetSearchTypes';
 
+interface JSONResponse {
+  risk_item: string;
+  relationship_type: 'Direct' | 'Indirect' | 'Significant Mention' | 'Unknown' | 'No Evidence Found';
+  finding_summary?: string;
+  intermediary_organizations?: string[];
+  source_urls: string[];
+}
+
 export class LinkupResponseParser {
 
   /**
-   * Parse the Linkup API response - simplified approach like frontend
+   * Parse the Linkup API response - prioritize JSON parsing
    */
   static parseResponse(response: LinkupApiResponse, riskEntity: string): ParsedSearchResult {
     if (!response || !response.answer) {
@@ -19,19 +27,77 @@ export class LinkupResponseParser {
     const sourceUrls = sources.map(source => source.url).filter(Boolean);
 
     try {
-      // Simple parsing approach - prioritize direct extraction over complex JSON parsing
-      return this.extractDirectFields(answer, riskEntity, sourceUrls, response);
+      // First try to parse as JSON array (expected format from new prompt)
+      return this.parseJSONResponse(answer, riskEntity, sourceUrls, response);
     } catch (error) {
-      console.error('Failed to parse Linkup response:', error);
-      // Return simple fallback result
-      return this.createSimpleResult(answer, riskEntity, sourceUrls, response);
+      console.log('JSON parsing failed, falling back to text parsing:', error);
+      // Fallback to text parsing for backward compatibility
+      return this.parseTextResponse(answer, riskEntity, sourceUrls, response);
     }
   }
 
   /**
-   * Extract fields directly using simple patterns - like frontend approach
+   * Parse JSON response from API
    */
-  private static extractDirectFields(
+  private static parseJSONResponse(
+    answer: string,
+    riskEntity: string,
+    sourceUrls: string[],
+    rawResponse: LinkupApiResponse
+  ): ParsedSearchResult {
+    try {
+      // Try to extract JSON from the answer
+      const jsonMatch = answer.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        throw new Error('No JSON array found in response');
+      }
+
+      const jsonData = JSON.parse(jsonMatch[0]) as JSONResponse[];
+
+      if (!Array.isArray(jsonData) || jsonData.length === 0) {
+        throw new Error('Invalid JSON structure - expected array');
+      }
+
+      // Take the first result from the array
+      const firstResult = jsonData[0];
+
+      // Validate required fields
+      if (!firstResult.risk_item) {
+        throw new Error('Missing risk_item in JSON response');
+      }
+
+      if (!firstResult.relationship_type) {
+        throw new Error('Missing relationship_type in JSON response');
+      }
+
+      // Validate relationship type
+      const validTypes = ['Direct', 'Indirect', 'Significant Mention', 'Unknown', 'No Evidence Found'];
+      if (!validTypes.includes(firstResult.relationship_type)) {
+        console.warn(`Invalid relationship_type: ${firstResult.relationship_type}, defaulting to Unknown`);
+        firstResult.relationship_type = 'Unknown';
+      }
+
+      return {
+        risk_item: firstResult.risk_item,
+        relationship_type: firstResult.relationship_type,
+        finding_summary: firstResult.finding_summary || '',
+        intermediary_organizations: firstResult.intermediary_organizations || [],
+        source_urls: firstResult.source_urls || sourceUrls,
+        processing_time_ms: 0,
+        completed_at: new Date().toISOString(),
+        raw_response: rawResponse
+      };
+
+    } catch (error) {
+      console.error('JSON parsing failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Parse text response (fallback for backward compatibility)
+   */
+  private static parseTextResponse(
     answer: string,
     riskEntity: string,
     sourceUrls: string[],
@@ -107,28 +173,6 @@ export class LinkupResponseParser {
       finding_summary: findingSummary,
       intermediary_organizations: intermediaryOrganizations.slice(0, 10), // Limit to 10
       source_urls: sourceUrls.slice(0, 10), // Limit to 10
-      processing_time_ms: 0,
-      completed_at: new Date().toISOString(),
-      raw_response: rawResponse
-    };
-  }
-
-  /**
-   * Create simple fallback result - minimal processing
-   */
-  private static createSimpleResult(
-    answer: string,
-    riskEntity: string,
-    sourceUrls: string[],
-    rawResponse: LinkupApiResponse
-  ): ParsedSearchResult {
-    // Very simple processing - just use what we have
-    return {
-      risk_item: riskEntity,
-      relationship_type: 'Unknown',
-      finding_summary: answer.length > 200 ? answer.substring(0, 200) + '...' : answer,
-      intermediary_organizations: [],
-      source_urls: sourceUrls,
       processing_time_ms: 0,
       completed_at: new Date().toISOString(),
       raw_response: rawResponse
