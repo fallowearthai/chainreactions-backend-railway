@@ -126,6 +126,19 @@ Gmail SMTP integration for demo request handling:
 - HTML email templates
 - Form validation and error handling
 
+### Dataset Search Service
+Advanced OSINT relationship search with dual API parallel processing:
+- **Dual Linkup API Integration**: True parallel processing with 2 API keys using round-robin distribution
+- **Server-Sent Events (SSE)**: Real-time streaming of search progress and results
+- **Canadian NRO Database**: Integration with Supabase for 103 Canadian organizations
+- **Performance Optimization**: 84% speed improvement (164s → 27s for 6 entities)
+- **Enhanced Rate Limiting**: Individual rate limiters per API key (10 queries/second each)
+- **Intelligent Response Parsing**: Multi-layered JSON parsing with fallback strategies
+- **Real-time API Status**: Frontend displays which API processes each entity
+- **CORS Support**: Configured for both local file testing and frontend server integration
+- **Search Configuration**: Standard depth search with OSINT-optimized prompts
+- **Error Handling**: Comprehensive error management with API-specific logging
+
 ## Environment Configuration
 
 Each service requires its own `.env` file with service-specific API keys:
@@ -139,9 +152,10 @@ NODE_ENV=development         # Environment
 ### Service-Specific Keys
 - `GEMINI_API_KEY` - Google Gemini API (Entity Relations)
 - `BRIGHT_DATA_API_KEY` - Bright Data SERP API (Entity Relations)
-- `LINKUP_API_KEY` - Linkup API (Entity Search)
+- `LINKUP_API_KEY` - Primary Linkup API (Entity Search, Dataset Search)
+- `LINKUP_API_KEY_2` - Secondary Linkup API (Dataset Search Dual Processing)
 - `GMAIL_APP_PASSWORD` - Gmail SMTP (Demo Email)
-- `SUPABASE_URL` and `SUPABASE_ANON_KEY` - Database (Dataset Matching)
+- `SUPABASE_URL` and `SUPABASE_ANON_KEY` - Database (Dataset Matching, Dataset Search)
 
 ## Development Workflow
 
@@ -166,6 +180,15 @@ cd dataset_matching
 curl -X POST http://localhost:3003/api/dataset-matching/match \
   -H "Content-Type: application/json" \
   -d '{"entity": "Apple Inc", "match_type": "fuzzy"}'
+
+# Dataset Search (SSE Streaming with Dual API)
+cd dataset_search
+curl -X POST http://localhost:3004/api/dataset-search/stream \
+  -H "Content-Type: application/json" \
+  -d '{"target_institution": "Apple Inc", "test_mode": true}'
+
+# Dataset Search Health Check
+curl -s http://localhost:3004/api/health | jq
 ```
 
 ### Service Health Checks
@@ -181,20 +204,34 @@ All services provide health check endpoints:
 3. ✅ Entity Search Service
 4. ✅ Dataset Matching Service (with full entity matching pipeline including bracketed names and cache management)
 5. ✅ Data Management Service (CSV upload and intelligent parsing)
+6. ✅ Dataset Search Service (SSE streaming with Linkup API integration)
 
 ### Current Development
-1. **Dataset Management Interface Optimization** - Improving user experience for dataset upload and management
-   - Enhanced CSV processing feedback
-   - Better error handling and validation
-   - Improved progress indicators
-   - Streamlined workflow for dataset operations
+1. **Dataset Search Service Frontend Integration** - Complete migration from N8N to pure TypeScript
+   - SSE streaming implementation ✅
+   - Linkup API integration ✅
+   - Canadian NRO database integration ✅
+   - Frontend testing interface needs restoration
 
 ### Planned Development
-1. **Dataset Search Service** - Excel processing and relationship search
-2. **Unified API Gateway** - Service orchestration and routing
-3. **Production Deployment** - Containerization and scaling
+1. **Unified API Gateway** - Service orchestration and routing
+2. **Production Deployment** - Containerization and scaling
 
-### Recent Achievements (Sept 28, 2025)
+### Recent Achievements (Sept 30, 2025)
+- 🚀 **Complete Dataset Search Service Implementation**: Migrated from N8N workflows to pure TypeScript with SSE streaming
+- ⚡ **Dual API Parallel Processing Optimization**: Implemented true parallel processing with 2 Linkup API keys
+  - **Performance Boost**: Reduced search time from 164s to 27s (84% improvement)
+  - **Parallel Execution**: Round-robin distribution across multiple API keys
+  - **Enhanced Rate Limiting**: Individual rate limiters per API key
+  - **Real-time API Status**: Frontend displays which API processes each entity
+- 🔧 **Fixed Linkup API Integration**: Corrected request format from `query/outputFormat` to `q/outputType`
+- ✅ **Enhanced SSE Streaming**: Real-time progress updates with API allocation information
+- 🔗 **Canadian NRO Database Integration**: Successfully processing 103 Canadian organizations in test mode
+- 🎯 **SSE Issues Resolution**: Fixed "undefined - undefined" events and executionId extraction
+- 📡 **Optimized Search Parameters**: Changed depth from "deep" to "standard" for better performance
+- 🔧 **CORS Configuration**: Updated to support local HTML file testing alongside frontend server
+
+### Previous Achievements (Sept 28, 2025)
 - 🔧 **Fixed Dataset Matching Critical Bug**: Resolved entity matching failure for bracketed names like "National University of Defense Technology (NUDT)"
 - 🔍 **Enhanced Database Query Logic**: Improved acronym extraction and multi-variation searching in SupabaseService
 - 🚀 **Cache Management Fix**: Identified and resolved cache invalidation issues preventing updated results

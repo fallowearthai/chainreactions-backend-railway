@@ -1,12 +1,18 @@
 import { Request, Response } from 'express';
-import { N8nIntegrationService } from '../services/N8nIntegrationService';
-import { ExcelProcessingService } from '../services/ExcelProcessingService';
+import { v4 as uuidv4 } from 'uuid';
+import { SupabaseNROService } from '../services/SupabaseNROService';
+import { LinkupSearchService } from '../services/LinkupSearchService';
+import { LinkupResponseParser } from '../services/LinkupResponseParser';
+import { SearchHistoryService } from '../services/SearchHistoryService';
+import { sseService } from '../services/SSEService';
 import {
   DatasetSearchRequest,
   DatasetSearchResponse,
   ExecutionStatusResponse,
-  N8nWebhookPayload,
-  DatasetSearchError
+  DatasetSearchError,
+  DatasetExecutionState,
+  ParsedSearchResult,
+  NROOrganization
 } from '../types/DatasetSearchTypes';
 import {
   asyncHandler,
@@ -19,335 +25,277 @@ import {
 } from '../utils/ErrorHandler';
 
 export class DatasetSearchController {
-  private n8nService: N8nIntegrationService;
-  private excelService: ExcelProcessingService;
+  private nroService: SupabaseNROService;
+  private linkupService: LinkupSearchService;
+  private historyService: SearchHistoryService;
+  private activeExecutions: Map<string, DatasetExecutionState> = new Map();
 
   constructor() {
-    this.n8nService = new N8nIntegrationService();
-    this.excelService = new ExcelProcessingService();
+    this.nroService = new SupabaseNROService();
+    this.linkupService = new LinkupSearchService();
+    this.historyService = new SearchHistoryService();
   }
 
+
+
+
+
+
+
+
   /**
-   * 执行Dataset搜索
-   * POST /api/dataset-search/execute
+   * SSE流式搜索 - 新的简化搜索模式
+   * POST /api/dataset-search/stream
    */
-  executeSearch = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const startTime = Date.now();
+  streamSearch = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { target_institution, test_mode = false } = req.body;
 
-    // 验证请求数据
-    const {
-      target_institution,
-      keywords,
-      start_date,
-      end_date
-    } = req.body as DatasetSearchRequest;
-
-    // 基本验证
+    // 验证输入
     validateRequired(target_institution, 'target_institution');
     validateString(target_institution, 'target_institution', 1, 200);
 
-    if (keywords) {
-      validateArray(keywords, 'keywords', 0, 50);
-      keywords.forEach((keyword: string, index: number) => {
-        validateString(keyword, `keywords[${index}]`, 1, 100);
-      });
-    }
+    const executionId = uuidv4();
+    const startTime = Date.now();
 
-    if (start_date) {
-      validateDate(start_date, 'start_date');
-    }
-
-    if (end_date) {
-      validateDate(end_date, 'end_date');
-    }
-
-    // 验证日期范围
-    if (start_date && end_date && start_date > end_date) {
-      throw new DatasetSearchError('start_date cannot be after end_date', 'INVALID_DATE_RANGE', 400);
-    }
-
-    console.log(`🚀 Starting Dataset Search for: ${target_institution}`);
+    console.log(`🚀 Starting SSE stream search for: ${target_institution} (${executionId})${test_mode ? ' [TEST MODE]' : ''}`);
 
     try {
-      // 处理文件（如果有）
-      let fileData: {
-        base64Content?: string;
-        fileName?: string;
-      } = {};
+      // 获取Canadian NRO组织列表 (测试模式下限制为6个实体)
+      const nroOrganizations = await this.nroService.getCanadianNRO(test_mode);
 
-      if (req.file) {
-        console.log(`📎 Processing uploaded file: ${req.file.originalname}`);
-        const processedFile = await this.excelService.processUploadedFile(req.file);
-        fileData = {
-          base64Content: processedFile.base64Content,
-          fileName: processedFile.metadata.fileName
+      if (nroOrganizations.length === 0) {
+        throw new DatasetSearchError('No Canadian NRO organizations found', 'NO_NRO_DATA', 500);
+      }
+
+      // 创建执行状态
+      const executionState: DatasetExecutionState = {
+        executionId,
+        status: 'processing',
+        userId: 'anonymous', // 简化为匿名用户
+        institutionName: target_institution,
+        totalEntities: nroOrganizations.length,
+        processedEntities: 0,
+        foundRelationships: 0,
+        startTime: new Date(),
+        cancelled: false,
+        abortController: new AbortController(),
+        results: []
+      };
+
+      this.activeExecutions.set(executionId, executionState);
+
+      // 不再创建搜索历史记录，直接开始搜索
+
+      // 建立SSE连接
+      const connectionId = sseService.createConnection(res, executionId, 'anonymous');
+
+      // 开始后台搜索处理
+      this.processStreamSearch(executionState, nroOrganizations)
+        .catch(error => {
+          console.error(`Stream search processing failed for ${executionId}:`, error);
+          sseService.sendError(executionId, error);
+        });
+
+      console.log(`✅ SSE stream search initiated: ${executionId} with ${nroOrganizations.length} entities`);
+
+    } catch (error) {
+      console.error(`❌ Failed to start stream search:`, error);
+
+      if (!res.headersSent) {
+        const response: DatasetSearchResponse = {
+          success: false,
+          execution_id: executionId,
+          message: 'Failed to start stream search',
+          error: error instanceof Error ? error.message : 'Unknown error'
         };
 
-        console.log(`✅ File processed: ${processedFile.metadata.rowCount} rows, ${processedFile.metadata.columnCount} columns`);
+        const statusCode = error instanceof DatasetSearchError ? error.statusCode : 500;
+        res.status(statusCode).json(response);
       }
-
-      // 触发N8N执行
-      const executionId = await this.n8nService.triggerExecution({
-        target_institution,
-        keywords,
-        start_date,
-        end_date,
-        excel_file_content: fileData.base64Content,
-        excel_file_name: fileData.fileName
-      });
-
-      const processingTime = Date.now() - startTime;
-
-      const response: DatasetSearchResponse = {
-        success: true,
-        execution_id: executionId,
-        message: 'Dataset search started successfully',
-        metadata: {
-          processing_time: processingTime,
-          keywords_used: keywords,
-          date_range: start_date || end_date ? {
-            start_date,
-            end_date
-          } : undefined
-        }
-      };
-
-      console.log(`✅ Dataset search initiated successfully: ${executionId} (${processingTime}ms)`);
-
-      res.status(202).json(response); // 202 Accepted for async processing
-
-    } catch (error) {
-      console.error(`❌ Dataset search failed:`, error);
-
-      const response: DatasetSearchResponse = {
-        success: false,
-        execution_id: '',
-        message: 'Failed to start dataset search',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-
-      // 如果是已知的DatasetSearchError，使用其状态码
-      const statusCode = error instanceof DatasetSearchError ? error.statusCode : 500;
-      res.status(statusCode).json(response);
     }
   });
 
   /**
-   * 上传Excel文件并预览
-   * POST /api/dataset-search/upload
+   * 处理流式搜索的后台逻辑
    */
-  uploadFile = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    if (!req.file) {
-      throw new DatasetSearchError('No file uploaded', 'NO_FILE', 400);
-    }
-
-    console.log(`📤 File upload request: ${req.file.originalname}`);
-
-    // 验证文件
-    const allowedExtensions = (process.env.ALLOWED_FILE_EXTENSIONS || '.xlsx,.xls,.csv').split(',');
-    validateFile(req.file, allowedExtensions);
+  private async processStreamSearch(
+    executionState: DatasetExecutionState,
+    nroOrganizations: NROOrganization[]
+  ): Promise<void> {
+    const { executionId, institutionName, abortController } = executionState;
 
     try {
-      // 处理Excel文件
-      const processedFile = await this.excelService.processUploadedFile(req.file);
+      // 搜索开始 - 不再记录历史
 
-      // 验证文件内容
-      const excelData = this.excelService.parseBase64Excel(
-        processedFile.base64Content,
-        processedFile.metadata.fileName
+      sseService.sendProgress(executionId, 0, nroOrganizations.length, 'Starting search...');
+
+      // 使用LinkupSearchService进行并发搜索
+      const linkupResponses = await this.linkupService.searchInstitutionRelationships(
+        institutionName,
+        'Canada', // 默认使用Canada作为机构国家
+        nroOrganizations,
+        {
+          maxConcurrent: 2, // 2个并发搜索
+          timeoutMs: 600000 // 10分钟超时
+        },
+        abortController.signal,
+        // 进度回调 - 增强API分配信息
+        async (current: number, total: number, result?, apiIndex?: number) => {
+          if (abortController.signal.aborted) {
+            return;
+          }
+
+          executionState.processedEntities = current;
+
+          const riskEntity = nroOrganizations[current - 1]?.organization_name || `Entity_${current - 1}`;
+          const apiInfo = apiIndex !== undefined ? ` (API ${apiIndex + 1})` : '';
+
+          if (result) {
+            // 解析响应
+            const parsedResult = LinkupResponseParser.parseResponse(result, riskEntity);
+
+            executionState.results.push(parsedResult);
+            executionState.foundRelationships++;
+
+            // 发送新结果到SSE
+            sseService.sendNewResult(executionId, parsedResult, current, total, apiIndex);
+
+            console.log(`✅ Processed entity ${current}/${total}: ${riskEntity}${apiInfo} - Relationship found`);
+          } else {
+            // 没有结果的情况（可能是搜索失败但没有抛出错误）
+            console.log(`⚠️ Processed entity ${current}/${total}: ${riskEntity}${apiInfo} - No relationship data`);
+
+            // 发送进度更新，表明实体已处理但无关系数据
+            sseService.sendProgress(executionId, current, total, `Processed ${riskEntity}${apiInfo} - no relationship found`, apiIndex);
+          }
+        }
       );
 
-      const validation = this.excelService.validateExcelForSearch(excelData);
-      const keywordSuggestions = this.excelService.extractKeywordSuggestions(excelData);
+      // 处理完成
+      const endTime = Date.now();
+      const processingTime = endTime - executionState.startTime.getTime();
 
-      console.log(`✅ File uploaded and processed: ${req.file.originalname}`);
+      executionState.status = 'completed';
+      executionState.endTime = new Date();
 
-      res.json({
-        success: true,
-        file_info: processedFile.metadata,
-        validation,
-        keyword_suggestions: keywordSuggestions,
-        message: 'File uploaded and processed successfully'
-      });
+      // 搜索完成 - 不再更新历史记录
+
+      // 发送完成通知
+      sseService.sendCompletion(executionId, executionState.foundRelationships, processingTime);
+
+      console.log(`✅ Stream search completed: ${executionId} - ${executionState.foundRelationships} relationships found in ${processingTime}ms`);
 
     } catch (error) {
-      console.error(`❌ File upload processing failed:`, error);
-      throw error; // Re-throw to be handled by error middleware
+      console.error(`❌ Stream search processing error:`, error);
+
+      executionState.status = 'failed';
+
+      // 搜索失败 - 不再更新历史记录
+
+      // 发送错误通知
+      sseService.sendError(executionId, error as Error, executionState.processedEntities, executionState.totalEntities);
+    } finally {
+      // 清理执行状态
+      setTimeout(() => {
+        this.activeExecutions.delete(executionId);
+      }, 30000); // 30秒后清理
     }
-  });
+  }
 
   /**
-   * 查询执行状态
-   * GET /api/dataset-search/status/:execution_id
+   * 取消SSE搜索
+   * DELETE /api/dataset-search/stream/:execution_id
    */
-  getExecutionStatus = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  cancelStreamSearch = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { execution_id } = req.params;
 
     validateExecutionId(execution_id, 'execution_id');
 
-    console.log(`📊 Checking execution status: ${execution_id}`);
+    console.log(`🛑 Cancelling stream search: ${execution_id}`);
 
     try {
-      const execution = this.n8nService.getExecutionStatus(execution_id);
+      const executionState = this.activeExecutions.get(execution_id);
 
-      if (!execution) {
-        throw new DatasetSearchError(`Execution ${execution_id} not found`, 'EXECUTION_NOT_FOUND', 404);
+      if (!executionState) {
+        throw new DatasetSearchError(`Execution ${execution_id} not found or already completed`, 'EXECUTION_NOT_FOUND', 404);
       }
 
-      const response: ExecutionStatusResponse = {
+      // 取消搜索
+      executionState.cancelled = true;
+      executionState.status = 'cancelled';
+      executionState.abortController.abort();
+
+      // 取消搜索 - 不再更新历史记录
+
+      // 发送取消通知
+      sseService.sendCancellation(execution_id);
+
+      console.log(`✅ Stream search cancelled: ${execution_id}`);
+
+      res.json({
         success: true,
         execution_id,
-        status: execution.status,
-        results_count: execution.results?.length || 0,
-        error: execution.error,
-        completed_at: execution.completedAt?.toISOString(),
-        created_at: execution.createdAt.toISOString()
-      };
-
-      console.log(`✅ Execution status retrieved: ${execution_id} -> ${execution.status}`);
-
-      res.json(response);
+        message: 'Stream search cancelled successfully'
+      });
 
     } catch (error) {
-      console.error(`❌ Failed to get execution status:`, error);
+      console.error(`❌ Failed to cancel stream search:`, error);
       throw error;
     }
   });
 
   /**
-   * 获取执行结果
-   * GET /api/dataset-search/results/:execution_id
+   * 获取流式搜索状态
+   * GET /api/dataset-search/stream/:execution_id/status
    */
-  getExecutionResults = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  getStreamSearchStatus = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { execution_id } = req.params;
 
     validateExecutionId(execution_id, 'execution_id');
 
-    console.log(`📥 Retrieving execution results: ${execution_id}`);
-
     try {
-      const execution = this.n8nService.getExecutionStatus(execution_id);
+      // 首先检查内存中的活跃执行
+      const executionState = this.activeExecutions.get(execution_id);
 
-      if (!execution) {
-        throw new DatasetSearchError(`Execution ${execution_id} not found`, 'EXECUTION_NOT_FOUND', 404);
+      if (executionState) {
+        res.json({
+          success: true,
+          execution_id,
+          status: executionState.status,
+          progress: {
+            current: executionState.processedEntities,
+            total: executionState.totalEntities,
+            found_relationships: executionState.foundRelationships
+          },
+          start_time: executionState.startTime.toISOString(),
+          end_time: executionState.endTime?.toISOString()
+        });
+        return;
       }
 
-      if (execution.status !== 'completed') {
-        throw new DatasetSearchError(
-          `Execution is not completed. Current status: ${execution.status}`,
-          'EXECUTION_NOT_COMPLETED',
-          400
-        );
-      }
-
-      const response: DatasetSearchResponse = {
-        success: true,
-        execution_id,
-        message: 'Results retrieved successfully',
-        data: execution.results || [],
-        metadata: {
-          total_results: execution.results?.length || 0
-        }
-      };
-
-      console.log(`✅ Execution results retrieved: ${execution_id} (${execution.results?.length || 0} results)`);
-
-      res.json(response);
+      // 如果不在内存中，说明搜索已完成或不存在
+      throw new DatasetSearchError(`Execution ${execution_id} not found or already completed`, 'EXECUTION_NOT_FOUND', 404);
 
     } catch (error) {
-      console.error(`❌ Failed to get execution results:`, error);
+      console.error(`❌ Failed to get stream search status:`, error);
       throw error;
     }
   });
 
   /**
-   * 取消执行
-   * DELETE /api/dataset-search/execution/:execution_id
+   * 获取Canadian NRO统计信息
+   * GET /api/dataset-search/nro-stats
    */
-  cancelExecution = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const { execution_id } = req.params;
-
-    validateExecutionId(execution_id, 'execution_id');
-
-    console.log(`🛑 Cancelling execution: ${execution_id}`);
-
+  getNROStats = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
-      const success = await this.n8nService.cancelExecution(execution_id);
-
-      console.log(`✅ Execution cancellation ${success ? 'successful' : 'failed'}: ${execution_id}`);
-
-      res.json({
-        success,
-        execution_id,
-        message: success ? 'Execution cancelled successfully' : 'Failed to cancel execution'
-      });
-
-    } catch (error) {
-      console.error(`❌ Failed to cancel execution:`, error);
-      throw error;
-    }
-  });
-
-  /**
-   * N8N Webhook回调处理
-   * POST /api/dataset-search/webhook
-   */
-  handleWebhook = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const payload = req.body as N8nWebhookPayload;
-
-    console.log(`🔗 N8N webhook received:`, {
-      execution_id: payload.execution_id,
-      status: payload.status,
-      results_count: payload.results?.length || 0
-    });
-
-    try {
-      validateRequired(payload.execution_id, 'execution_id');
-      validateRequired(payload.status, 'status');
-
-      await this.n8nService.handleWebhookCallback(payload);
-
-      console.log(`✅ Webhook processed successfully: ${payload.execution_id}`);
-
-      res.json({
-        success: true,
-        message: 'Webhook processed successfully'
-      });
-
-    } catch (error) {
-      console.error(`❌ Webhook processing failed:`, error);
-      throw error;
-    }
-  });
-
-  /**
-   * 服务统计信息
-   * GET /api/dataset-search/stats
-   */
-  getServiceStats = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    try {
-      const executionStats = this.n8nService.getExecutionStats();
-      const n8nHealthy = await this.n8nService.checkN8nHealth();
-
-      const stats = {
-        service: 'Dataset Search Service',
-        version: '1.0.0',
-        uptime: process.uptime(),
-        memory_usage: process.memoryUsage(),
-        execution_stats: executionStats,
-        n8n_health: n8nHealthy ? 'healthy' : 'unhealthy',
-        timestamp: new Date().toISOString()
-      };
-
-      console.log(`📊 Service stats requested`);
+      const stats = await this.nroService.getNROStatistics();
 
       res.json({
         success: true,
         stats
       });
-
     } catch (error) {
-      console.error(`❌ Failed to get service stats:`, error);
+      console.error(`❌ Failed to get NRO stats:`, error);
       throw error;
     }
   });
@@ -357,16 +305,20 @@ export class DatasetSearchController {
    * GET /api/health
    */
   healthCheck = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const n8nHealthy = await this.n8nService.checkN8nHealth();
+    const supabaseHealthy = await this.nroService.testConnection();
+    const linkupHealthy = await this.linkupService.testConnection();
 
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
       service: 'Dataset Search Service',
-      version: '1.0.0',
+      version: '2.0.0',
       dependencies: {
-        n8n: n8nHealthy ? 'healthy' : 'unhealthy'
-      }
+        supabase: supabaseHealthy ? 'healthy' : 'unhealthy',
+        linkup: linkupHealthy ? 'healthy' : 'unhealthy'
+      },
+      active_executions: this.activeExecutions.size,
+      sse_connections: sseService.getActiveConnectionsCount()
     });
   });
 }
