@@ -1,0 +1,222 @@
+{
+  "name": "Dataset Search 4",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "=cancel_flag:{{ $json.body.executionId }}",
+        "value": "true",
+        "expire": true,
+        "ttl": 3600
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "f8e658fd-ef50-4a45-b7f6-03aad542f66c",
+      "name": "Redis",
+      "credentials": {
+        "redis": {
+          "id": "aFelcdqmcZk4kPYH",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "8b50c54e-c5b7-4cc5-bf74-392d71edb0be",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 获取输入数据中的 executionId\nconst executionId = $input.first().json.body.executionId;\n\nlet responsePayload;\nlet httpStatusCode = 200;\n\nif (executionId && executionId !== \"\") {\n    responsePayload = {\n        success: true,\n        message: `Cancel request for execution ID ${executionId} has been successfully logged to Redis.`\n    };\n} else {\n    console.error(\"Workflow 4A: executionId is undefined or empty at response stage...\");\n    responsePayload = {\n        success: false,\n        error: \"Failed to process cancellation request: executionId was missing, invalid, or not found in input.\"\n    };\n    httpStatusCode = 500;\n}\n\nconsole.log(\"Final responsePayload being prepared: \" + JSON.stringify(responsePayload));\n\nreturn [\n    {\n        json: {\n            ...responsePayload,\n            responseCode: httpStatusCode\n        }\n    }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "469c0d10-abaf-444c-8369-cad57e123468",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "path": "is-analysis-cancelled",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        208
+      ],
+      "id": "09aecc42-07a5-41aa-a3b9-dcc456973f92",
+      "name": "Check Cancel Status Trigger",
+      "webhookId": "44eec383-4d36-48a2-a3ad-aa0837518c7c"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "isCancelled",
+        "key": "=cancel_flag:{{ $json.query.executionId }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        224,
+        208
+      ],
+      "id": "f7119925-3fa9-4c74-973f-67c83e748595",
+      "name": "Redis1",
+      "credentials": {
+        "redis": {
+          "id": "aFelcdqmcZk4kPYH",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const executionIdFromQuery = $('Check Cancel Status Trigger').first().json.query.executionId;\n\n// 从前一个Redis GET节点的输出中获取值\n// (Redis GET命令在键不存在时返回 null，如果存在且值为\"true\"，则返回字符串\"true\")\nconst redisValue = $input.first().json.isCancelled;\n\nlet isCancelled = false;\n\n// 核心判断逻辑\nif (redisValue === \"true\") {\n    isCancelled = true;\n}\n// 如果 executionIdFromQuery 无效 (例如，不是字符串，或者为空),\n// 或者 redisValue 不是 \"true\" (例如是 null 或其他值),\n// isCancelled 将保持其默认值 false。这是一种安全的设计，即默认不取消。\n\n\n// 构建并返回给Workflow 2的JSON响应\nreturn [{\n    json: {\n        // 确保executionId字段总是存在于响应中，即使原始查询参数有问题\n        executionId: typeof executionIdFromQuery === 'string' ? executionIdFromQuery : \"INVALID_OR_MISSING_EXECUTION_ID\",\n        isCancelled: isCancelled\n        // 如果Workflow 2确实需要更详细的状态，可以再加一个简单的status字段，但根据您的要求，保持最简化\n        // briefStatus: isCancelled ? \"CANCELLED\" : (redisValue === null ? \"NOT_FOUND_IN_REDIS\" : \"NOT_CANCELLED\")\n    },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        208
+      ],
+      "id": "ca4aeb67-21b4-4b9c-b788-a5bcb8e0df05",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        208
+      ],
+      "id": "395ae93f-eed1-4186-8ca2-dca36c5a3ba7",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "request-analysis-cancel",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "00dc6838-d36a-48ec-b8a4-5dd363f8ed7a",
+      "name": "Cancel trigger",
+      "webhookId": "50ea8c9d-c9bc-454c-8ac8-79088293507d"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Redis": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Cancel Status Trigger": {
+      "main": [
+        [
+          {
+            "node": "Redis1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis1": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cancel trigger": {
+      "main": [
+        [
+          {
+            "node": "Redis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "23448dd8-c8af-43d2-b20a-ad49855365ae",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b94fff4a25c8c9acd6ea2ece249b32b40c282de9dc2e8ea313fdcf6db8d3767c"
+  },
+  "id": "9KchbWnEBQdgKl0K",
+  "tags": [
+    {
+      "createdAt": "2025-08-18T03:14:38.039Z",
+      "updatedAt": "2025-08-18T03:14:38.039Z",
+      "id": "ozHUads50ca9gRTo",
+      "name": "dataset search"
+    }
+  ]
+}
