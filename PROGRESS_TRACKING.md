@@ -1,6 +1,6 @@
 # ChainReactions 后端开发进度追踪
 
-> 更新时间：2025-09-30
+> 更新时间：2025-10-01
 >
 > 项目策略：模块化独立开发，每个功能单独成项目，最后统一整合
 
@@ -83,7 +83,77 @@
 
 ---
 
-## 🚀 最新更新 (2025-09-30)
+## 🚀 最新更新 (2025-10-01)
+
+### 🎨 Dataset Search Frontend Integration - UI重大改进
+
+#### ✅ 前端SSE完全集成
+- **新增文件**: `useDatasetSearchSSE.ts` - SSE客户端React Hook
+- **集成方式**: 与现有 `useLongTextSearch.ts` 无缝整合
+- **向后兼容**: N8N Excel上传功能保持不变
+- **实时通信**: SSE事件流实时更新搜索进度和结果
+
+#### 🎯 Test Mode功能实现
+- **默认模式**: Test Mode (6 entities) - 防止Token浪费
+- **生产模式**: Production Mode (103 entities) - 需确认警告
+- **Token节省**: 测试模式节省94.2% API Token消耗
+- **用户体验**: 提供清晰的测试/生产模式切换和提示
+
+#### 🎨 结果展示UI重大重新设计
+**问题**: 原UI显示citation，缺少可折叠功能，Sources按钮报错
+
+**解决方案**:
+1. **移除Citation显示** - 不再在卡片底部显示引用
+2. **实现可折叠卡片** (Direct/Indirect关系):
+   - 默认折叠，只显示实体名称和关系类型
+   - 点击展开显示 Finding Summary 和 Source URLs
+   - ChevronRight图标指示展开状态
+3. **简化卡片** (No Evidence/Significant Mention):
+   - 静态卡片，不可展开
+   - 移除Sources按钮和展开图标
+   - 只显示实体名称和时间戳
+4. **修复Sources按钮**:
+   - 从查询Supabase改为直接使用 `raw_response` 数据
+   - 显示Linkup的sources (name, snippet, url)
+   - 显示source数量徽章
+
+#### 📊 数据解析优化
+- **raw_data结构**: 正确解析Linkup API完整响应
+- **Answer字段提取**: JSON数组解析获取 finding_summary 和 source_urls
+- **Sources字段**: 直接传递给ResultSourcesButton组件
+- **搜索历史兼容**: 历史记录加载时正确恢复raw_data
+
+#### 📋 相关文档
+- `TEST_MODE_GUIDE.md` - Test Mode功能完整说明
+- `SSE_INTEGRATION_GUIDE.md` - SSE集成技术文档
+
+---
+
+## 🚀 历史更新 (2025-10-01 早期)
+
+### ✅ Dataset Search Service - 完整功能验证与性能分析
+
+#### 🧪 Linkup API JSON响应验证
+- **测试案例**: Peking University ↔ University of Waterloo (China)
+- **结果**: ✅ API成功返回结构化JSON格式
+- **验证字段**: risk_item, relationship_type, finding_summary, intermediary_organizations, source_urls
+- **解析器状态**: LinkupResponseParser.ts 工作正常
+
+#### 📊 实际性能数据修正
+- **单API处理时间**: 103个NRO实体 ≈ 15分钟 (900秒)
+- **双API理论提升**: ~7.5-8分钟 (预计50%性能提升)
+- **单查询平均耗时**: ~8.7秒/查询
+- **瓶颈分析**: API响应时间为主要瓶颈，非rate limit
+
+#### 🔧 Rate Limit架构理解
+- **Linkup限制**: 10 queries/second per account (非per API key)
+- **当前配置**: 2 API keys (同一账号)
+- **实际并行**: 2个查询同时处理 (远低于10 qps限制)
+- **扩展策略**: 需3-4个独立账号支持10并发用户场景
+
+---
+
+## 🚀 历史更新 (2025-09-30)
 
 ### 🎉 Dataset Search Service 完全重构完成 - 重大里程碑！
 
