@@ -85,7 +85,7 @@
 
 ## 🚀 最新更新 (2025-10-01)
 
-### 🎨 Dataset Search Frontend Integration - UI重大改进
+### 🎨 Dataset Search Frontend Integration - UI完整优化完成
 
 #### ✅ 前端SSE完全集成
 - **新增文件**: `useDatasetSearchSSE.ts` - SSE客户端React Hook
@@ -117,6 +117,31 @@
    - 显示Linkup的sources (name, snippet, url)
    - 显示source数量徽章
 
+#### 🎨 现代化UI设计优化 (2025-10-01 下午)
+**目标**: 移除卡片边框，创建无缝现代化界面
+
+**实现改进**:
+1. **无边框设计**:
+   - 移除所有Card组件边框
+   - 使用干净的白色背景 + 圆角
+   - 添加微妙的hover效果提升交互性
+
+2. **布局稳定性修复**:
+   - 修复sidebar宽度变化问题：添加 `flex-shrink-0`、`min-w-80`、`max-w-80`
+   - 解决水平溢出问题：添加 `overflow-x-hidden`、`max-w-full`
+   - 文本换行优化：使用 `break-words`、`break-all`、`truncate`
+
+3. **预览功能优化**:
+   - 折叠状态：显示100字符预览
+   - 展开状态：只显示完整Finding Summary，隐藏预览
+   - 使用受控状态 `openItems` Set 追踪展开/折叠状态
+
+4. **界面细节改进**:
+   - 移除时间戳显示，简化视觉
+   - Sources按钮移至最右侧
+   - 动态subtitle：搜索中显示"Analyzing"，完成后显示"Search results for relationships between..."
+   - 添加统计行下划线分隔标题和结果区域
+
 #### 📊 数据解析优化
 - **raw_data结构**: 正确解析Linkup API完整响应
 - **Answer字段提取**: JSON数组解析获取 finding_summary 和 source_urls
@@ -126,6 +151,7 @@
 #### 📋 相关文档
 - `TEST_MODE_GUIDE.md` - Test Mode功能完整说明
 - `SSE_INTEGRATION_GUIDE.md` - SSE集成技术文档
+- `UI_OPTIMIZATION_2025-10-01.md` - UI优化完整记录
 
 ---
 
