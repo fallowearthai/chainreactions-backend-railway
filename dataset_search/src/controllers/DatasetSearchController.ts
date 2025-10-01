@@ -126,8 +126,8 @@ export class DatasetSearchController {
 
     try {
       // 搜索开始 - 不再记录历史
-
-      sseService.sendProgress(executionId, 0, nroOrganizations.length, 'Starting search...');
+      const firstEntity = nroOrganizations[0]?.organization_name || 'First Entity';
+      sseService.sendProgress(executionId, 0, nroOrganizations.length, 'Starting search...', undefined, firstEntity);
 
       // 使用LinkupSearchService进行并发搜索
       const linkupResponses = await this.linkupService.searchInstitutionRelationships(
