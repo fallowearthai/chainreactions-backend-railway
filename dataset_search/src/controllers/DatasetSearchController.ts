@@ -166,7 +166,7 @@ export class DatasetSearchController {
             console.log(`⚠️ Processed entity ${current}/${total}: ${riskEntity}${apiInfo} - No relationship data`);
 
             // 发送进度更新，表明实体已处理但无关系数据
-            sseService.sendProgress(executionId, current, total, `Processed ${riskEntity}${apiInfo} - no relationship found`, apiIndex);
+            sseService.sendProgress(executionId, current, total, `Processed ${riskEntity}${apiInfo} - no relationship found`, apiIndex, riskEntity);
           }
         }
       );

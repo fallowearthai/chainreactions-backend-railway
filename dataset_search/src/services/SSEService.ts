@@ -85,7 +85,8 @@ export class SSEService {
     current: number,
     total: number,
     message?: string,
-    apiIndex?: number
+    apiIndex?: number,
+    currentEntity?: string
   ): void {
     const event: SSEProgressEvent = {
       stage: 'progress',
@@ -93,7 +94,10 @@ export class SSEService {
       message: message || `Processing ${current} of ${total}`,
       current,
       total,
-      data: apiIndex !== undefined ? { apiIndex: apiIndex + 1 } : undefined
+      data: {
+        ...(apiIndex !== undefined ? { apiIndex: apiIndex + 1 } : {}),
+        ...(currentEntity ? { currentEntity } : {})
+      }
     };
 
     this.sendToExecution(executionId, event);
