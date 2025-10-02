@@ -139,7 +139,7 @@ export interface LinkupSource {
 // 新增：解析后的搜索结果接口
 export interface ParsedSearchResult {
   risk_item: string;
-  relationship_type: 'Direct' | 'Indirect' | 'Significant Mention' | 'Unknown' | 'No Evidence Found';
+  relationship_type: 'Direct' | 'Indirect' | 'Significant Mention' | 'Unknown' | 'No Evidence Found' | 'Timed Out';
   finding_summary?: string;
   intermediary_organizations?: string[];
   source_urls: string[];

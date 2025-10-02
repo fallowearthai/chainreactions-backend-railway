@@ -178,7 +178,7 @@ User Query: Investigate and report on the relationship between '${institutionA}'
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${this.apiKeys[apiIndex]}`
           },
-          timeout: 60000, // 60 second timeout
+          timeout: 120000, // 120 second (2 minute) timeout
           signal
         }
       );

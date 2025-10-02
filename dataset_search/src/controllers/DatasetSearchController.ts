@@ -176,11 +176,22 @@ export class DatasetSearchController {
 
             console.log(`✅ Processed entity ${current}/${total}: ${riskEntity}${apiInfo} - Relationship found`);
           } else {
-            // 没有结果的情况（可能是搜索失败但没有抛出错误）
-            console.log(`⚠️ Processed entity ${current}/${total}: ${riskEntity}${apiInfo} - No relationship data`);
+            // 搜索超时或失败的情况 - 创建一个 "Timed Out" 结果
+            const timedOutResult: ParsedSearchResult = {
+              risk_item: riskEntity,
+              relationship_type: 'Timed Out',
+              finding_summary: 'Search request timed out or failed. Please try again later.',
+              intermediary_organizations: [],
+              source_urls: [],
+              completed_at: new Date().toISOString()
+            };
 
-            // 发送进度更新，表明实体已处理但无关系数据
-            sseService.sendProgress(executionId, current, total, `Processed ${riskEntity}${apiInfo} - no relationship found`, apiIndex, riskEntity);
+            executionState.results.push(timedOutResult);
+
+            // 发送 timed out 结果到SSE
+            sseService.sendNewResult(executionId, timedOutResult, current, total, apiIndex);
+
+            console.log(`⏱️ Processed entity ${current}/${total}: ${riskEntity}${apiInfo} - Timed out`);
           }
         }
       );
