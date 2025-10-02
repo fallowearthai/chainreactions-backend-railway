@@ -116,7 +116,7 @@ Criteria/Method: For each entity in Risk Item C:
 - Always include source URLs for verification.
 - Ensure findings are supported by both English and local-language sources where available.
 
-Format: Return a JSON array, where each object contains: risk_item, relationship_type, finding_summary (if applicable), intermediary_organizations (if any), and source_urls.
+Format: Return a JSON array, where each object contains: risk_item, relationship_type, finding_summary (if applicable, always in English), intermediary_organizations (if any), and source_urls.
 
 User Query: Investigate and report on the relationship between '${institutionA}' (Institution A) and '${riskEntity}' (Risk Item C, location: ${country}) using the above methodology. Return your findings in the specified JSON format.`;
   }
