@@ -48,11 +48,19 @@ export class DatasetSearchController {
    * POST /api/dataset-search/stream
    */
   streamSearch = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const { target_institution, test_mode = false } = req.body;
+    const { target_institution, test_mode = false, from_date, to_date } = req.body;
 
     // 验证输入
     validateRequired(target_institution, 'target_institution');
     validateString(target_institution, 'target_institution', 1, 200);
+
+    // 验证日期格式（如果提供）
+    if (from_date) {
+      validateString(from_date, 'from_date', 1, 50);
+    }
+    if (to_date) {
+      validateString(to_date, 'to_date', 1, 50);
+    }
 
     const executionId = uuidv4();
     const startTime = Date.now();
@@ -90,7 +98,7 @@ export class DatasetSearchController {
       const connectionId = sseService.createConnection(res, executionId, 'anonymous');
 
       // 开始后台搜索处理
-      this.processStreamSearch(executionState, nroOrganizations)
+      this.processStreamSearch(executionState, nroOrganizations, from_date, to_date)
         .catch(error => {
           console.error(`Stream search processing failed for ${executionId}:`, error);
           sseService.sendError(executionId, error);
@@ -120,9 +128,13 @@ export class DatasetSearchController {
    */
   private async processStreamSearch(
     executionState: DatasetExecutionState,
-    nroOrganizations: NROOrganization[]
+    nroOrganizations: NROOrganization[],
+    fromDate?: string,
+    toDate?: string
   ): Promise<void> {
     const { executionId, institutionName, abortController } = executionState;
+
+    console.log(`📅 Search date range: ${fromDate || 'N/A'} to ${toDate || 'N/A'}`);
 
     try {
       // 搜索开始 - 不再记录历史
@@ -136,7 +148,9 @@ export class DatasetSearchController {
         nroOrganizations,
         {
           maxConcurrent: 2, // 2个并发搜索
-          timeoutMs: 600000 // 10分钟超时
+          timeoutMs: 600000, // 10分钟超时
+          fromDate,
+          toDate
         },
         abortController.signal,
         // 进度回调 - 增强API分配信息

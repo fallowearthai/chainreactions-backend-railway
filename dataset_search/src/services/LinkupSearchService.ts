@@ -13,6 +13,8 @@ export interface LinkupSearchOptions {
   timeoutMs?: number;
   retryAttempts?: number;
   retryDelayMs?: number;
+  fromDate?: string;  // ISO 8601 date string
+  toDate?: string;    // ISO 8601 date string
 }
 
 export class LinkupSearchService {
@@ -129,7 +131,9 @@ User Query: Investigate and report on the relationship between '${institutionA}'
     riskEntity: string,
     country: string,
     apiIndex: number = 0,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    fromDate?: string,
+    toDate?: string
   ): Promise<LinkupApiResponse> {
     const prompt = this.buildOSINTPrompt(institutionA, riskEntity, country);
 
@@ -146,7 +150,7 @@ User Query: Investigate and report on the relationship between '${institutionA}'
     // Get default exclude domains for higher quality results
     const excludeDomains = this.getDefaultExcludeDomains();
 
-    const requestData = {
+    const requestData: any = {
       q: prompt,
       depth: "standard", // Changed from "deep" to "standard" for better performance
       outputType: "sourcedAnswer",
@@ -154,6 +158,16 @@ User Query: Investigate and report on the relationship between '${institutionA}'
       includeInlineCitations: false,
       excludeDomains: excludeDomains
     };
+
+    // Add optional date range if provided
+    if (fromDate) {
+      requestData.fromDate = fromDate;
+      console.log(`📅 Adding fromDate: ${fromDate}`);
+    }
+    if (toDate) {
+      requestData.toDate = toDate;
+      console.log(`📅 Adding toDate: ${toDate}`);
+    }
 
     try {
       const response: AxiosResponse<LinkupApiResponse> = await axios.post(
@@ -186,7 +200,7 @@ User Query: Investigate and report on the relationship between '${institutionA}'
       if ((error as any).response?.status === 429) {
         // Rate limit exceeded, wait and retry
         await this.delay(2000);
-        return this.performSingleSearch(institutionA, riskEntity, country, apiIndex, signal);
+        return this.performSingleSearch(institutionA, riskEntity, country, apiIndex, signal, fromDate, toDate);
       }
 
       throw new DatasetSearchError(
@@ -212,7 +226,9 @@ User Query: Investigate and report on the relationship between '${institutionA}'
       maxConcurrent = 2,
       timeoutMs = 300000, // 5 minutes
       retryAttempts = 3,
-      retryDelayMs = 1000
+      retryDelayMs = 1000,
+      fromDate,
+      toDate
     } = options;
 
     const results: LinkupApiResponse[] = [];
@@ -246,7 +262,9 @@ User Query: Investigate and report on the relationship between '${institutionA}'
             entity.organization_name,
             entity.countries[0] || institutionCountry,
             apiIndex,
-            combinedSignal
+            combinedSignal,
+            fromDate,
+            toDate
           );
 
           completed++;
