@@ -11,12 +11,14 @@ ChainReactions Backend is a microservices architecture implementing OSINT (Open-
 ### Microservices Design
 The project consists of independent services running on separate ports:
 
-1. **Entity Relations DeepThinking** (Port 3000) - 3-stage OSINT workflow with AI analysis
+1. **Entity Relations Service** (Port 3000) - Unified dual-mode OSINT service
+   - DeepThinking Mode: 3-stage workflow with multi-engine SERP
+   - Normal Search Mode: Fast Google Web Search analysis
 2. **Demo Request Email Service** (Port 3001) - Email handling service
 3. **Entity Search Service** (Port 3002) - Linkup API integration for entity search
 4. **Dataset Matching Service** (Port 3003) - Advanced entity matching algorithms
-5. **Data Management Service** (Port 3006) - CSV upload and intelligent parsing service
-6. **Entity Relations Normal Search** (Port 3005) - Google Web Search based OSINT analysis
+5. **Dataset Search Service** (Port 3004) - Dataset search with dual Linkup API integration
+6. **Data Management Service** (Port 3006) - CSV upload and intelligent parsing service
 
 ### Common Technology Stack
 - **Runtime**: Node.js with TypeScript
@@ -45,12 +47,11 @@ npm run type-check   # Run TypeScript type checking without compilation
 
 **FIXED PORT ALLOCATION - DO NOT CHANGE**:
 - **Frontend**: `8080` (STRICT - no auto-increment allowed)
-- **Entity Relations DeepThinking**: `3000`
+- **Entity Relations Service**: `3000` (Unified: DeepThinking + Normal Search)
 - **Demo Email Service**: `3001`
 - **Entity Search Service**: `3002`
 - **Dataset Matching Service**: `3003`
 - **Dataset Search Service**: `3004`
-- **Entity Relations Normal Search**: `3005`
 - **Data Management Service**: `3006`
 
 **Port Conflict Resolution**:
@@ -68,8 +69,7 @@ kill PID_NUMBER
 **Testing Ports**: Use range `9000-9999` to avoid conflicts with production ports
 
 ### Service-Specific Directories
-- `entity_relations_deepthinking/` - Main OSINT analysis service (DeepThinking mode)
-- `entity_relations_normal/` - Google Web Search based OSINT service (Normal mode)
+- `entity_relations_deepthinking/` - **Unified OSINT Service** with dual modes (DeepThinking + Normal Search)
 - `entity_search/` - Entity search via Linkup API
 - `demo_email/` - Email service for demo requests
 - `dataset_matching/` - Entity matching algorithms
@@ -78,8 +78,11 @@ kill PID_NUMBER
 
 ## Key Services Documentation
 
-### Entity Relations DeepThinking Service
-**Primary Service** - Comprehensive OSINT analysis with 3-stage workflow:
+### Entity Relations Service (Unified Dual-Mode OSINT)
+**Unified Service** running on Port 3000 with two operational modes:
+
+#### Mode 1: DeepThinking (3-Stage Workflow)
+Comprehensive OSINT analysis with multi-engine search:
 
 1. **Stage 1**: WebSearch Meta-Prompting for intelligent search strategy
 2. **Stage 2**: Multi-engine SERP execution (Google, Baidu, Yandex)
@@ -90,25 +93,26 @@ kill PID_NUMBER
 - Bright Data SERP API for multi-engine search
 - Geographic engine optimization
 - Server-Sent Events (SSE) for real-time progress
-- Structured OSINT output format
+- Processing time: ~35-60 seconds
+- Endpoint: `POST /api/enhanced/search`
 
-**Critical Implementation Notes**:
-- Contains extensive CLAUDE.md with detailed architecture
-- JSON parsing includes multi-layered fallback strategies
-- Never modify AI system prompts without explicit permission
-- Includes intelligent search engine normalization
+#### Mode 2: Normal Search (Google Web Search)
+Simplified OSINT analysis with Google Web Search:
 
-### Entity Relations Normal Search Service
-**Simplified OSINT Service** - Google Web Search based analysis:
 - **Single-Stage Workflow**: Direct Gemini API call with googleSearch tool
 - **Fast Processing**: 10-30 seconds typical response time
 - **Google Web Search**: Native integration via Gemini's googleSearch capability
 - **Multi-language**: Automatic search in English and native language of Location
 - **Time Range Support**: Optional date filtering using Google search operators
-- **Relationship Types**: Direct, Indirect, Significant Mention, Unknown, No Evidence Found
 - **N8N Compatible**: Drop-in replacement for existing N8N webhook
-- **Grounding Metadata**: Includes rendered content and web search queries
-- **Robust Parsing**: Multi-layered JSON extraction and cleaning
+- **Endpoint**: `POST /api/normal-search`
+
+**Critical Implementation Notes**:
+- Both modes share Port 3000 for unified frontend integration
+- Contains extensive CLAUDE.md with detailed architecture
+- JSON parsing includes multi-layered fallback strategies
+- Never modify AI system prompts without explicit permission
+- Includes intelligent search engine normalization
 
 ### Entity Search Service
 Linkup API integration for professional business intelligence:
@@ -166,8 +170,8 @@ NODE_ENV=development         # Environment
 ```
 
 ### Service-Specific Keys
-- `GEMINI_API_KEY` - Google Gemini API (Entity Relations DeepThinking & Normal Search)
-- `BRIGHT_DATA_API_KEY` - Bright Data SERP API (Entity Relations DeepThinking)
+- `GEMINI_API_KEY` - Google Gemini API (Entity Relations Service - both modes)
+- `BRIGHT_DATA_API_KEY` - Bright Data SERP API (Entity Relations DeepThinking mode only)
 - `LINKUP_API_KEY` - Primary Linkup API (Entity Search, Dataset Search)
 - `LINKUP_API_KEY_2` - Secondary Linkup API (Dataset Search Dual Processing)
 - `GMAIL_APP_PASSWORD` - Gmail SMTP (Demo Email)
@@ -179,15 +183,15 @@ NODE_ENV=development         # Environment
 Each service can be tested independently:
 
 ```bash
-# Entity Relations DeepThinking (Full 3-stage workflow)
+# Entity Relations Service - DeepThinking Mode (3-stage workflow)
 cd entity_relations_deepthinking
 curl -X POST http://localhost:3000/api/enhanced/search \
   -H "Content-Type: application/json" \
   -d '{"Target_institution": "NanoAcademic Technologies", "Risk_Entity": "HongZhiWei", "Location": "China"}'
 
-# Entity Relations Normal Search (Google Web Search)
-cd entity_relations_normal
-curl -X POST http://localhost:3005/api/normal-search \
+# Entity Relations Service - Normal Search Mode (Google Web Search)
+cd entity_relations_deepthinking
+curl -X POST http://localhost:3000/api/normal-search \
   -H "Content-Type: application/json" \
   -d '{"Target_institution": "Apple Inc", "Risk_Entity": "Military", "Location": "United States"}'
 
@@ -221,22 +225,18 @@ All services provide health check endpoints:
 ## Project Status and Development Strategy
 
 ### Completed Modules (100%)
-1. ✅ Demo Request Email Service
-2. ✅ Entity Relations DeepThinking (with frontend integration)
-3. ✅ Entity Relations Normal Search (Google Web Search based OSINT)
-4. ✅ Entity Search Service
-5. ✅ Dataset Matching Service (with full entity matching pipeline including bracketed names and cache management)
-6. ✅ Data Management Service (CSV upload and intelligent parsing)
-7. ✅ Dataset Search Service (SSE streaming with Linkup API integration)
+1. ✅ **Entity Relations Service (Unified Dual-Mode)** - Port 3000
+   - DeepThinking Mode: 3-stage OSINT workflow
+   - Normal Search Mode: Google Web Search based OSINT
+   - Shared infrastructure with dual endpoints
+2. ✅ Demo Request Email Service
+3. ✅ Entity Search Service
+4. ✅ Dataset Matching Service (with full entity matching pipeline including bracketed names and cache management)
+5. ✅ Data Management Service (CSV upload and intelligent parsing)
+6. ✅ Dataset Search Service (SSE streaming with Linkup API integration)
 
 ### Current Development
-1. **Entity Relations Normal Search Frontend Integration** - Migrate from N8N to local backend
-   - Backend service implementation ✅
-   - Google Web Search integration ✅
-   - Response format compatibility ✅
-   - Frontend endpoint migration (pending)
-
-2. **Dataset Search Service Frontend Integration** - Complete migration from N8N to pure TypeScript
+1. **Dataset Search Service Frontend Integration** - Complete migration from N8N to pure TypeScript
    - SSE streaming implementation ✅
    - Linkup API integration ✅
    - Canadian NRO database integration ✅
@@ -246,14 +246,21 @@ All services provide health check endpoints:
 1. **Unified API Gateway** - Service orchestration and routing
 2. **Production Deployment** - Containerization and scaling
 
-### Recent Achievements (Oct 3, 2025)
+### Recent Achievements (Oct 4, 2025)
+- 🔗 **Entity Relations Service Unification**: Merged DeepThinking and Normal Search into single service
+  - **Unified Port 3000**: Both modes now run on same server instance
+  - **Dual Endpoints**: `/api/enhanced/search` (DeepThinking) and `/api/normal-search` (Normal)
+  - **Shared Infrastructure**: Common middleware, logging, and error handling
+  - **Simplified Deployment**: Single service to start and manage
+  - **Frontend Compatibility**: Maintains all existing API contracts
+
+### Previous Achievements (Oct 3, 2025)
 - 🚀 **Entity Relations Normal Search Service Complete**: Migrated from N8N to pure TypeScript backend
   - **Google Web Search Integration**: Direct integration via Gemini googleSearch tool
   - **Single-Call Architecture**: Simplified workflow compared to DeepThinking (10-30s vs 35-60s)
   - **Multi-language Support**: Automatic search in English and native language
   - **N8N Compatible Format**: Drop-in replacement with identical response structure
   - **Robust JSON Parsing**: Multi-layered fallback parsing strategy
-  - **Port 3005**: New service on dedicated port with CORS support
 
 ### Previous Achievements (Oct 2, 2025)
 - 🎨 **Dataset Search UI Optimization**: Enhanced frontend user experience
@@ -307,10 +314,11 @@ All services provide health check endpoints:
 - Backend data management service runs on port 3006
 - Always use `cd /Users/kanbei/Code/chainreactions_frontend_dev && npm run dev` for frontend
 
-### Entity Relations DeepThinking Service Rules
+### Entity Relations Service Rules
 - **NEVER modify system prompts** without explicit user approval
 - Prompts are carefully crafted for specific AI behavior and output formatting
-- This includes system instructions, meta-prompting logic, and AI instructions
+- This includes system instructions for both DeepThinking and Normal Search modes
+- Each mode has independent prompts optimized for its specific workflow
 
 ### General Code Quality
 - Follow existing TypeScript conventions in each service
