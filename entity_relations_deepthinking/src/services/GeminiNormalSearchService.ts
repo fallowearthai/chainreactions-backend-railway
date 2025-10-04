@@ -255,33 +255,12 @@ Each item in **Risk List C** must be a separate JSON object containing:
     }
   }
 
-  /**
-   * Extract grounding metadata from Gemini response
-   */
-  private extractGroundingMetadata(response: GeminiResponse) {
-    try {
-      const candidate = response?.candidates?.[0];
-      return {
-        renderedContent: candidate?.groundingMetadata?.searchEntryPoint?.renderedContent,
-        webSearchQueries: candidate?.groundingMetadata?.webSearchQueries || []
-      };
-    } catch (error) {
-      return {
-        renderedContent: undefined,
-        webSearchQueries: []
-      };
-    }
-  }
-
+  
   /**
    * Execute normal search using Gemini API with Google Search tools
    */
   async executeNormalSearch(request: NormalSearchRequest): Promise<{
     results: NormalSearchResult[];
-    metadata: {
-      renderedContent?: string;
-      webSearchQueries: string[];
-    };
   }> {
     try {
       const requestBody = this.buildRequestBody(request);
@@ -316,16 +295,14 @@ Each item in **Risk List C** must be a separate JSON object containing:
       if (!results || results.length === 0) {
         console.warn('⚠️ No results parsed from Gemini response');
         return {
-          results: [],
-          metadata: this.extractGroundingMetadata(response.data)
+          results: []
         };
       }
 
       console.log('✅ Successfully parsed', results.length, 'search results');
 
       return {
-        results,
-        metadata: this.extractGroundingMetadata(response.data)
+        results
       };
 
     } catch (error) {

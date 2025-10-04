@@ -65,40 +65,11 @@ export interface GeminiCandidate {
   finishReason: string;
   index: number;
   safetyRatings?: GeminiSafetyRating[];
-  groundingMetadata?: GeminiGroundingMetadata;
-  groundnMetadata?: GeminiGroundingMetadata; // Legacy typo - keep for backward compatibility
 }
 
 export interface GeminiSafetyRating {
   category: string;
   probability: string;
-}
-
-export interface GeminiGroundingMetadata {
-  webSearchQueries?: string[];
-  searchEntryPoint?: {
-    renderedContent: string;
-    schema?: Record<string, any>;
-  };
-  groundingAttributions?: GeminiGroundingAttribution[];
-  retrievalMetadata?: GeminiRetrievalMetadata;
-}
-
-export interface GeminiGroundingAttribution {
-  web?: {
-    uri: string;
-    title: string;
-  };
-  segment?: {
-    partIndex: number;
-    startIndex: number;
-    endIndex: number;
-    text: string;
-  };
-}
-
-export interface GeminiRetrievalMetadata {
-  googleSearchDynamicRetrievalScore?: number;
 }
 
 export interface SearchRequest {
@@ -213,8 +184,6 @@ export interface FormattedSearchOutput {
     potential_intermediary_B: string; // Changed from array to string for frontend compatibility
     urls: string;
     sources_count: number;
-    renderedContent?: string;
-    webSearchQueries?: string[];
   };
 }
 

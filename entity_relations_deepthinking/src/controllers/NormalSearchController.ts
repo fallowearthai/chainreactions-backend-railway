@@ -13,11 +13,7 @@ export class NormalSearchController {
    * Format search results to match N8N output format
    */
   private formatSearchResults(
-    result: NormalSearchResult,
-    metadata: {
-      renderedContent?: string;
-      webSearchQueries: string[];
-    }
+    result: NormalSearchResult
   ): FormattedSearchOutput {
     // Handle intermediary_B array conversion to string
     let intermediaryString = 'None';
@@ -50,9 +46,7 @@ export class NormalSearchController {
         finding_summary: result.finding_summary,
         potential_intermediary_B: intermediaryString, // Convert array to string for frontend compatibility
         urls: urlsString,
-        sources_count: result.sources?.length || 0,
-        renderedContent: metadata.renderedContent,
-        webSearchQueries: metadata.webSearchQueries
+        sources_count: result.sources?.length || 0
       }
     };
   }
@@ -82,7 +76,7 @@ export class NormalSearchController {
       console.log('📨 Normal Search Request:', searchRequest);
 
       // Execute search
-      const { results, metadata } = await this.geminiService.executeNormalSearch(searchRequest);
+      const { results } = await this.geminiService.executeNormalSearch(searchRequest);
 
       // Handle no results case
       if (!results || results.length === 0) {
@@ -96,16 +90,14 @@ export class NormalSearchController {
             finding_summary: 'After thorough search, no evidence of connection was found.',
             potential_intermediary_B: [],
             urls: '',
-            sources_count: 0,
-            renderedContent: metadata.renderedContent,
-            webSearchQueries: metadata.webSearchQueries
+            sources_count: 0
           }
         });
         return;
       }
 
       // Format first result (matching N8N behavior which returns single result)
-      const formattedResult = this.formatSearchResults(results[0], metadata);
+      const formattedResult = this.formatSearchResults(results[0]);
 
       console.log('✅ Normal Search completed successfully');
       res.status(200).json(formattedResult);
@@ -181,9 +173,7 @@ export class NormalSearchController {
           finding_summary: 'string',
           potential_intermediary_B: 'array',
           urls: 'string',
-          sources_count: 'number',
-          renderedContent: 'string (optional)',
-          webSearchQueries: 'array'
+          sources_count: 'number'
         }
       }
     });
