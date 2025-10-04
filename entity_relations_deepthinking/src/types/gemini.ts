@@ -210,7 +210,7 @@ export interface FormattedSearchOutput {
     institution_A: string;
     relationship_type: string;
     finding_summary: string;
-    potential_intermediary_B: string[];
+    potential_intermediary_B: string; // Changed from array to string for frontend compatibility
     urls: string;
     sources_count: number;
     renderedContent?: string;

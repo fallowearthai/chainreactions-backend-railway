@@ -19,7 +19,7 @@ export class NormalSearchController {
       webSearchQueries: string[];
     }
   ): FormattedSearchOutput {
-    // Handle intermediary_B array conversion
+    // Handle intermediary_B array conversion to string
     let intermediaryString = 'None';
     if (Array.isArray(result.potential_intermediary_B) && result.potential_intermediary_B.length > 0) {
       intermediaryString = result.potential_intermediary_B.join(', ');
@@ -48,7 +48,7 @@ export class NormalSearchController {
         institution_A: result.institution_A,
         relationship_type: result.relationship_type,
         finding_summary: result.finding_summary,
-        potential_intermediary_B: result.potential_intermediary_B || [],
+        potential_intermediary_B: intermediaryString, // Convert array to string for frontend compatibility
         urls: urlsString,
         sources_count: result.sources?.length || 0,
         renderedContent: metadata.renderedContent,
@@ -72,9 +72,9 @@ export class NormalSearchController {
       };
 
       // Validate required fields
-      if (!searchRequest.Target_institution || !searchRequest.Risk_Entity || !searchRequest.Location) {
+      if (!searchRequest.Target_institution || !searchRequest.Risk_Entity) {
         res.status(400).json({
-          error: 'Missing required fields: Target_institution, Risk_Entity, Location'
+          error: 'Missing required fields: Target_institution, Risk_Entity'
         });
         return;
       }
