@@ -36,23 +36,19 @@ Instructions:
    - Significant Mention: Both entities are referenced together in a context that suggests relevance, but no direct or indirect link is established.
    - No Evidence Found: No meaningful connection identified in the sources.
 3. For each finding, include:
-   - Finding summary: Clear narrative of the relationship (no inline citations required).
-   - Key evidence: Each bullet point should end with its source citation [1], [2], etc., matching the sources array indices.
-   - Example key_evidence format:
-     * "Company A signed partnership agreement with Company B in 2023 [1]"
-     * "Deal worth $5M reported by industry news [2]"
+   - Numbered inline citations in the finding_summary in [1], [2], etc., matching the search results.
    - Specific details such as dates, transaction amounts, or named individuals when available.
    - Assessment of source credibility (e.g., official site, reputable news, academic publication).
    - Conservative classification: Only assign 'Direct' if there is unambiguous supporting evidence; for 'Indirect', name the intermediary.
 4. Structure your output as a JSON object with the following fields:
 {
   "relationship_type": "Direct|Indirect|Significant Mention|No Evidence Found",
-  "finding_summary": "Concise narrative summary without inline citations",
+  "finding_summary": "Concise, evidence-based summary with numbered inline citations.",
   "Affiliated_entity": "Name of affiliated entity if Indirect, else null",
   "sources": ["List of URLs used as evidence"],
   "confidence_score": Numeric value between 0 and 1 reflecting certainty,
   "evidence_quality": "high|medium|low",
-  "key_evidence": ["Evidence point with specific details [1]", "Another evidence point [2]", "..."]
+  "key_evidence": ["Bullet points of the strongest supporting facts"]
 }
 
 Prioritize factual accuracy, source attribution, and clarity in your analysis. Do not speculate or infer beyond the evidence presented.`;
@@ -539,16 +535,7 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
         }
       );
 
-      // Debug: Log the full Gemini response structure
-      console.log('🔍 Stage 3: Full Gemini API Response:', JSON.stringify(response, null, 2));
-      console.log('🔍 Stage 3: Response has candidates?', !!response.candidates);
-      if (response.candidates) {
-        console.log('🔍 Stage 3: Candidates length:', response.candidates.length);
-        console.log('🔍 Stage 3: First candidate:', JSON.stringify(response.candidates[0], null, 2));
-      }
-
       if (!response.candidates || !response.candidates[0] || !response.candidates[0].content || !response.candidates[0].content.parts || !response.candidates[0].content.parts[0]) {
-        console.error('❌ Invalid Gemini response structure:', JSON.stringify(response, null, 2));
         throw new Error('Invalid Gemini API response structure: Missing candidates or content');
       }
 
