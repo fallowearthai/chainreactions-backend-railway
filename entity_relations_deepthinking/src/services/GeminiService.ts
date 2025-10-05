@@ -132,13 +132,18 @@ export class GeminiService {
     const companyA = companyName;
     const companyB = targetInstitution || 'Unknown';
 
+    // Fallback location if empty
+    const effectiveLocation = location && location.trim() !== '' ? location : 'Global';
+
     // User Prompt from prompt.md
     const userPrompt = `Analyze the following entity entities and generate an optimized relationship search strategy:
 Entity A Information:
 Entity Name: ${companyA}
 Entity B Information:
 Entity Name: ${companyB}
-Location:${location}`;
+Location:${effectiveLocation}`;
+
+    console.log(`🔍 Verifying entities: ${companyA} vs ${companyB} in ${effectiveLocation}`);
 
     try {
       // System Prompt from prompt.md
@@ -178,6 +183,9 @@ INSTRUCTIONS:
 CRITICAL: Return ONLY the JSON object. No additional text, explanations, or commentary.` }]
       };
 
+      const startTime = Date.now();
+      console.log(`⏱️ Starting Gemini API call with googleSearch tool...`);
+
       const response = await this.generateContent(
         [{ role: 'user', parts: [{ text: userPrompt }] }],
         systemInstruction,
@@ -186,10 +194,13 @@ CRITICAL: Return ONLY the JSON object. No additional text, explanations, or comm
           temperature: 0.1,
           maxOutputTokens: 4096,
           thinkingConfig: {
-            thinkingBudget: -1
+            thinkingBudget: 10000  // Stage 1: Limited to 10 seconds for entity verification
           }
         }
       );
+
+      const elapsedTime = Date.now() - startTime;
+      console.log(`✅ Gemini API responded in ${elapsedTime}ms`);
 
       const resultText = response.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!resultText) {

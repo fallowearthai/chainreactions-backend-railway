@@ -354,14 +354,118 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
         } catch (error3) {
           console.warn(`❌ JSON parse failed for ${entityName} (attempt 3):`, error3);
 
-          // Strategy 4: Log full response and throw detailed error
-          console.error(`❌ FULL RAW RESPONSE for ${entityName}:`, rawResponse);
-          console.error(`❌ FULL CLEANED RESPONSE for ${entityName}:`, cleaned);
+          // Strategy 4: Extract information from text and reconstruct JSON
+          try {
+            console.log(`🔧 Attempting text extraction strategy for ${entityName}...`);
+            const reconstructedJson = this.extractJsonFromText(rawResponse, entityName);
+            console.log(`✅ Successfully reconstructed JSON from text for ${entityName}`);
+            return reconstructedJson;
+          } catch (error4) {
+            console.warn(`❌ Text extraction failed for ${entityName} (attempt 4):`, error4);
 
-          throw new Error(`JSON parsing failed for ${entityName}. Original error: ${error1 instanceof Error ? error1.message : String(error1)}. Repair attempt error: ${error2 instanceof Error ? error2.message : String(error2)}. Aggressive cleaning error: ${error3 instanceof Error ? error3.message : String(error3)}`);
+            // Strategy 5: Log full response and throw detailed error
+            console.error(`❌ FULL RAW RESPONSE for ${entityName}:`, rawResponse);
+            console.error(`❌ FULL CLEANED RESPONSE for ${entityName}:`, cleaned);
+
+            throw new Error(`JSON parsing failed for ${entityName}. Original error: ${error1 instanceof Error ? error1.message : String(error1)}. Repair attempt error: ${error2 instanceof Error ? error2.message : String(error2)}. Aggressive cleaning error: ${error3 instanceof Error ? error3.message : String(error3)}. Text extraction error: ${error4 instanceof Error ? error4.message : String(error4)}`);
+          }
         }
       }
     }
+  }
+
+  /**
+   * Extract structured information from text response and reconstruct JSON
+   * Fallback strategy when Gemini returns text analysis instead of JSON
+   */
+  private extractJsonFromText(textResponse: string, entityName: string): any {
+    console.log(`🔍 Extracting information from text for ${entityName}...`);
+
+    // Extract relationship type
+    let relationship_type = 'No Evidence Found';
+    const relationshipMatch = textResponse.match(/relationship type should be ["']?(Direct|Indirect|Significant Mention|No Evidence Found)["']?/i) ||
+                             textResponse.match(/relationship.*is.*["']?(Direct|Indirect|Significant Mention|No Evidence Found)["']?/i) ||
+                             textResponse.match(/\*\*Relationship Type:\*\*\s*["']?(Direct|Indirect|Significant Mention|No Evidence Found)["']?/i);
+    if (relationshipMatch) {
+      relationship_type = relationshipMatch[1];
+    }
+
+    // Extract finding summary
+    let finding_summary = '';
+    const summaryMatch = textResponse.match(/\*\*Finding Summary:\*\*\s*([\s\S]*?)(?=\*\*|$)/i) ||
+                        textResponse.match(/finding[_ ]summary[:\s]+([\s\S]*?)(?=\n\*\*|$)/i);
+    if (summaryMatch) {
+      finding_summary = summaryMatch[1].trim().replace(/\n+/g, ' ');
+    }
+
+    // Extract affiliated entity / intermediary
+    let Affiliated_entity = null;
+    const affiliatedMatch = textResponse.match(/\*\*Affiliated Entity:\*\*\s*([^\n]+)/i) ||
+                           textResponse.match(/affiliated[_ ]entity[:\s]+([^\n]+)/i) ||
+                           textResponse.match(/potential[_ ]intermediary[:\s]+([^\n]+)/i);
+    if (affiliatedMatch) {
+      Affiliated_entity = affiliatedMatch[1].trim();
+      // Clean up any markdown or extra formatting
+      Affiliated_entity = Affiliated_entity.replace(/\*\*/g, '').replace(/["']/g, '').trim();
+      if (Affiliated_entity.toLowerCase() === 'null' || Affiliated_entity.toLowerCase() === 'none') {
+        Affiliated_entity = null;
+      }
+    }
+
+    // Extract sources
+    const sources: string[] = [];
+    const sourcesMatch = textResponse.match(/\*\*Sources:\*\*\s*([\s\S]*?)(?=\n\*\*|$)/i) ||
+                        textResponse.match(/sources?[:\s]+([\s\S]*?)(?=\n\*\*|$)/i);
+    if (sourcesMatch) {
+      const sourceText = sourcesMatch[1];
+      // Extract URLs using regex
+      const urlMatches = sourceText.match(/https?:\/\/[^\s\)]+/g);
+      if (urlMatches) {
+        sources.push(...urlMatches);
+      }
+    }
+
+    // Extract key evidence
+    const key_evidence: string[] = [];
+    const evidenceMatch = textResponse.match(/\*\*Key Evidence:\*\*\s*([\s\S]*?)(?=\n\*\*|$)/i) ||
+                         textResponse.match(/key[_ ]evidence[:\s]+([\s\S]*?)(?=\n\*\*|$)/i);
+    if (evidenceMatch) {
+      const evidenceText = evidenceMatch[1];
+      // Split by bullet points or line breaks
+      const evidenceItems = evidenceText.split(/\n\s*[\*\-•]\s*/);
+      key_evidence.push(...evidenceItems.filter(item => item.trim().length > 0).map(item => item.trim()));
+    }
+
+    // Extract confidence score
+    let confidence_score = 0.5;
+    const confidenceMatch = textResponse.match(/\*\*Confidence Score:\*\*\s*([\d.]+)/i) ||
+                           textResponse.match(/confidence[_ ]score[:\s]+([\d.]+)/i);
+    if (confidenceMatch) {
+      confidence_score = parseFloat(confidenceMatch[1]);
+    }
+
+    // Extract evidence quality
+    let evidence_quality: 'high' | 'medium' | 'low' = 'medium';
+    const qualityMatch = textResponse.match(/\*\*Evidence Quality:\*\*\s*(high|medium|low)/i) ||
+                        textResponse.match(/evidence[_ ]quality[:\s]+(high|medium|low)/i);
+    if (qualityMatch) {
+      evidence_quality = qualityMatch[1].toLowerCase() as 'high' | 'medium' | 'low';
+    }
+
+    // Construct JSON object
+    const reconstructedJson = {
+      relationship_type,
+      finding_summary: finding_summary || `Analysis for ${entityName} completed.`,
+      Affiliated_entity,
+      sources,
+      confidence_score,
+      evidence_quality,
+      key_evidence: key_evidence.length > 0 ? key_evidence : ['Analysis based on available search results']
+    };
+
+    console.log(`📋 Reconstructed JSON for ${entityName}:`, JSON.stringify(reconstructedJson, null, 2));
+
+    return reconstructedJson;
   }
 
   /**

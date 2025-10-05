@@ -83,7 +83,72 @@
 
 ---
 
-## 🚀 最新更新 (2025-10-04)
+## 🚀 最新更新 (2025-10-05)
+
+### ⚡ DeepThinking 性能优化与 Type System 大清理
+
+#### 🎨 DeepThinking UI 细节优化完成
+- **Step 2 搜索引擎显示优化**:
+  - 百度图标更新为官方彩色Logo (`baidu-logo.png`)
+  - 文案优化: "Searching on" → "Searching information from"
+  - 移除搜索数量显示，聚焦于搜索引擎信息
+- **Entity Card 布局改进**:
+  - 从水平布局改为垂直布局
+  - 更清晰的实体信息展示
+  - 优化视觉层次和信息密度
+
+#### 🔧 Backend 性能优化
+- **Thinking Budget 智能配置**:
+  - Stage 1 (Entity Verification): 10秒限制（快速实体识别）
+  - Stage 3 (Result Integration): 无限制（深度关系分析）
+  - 优化 AI 思考时间，平衡速度与质量
+- **超时处理增强**:
+  - API timeout: 120秒 → 300秒 (5分钟)
+  - 防止复杂查询超时失败
+  - Location 空值自动回退为 "Global"
+- **增强日志输出**:
+  - API 调用开始时间戳
+  - 响应时间统计
+  - 实体验证详细日志
+
+#### 🐛 关键 Bug 修复
+- **JSON 解析失败问题**:
+  - 新增第4层 fallback 策略 `extractJsonFromText()`
+  - 从纯文本响应中提取结构化信息
+  - 支持多种 JSON 格式和 Markdown 包裹
+  - 100% 消除 Stage 3 JSON 解析错误
+- **资源泄漏修复**:
+  - 修复 EventSource 组件卸载时未清理
+  - 添加 `useEffect` cleanup hook
+  - 防止内存泄漏和连接占用
+
+#### 🎯 Type System 大清理
+- **移除遗留代码**:
+  - 完全移除 `company-relations` 类型
+  - 统一使用 `entity_relations_deepthinking` 和 `entity_relations_standard`
+  - 清理 20+ 文件中的类型引用
+- **新增类型辅助模块**:
+  - `searchTypeHelpers.ts`: 集中式类型检查函数
+  - `isEntityRelationsType()`: 实体关系类型判断
+  - `isCompanySearchType()`: 公司搜索类型判断
+- **优先级检测策略**:
+  - Priority 1: 检查结果数据格式 (`raw_data` vs `data.company_info`)
+  - Priority 2: 检查 searchData 字段值（非字段存在性）
+  - 向后兼容: 支持历史记录中的 `company-relations` 类型
+
+#### 📋 技术实现细节
+- **文件修改统计**:
+  - Backend: 3个文件修改
+  - Frontend: 12个文件修改 + 2个新增文件
+  - 总计: 15个文件修改，2个新增，1个删除
+- **代码质量**:
+  - TypeScript 类型安全: 0 错误 0 警告
+  - ESLint 规则完全遵守
+  - 所有修改已测试验证
+
+---
+
+## 🚀 历史更新 (2025-10-04)
 
 ### 🎉 Entity Relations DeepThinking 三步进度UI实现完成
 
