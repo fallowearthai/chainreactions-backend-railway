@@ -120,6 +120,8 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
       num_results?: number;
       time_filter?: string;
       safe_search?: string;
+      start_date?: string;  // Format: YYYY-MM
+      end_date?: string;    // Format: YYYY-MM
     } = {}
   ): Promise<BrightDataSerpResponse> {
     try {
@@ -231,6 +233,39 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
     }
   }
 
+  /**
+   * Convert YYYY-MM format to Google date format MM/DD/YYYY
+   */
+  private convertToGoogleDateFormat(yearMonth: string, isEndDate: boolean): string {
+    if (!yearMonth || !yearMonth.match(/^\d{4}-\d{2}$/)) {
+      throw new Error(`Invalid date format: ${yearMonth}. Expected YYYY-MM format.`);
+    }
+
+    const [year, month] = yearMonth.split('-');
+    const yearNum = parseInt(year, 10);
+    const monthNum = parseInt(month, 10);
+
+    if (monthNum < 1 || monthNum > 12) {
+      throw new Error(`Invalid month: ${monthNum}. Must be between 1-12.`);
+    }
+
+    let day: number;
+    if (isEndDate) {
+      // Get last day of month
+      const lastDay = new Date(yearNum, monthNum, 0).getDate();
+      day = lastDay;
+    } else {
+      // First day of month
+      day = 1;
+    }
+
+    // Format as MM/DD/YYYY
+    const monthStr = monthNum.toString().padStart(2, '0');
+    const dayStr = day.toString().padStart(2, '0');
+
+    return `${monthStr}/${dayStr}/${year}`;
+  }
+
   private buildSearchUrl(
     engine: SerpEngine,
     query: string,
@@ -251,7 +286,17 @@ export class BrightDataSerpService implements EngineSelectionStrategy {
         params.set('hl', options.language || 'en');
         params.set('gl', options.country || 'us');
         if (options.num_results) params.set('num', options.num_results.toString());
-        if (options.time_filter) params.set('tbs', `qdr:${options.time_filter}`);
+
+        // Date filtering: Custom date range takes priority over time_filter
+        if (options.start_date && options.end_date) {
+          const googleStartDate = this.convertToGoogleDateFormat(options.start_date, false);
+          const googleEndDate = this.convertToGoogleDateFormat(options.end_date, true);
+          params.set('tbs', `cdr:1,cd_min:${googleStartDate},cd_max:${googleEndDate}`);
+          console.log(`📅 Google date filter applied: ${options.start_date} to ${options.end_date} → ${googleStartDate} to ${googleEndDate}`);
+        } else if (options.time_filter) {
+          params.set('tbs', `qdr:${options.time_filter}`);
+        }
+
         if (options.safe_search) params.set('safe', options.safe_search);
         break;
 

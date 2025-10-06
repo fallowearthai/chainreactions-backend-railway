@@ -20,6 +20,8 @@ export interface MetaPromptResult {
     search_operators: string[];
     relationship_likelihood: string;
   };
+  Start_Date?: string;  // Pass through from SearchRequest
+  End_Date?: string;    // Pass through from SearchRequest
 }
 
 export class WebSearchMetaPromptService {
@@ -77,7 +79,12 @@ export class WebSearchMetaPromptService {
         console.log(`   Likelihood: ${result.search_strategy.relationship_likelihood}`);
         console.log(`🎯 Stage 1 completed successfully in ${Date.now() - startTime}ms`);
 
-        return result as MetaPromptResult;
+        // Add date range to result if provided
+        return {
+          ...result,
+          Start_Date: request.Start_Date,
+          End_Date: request.End_Date
+        } as MetaPromptResult;
       } else {
         console.error(`❌ Gemini API response validation failed:`);
         validationResult.errors.forEach((error, index) => {

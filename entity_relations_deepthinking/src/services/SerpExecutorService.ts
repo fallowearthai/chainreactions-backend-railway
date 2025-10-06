@@ -44,6 +44,8 @@ interface SearchTask {
     country: string;
     language: string;
     timeRange?: string;
+    start_date?: string;  // Format: YYYY-MM
+    end_date?: string;    // Format: YYYY-MM
   };
 }
 
@@ -268,6 +270,14 @@ export class SerpExecutorService {
     const normalizedEngines = this.normalizeSearchEngines(search_strategy.source_engine);
     console.log(`📋 Generating search tasks for ${search_strategy.search_keywords.length} keywords across ${normalizedEngines.length} engines`);
 
+    // Extract date range from metaPromptResult (if available)
+    const startDate = metaPromptResult.Start_Date;
+    const endDate = metaPromptResult.End_Date;
+
+    if (startDate && endDate) {
+      console.log(`📅 Date filtering enabled: ${startDate} to ${endDate}`);
+    }
+
     // Generate tasks for each keyword on each normalized engine
     for (const keyword of search_strategy.search_keywords) {
       for (const engine of normalizedEngines) {
@@ -286,6 +296,8 @@ export class SerpExecutorService {
             num_results: 25, // Increased for better coverage
             country: validatedCountry,
             language: validatedLanguage,
+            start_date: startDate,
+            end_date: endDate
           }
         });
       }
@@ -553,7 +565,9 @@ export class SerpExecutorService {
         {
           country: task.options.country,
           language: task.options.language,
-          num_results: task.options.num_results
+          num_results: task.options.num_results,
+          start_date: task.options.start_date,
+          end_date: task.options.end_date
         }
       );
 
