@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChainReactions SaaS - 配色方案对比</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding: 2rem;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: #64748b;
+            font-size: 1.1rem;
+        }
+
+        .scheme-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .scheme-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e2e8f0;
+        }
+
+        .scheme-header {
+            padding: 1.5rem;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .scheme-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 0.5rem;
+        }
+
+        .scheme-description {
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+
+        .color-palette {
+            padding: 1.5rem;
+        }
+
+        .color-row {
+            display: flex;
+            margin-bottom: 1rem;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .color-swatch {
+            flex: 1;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 500;
+            font-size: 0.875rem;
+            position: relative;
+        }
+
+        .color-info {
+            position: absolute;
+            bottom: 4px;
+            left: 8px;
+            font-size: 0.75rem;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .demo-section {
+            padding: 1.5rem;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .demo-card {
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid;
+            transition: transform 0.2s ease;
+            cursor: pointer;
+        }
+
+        .demo-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .demo-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .demo-meta {
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+        }
+
+        .demo-stats {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .demo-button {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 0.875rem;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .comparison-note {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .comparison-note h3 {
+            color: #0369a1;
+            margin-bottom: 1rem;
+        }
+
+        .comparison-note ul {
+            color: #0c4a6e;
+            margin-left: 1.5rem;
+        }
+
+        .comparison-note li {
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>ChainReactions SaaS 配色方案对比</h1>
+            <p>多套配色方案展示，帮助选择最适合商业分析SaaS的颜色体系</p>
+        </div>
+
+        <div class="scheme-grid">
+            <!-- 方案一：用户提供的配色 -->
+            <div class="scheme-card">
+                <div class="scheme-header">
+                    <h3 class="scheme-title">方案一：深紫商务风</h3>
+                    <p class="scheme-description">用户提供 - 深紫主色调，专业稳重，适合企业级应用</p>
+                </div>
+
+                <div class="color-palette">
+                    <div class="color-row">
+                        <div class="color-swatch" style="background: #22010f; color: white;">
+                            Text
+                            <div class="color-info">#22010f</div>
+                        </div>
+                        <div class="color-swatch" style="background: #ffffff; color: #22010f; border: 1px solid #eee;">
+                            Background
+                            <div class="color-info" style="background: rgba(34, 1, 15, 0.7);">#ffffff</div>
+                        </div>
+                    </div>
+                    <div class="color-row">
+                        <div class="color-swatch" style="background: #19183B; color: white;">
+                            Primary
+                            <div class="color-info">#19183B</div>
+                        </div>
+                        <div class="color-swatch" style="background: #708993; color: white;">
+                            Secondary
+                            <div class="color-info">#708993</div>
+                        </div>
+                        <div class="color-swatch" style="background: #79bab0; color: white;">
+                            Accent
+                            <div class="color-info">#79bab0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="demo-section">
+                    <h4 style="margin-bottom: 1rem; color: #19183B;">Dataset卡片效果预览</h4>
+                    <div class="demo-card" style="background: #ffffff; border-color: #708993; color: #22010f;">
+                        <div class="demo-title" style="color: #19183B;">Chinese Sanction List</div>
+                        <div class="demo-meta" style="color: #708993;">System Dataset • Updated Sep 28, 2025</div>
+                        <div class="demo-stats">
+                            <div class="stat-item">
+                                <div class="stat-number" style="color: #19183B;">1,250</div>
+                                <div class="stat-label" style="color: #708993;">Entities</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-number" style="color: #79bab0;">45</div>
+                                <div class="stat-label" style="color: #708993;">Countries</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-number" style="color: #19183B;">892</div>
+                                <div class="stat-label" style="color: #708993;">Aliases</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="button-group">
+                        <button class="demo-button" style="background: #19183B; color: white;">创建 Dataset</button>
+                        <button class="demo-button" style="background: #708993; color: white;">编辑</button>
+                        <button class="demo-button" style="background: #79bab0; color: white;">下载</button>
+                        <button class="demo-button" style="background: #ffffff; color: #19183B; border: 1px solid #708993;">取消</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Claude建议的方案 -->
+            <div class="scheme-card">
+                <div class="scheme-header">
+                    <h3 class="scheme-title">Claude建议方案：蓝灰商务风</h3>
+                    <p class="scheme-description">AI推荐 - 现代蓝灰色调，清晰层次，符合SaaS行业标准</p>
+                </div>
+
+                <div class="color-palette">
+                    <div class="color-row">
+                        <div class="color-swatch" style="background: #0f172a; color: white;">
+                            Deep Navy
+                            <div class="color-info">#0f172a</div>
+                        </div>
+                        <div class="color-swatch" style="background: #1e293b; color: white;">
+                            Slate
+                            <div class="color-info">#1e293b</div>
+                        </div>
+                        <div class="color-swatch" style="background: #475569; color: white;">
+                            Medium
+                            <div class="color-info">#475569</div>
+                        </div>
+                    </div>
+                    <div class="color-row">
+                        <div class="color-swatch" style="background: #3b82f6; color: white;">
+                            Primary Blue
+                            <div class="color-info">#3b82f6</div>
+                        </div>
+                        <div class="color-swatch" style="background: #10b981; color: white;">
+                            Success
+                            <div class="color-info">#10b981</div>
+                        </div>
+                        <div class="color-swatch" style="background: #f8fafc; color: #0f172a; border: 1px solid #eee;">
+                            Background
+                            <div class="color-info" style="background: rgba(15, 23, 42, 0.7);">#f8fafc</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="demo-section">
+                    <h4 style="margin-bottom: 1rem; color: #0f172a;">Dataset卡片效果预览</h4>
+                    <div class="demo-card" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-color: #e2e8f0; color: #1e293b;">
+                        <div class="demo-title" style="color: #0f172a;">Chinese Sanction List</div>
+                        <div class="demo-meta" style="color: #64748b;">System Dataset • Updated Sep 28, 2025</div>
+                        <div class="demo-stats">
+                            <div class="stat-item">
+                                <div class="stat-number" style="color: #3b82f6;">1,250</div>
+                                <div class="stat-label" style="color: #64748b;">Entities</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-number" style="color: #10b981;">45</div>
+                                <div class="stat-label" style="color: #64748b;">Countries</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-number" style="color: #3b82f6;">892</div>
+                                <div class="stat-label" style="color: #64748b;">Aliases</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="button-group">
+                        <button class="demo-button" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white;">创建 Dataset</button>
+                        <button class="demo-button" style="background: #64748b; color: white;">编辑</button>
+                        <button class="demo-button" style="background: #10b981; color: white;">下载</button>
+                        <button class="demo-button" style="background: #f8fafc; color: #475569; border: 1px solid #e2e8f0;">取消</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="comparison-note">
+            <h3>配色方案对比分析</h3>
+            <ul>
+                <li><strong>方案一 (深紫商务风)</strong>：
+                    <ul>
+                        <li>✅ 独特的品牌感，深紫色显得专业神秘</li>
+                        <li>✅ 青绿色accent提供良好的视觉对比</li>
+                        <li>⚠️ 深色调可能在长时间使用时造成视觉疲劳</li>
+                        <li>⚠️ 对比度需要仔细调节以确保可读性</li>
+                    </ul>
+                </li>
+                <li><strong>Claude建议方案 (蓝灰商务风)</strong>：
+                    <ul>
+                        <li>✅ 符合行业标准，用户接受度高</li>
+                        <li>✅ 清晰的层次结构，优秀的可读性</li>
+                        <li>✅ 渐变效果增加现代感</li>
+                        <li>⚠️ 相对常见，品牌独特性较弱</li>
+                    </ul>
+                </li>
+            </ul>
+            <p style="margin-top: 1rem; font-weight: 500;">建议：继续添加更多配色方案进行对比，可以考虑结合两套方案的优点。</p>
+        </div>
+    </div>
+
+    <script>
+        // 添加交互效果
+        document.querySelectorAll('.demo-card').forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
+            });
+
+            card.addEventListener('mouseleave', function() {
+                this.style.boxShadow = '';
+            });
+        });
+
+        document.querySelectorAll('.demo-button').forEach(button => {
+            button.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-1px)';
+                this.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+            });
+
+            button.addEventListener('mouseleave', function() {
+                this.style.transform = '';
+                this.style.boxShadow = '';
+            });
+        });
+    </script>
+</body>
+</html>
