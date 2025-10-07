@@ -324,13 +324,55 @@ export class EnhancedSearchController {
       }
     }
 
+    // Validate custom keyword if provided
+    let customKeyword: string | undefined;
+    if (body.Custom_Keyword) {
+      customKeyword = this.validateCustomKeyword(body.Custom_Keyword);
+    }
+
     return {
       Target_institution: body.Target_institution,
       Risk_Entity: body.Risk_Entity,
       Location: body.Location || '',  // Make Location optional with empty string default
       Start_Date: body.Start_Date || '',
-      End_Date: body.End_Date || ''
+      End_Date: body.End_Date || '',
+      Custom_Keyword: customKeyword
     };
+  }
+
+  /**
+   * Validate custom keyword format and content
+   */
+  private validateCustomKeyword(keyword: any): string {
+    if (typeof keyword !== 'string') {
+      throw new Error('Custom_Keyword must be a string');
+    }
+
+    const trimmed = keyword.trim();
+
+    // Length validation
+    if (trimmed.length === 0) {
+      throw new Error('Custom_Keyword cannot be empty');
+    }
+
+    if (trimmed.length > 50) {
+      throw new Error('Custom_Keyword must be 50 characters or less');
+    }
+
+    // Word count validation (1-3 words)
+    const wordCount = trimmed.split(/\s+/).length;
+    if (wordCount > 3) {
+      throw new Error('Custom_Keyword must be 1-3 words only');
+    }
+
+    // Content validation - allow letters, numbers, spaces, and basic symbols
+    const validPattern = /^[a-zA-Z0-9\s\-_]+$/;
+    if (!validPattern.test(trimmed)) {
+      throw new Error('Custom_Keyword can only contain letters, numbers, spaces, hyphens, and underscores');
+    }
+
+    console.log(`✅ Custom keyword validated: "${trimmed}"`);
+    return trimmed;
   }
 
 

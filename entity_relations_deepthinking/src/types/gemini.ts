@@ -78,6 +78,7 @@ export interface SearchRequest {
   Location: string;
   Start_Date?: string;
   End_Date?: string;
+  Custom_Keyword?: string;
 }
 
 export interface SearchResult {

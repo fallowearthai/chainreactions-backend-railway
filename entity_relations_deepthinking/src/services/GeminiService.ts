@@ -121,7 +121,7 @@ export class GeminiService {
       topP: 0.95,
       topK: 10,
       thinkingConfig: {
-        thinkingBudget: -1
+        thinkingBudget: 24576  // API maximum limit
       }
     };
 

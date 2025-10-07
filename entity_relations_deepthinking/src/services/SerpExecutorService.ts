@@ -268,7 +268,21 @@ export class SerpExecutorService {
 
     // Map and normalize search engines
     const normalizedEngines = this.normalizeSearchEngines(search_strategy.source_engine);
-    console.log(`📋 Generating search tasks for ${search_strategy.search_keywords.length} keywords across ${normalizedEngines.length} engines`);
+
+    // Start with base keywords from AI strategy
+    let keywords = [...search_strategy.search_keywords];
+
+    // Add custom keyword combinations if provided
+    if (metaPromptResult.Custom_Keyword && metaPromptResult.Custom_Keyword.trim()) {
+      const customKeywords = this.generateCustomKeywordCombinations(metaPromptResult);
+      keywords = [...keywords, ...customKeywords];
+
+      console.log(`🎯 Custom keyword enhancement: +${customKeywords.length} keywords added`);
+      console.log(`   Original: ${search_strategy.search_keywords.length} keywords`);
+      console.log(`   Enhanced: ${keywords.length} keywords`);
+    }
+
+    console.log(`📋 Generating search tasks for ${keywords.length} keywords across ${normalizedEngines.length} engines`);
 
     // Extract date range from metaPromptResult (if available)
     const startDate = metaPromptResult.Start_Date;
@@ -279,7 +293,7 @@ export class SerpExecutorService {
     }
 
     // Generate tasks for each keyword on each normalized engine
-    for (const keyword of search_strategy.search_keywords) {
+    for (const keyword of keywords) {
       for (const engine of normalizedEngines) {
         // Validate and format country code for each engine
         const validatedCountry = this.validateAndFormatCountryCode(search_strategy.country_code, engine);
@@ -744,5 +758,39 @@ ${executionSummary.performanceMetrics ? `
   .map(([engine, rate]) => `${engine}: ${(rate * 100).toFixed(1)}%`)
   .join(', ')}` : ''}
     `.trim();
+  }
+
+  /**
+   * Generate custom keyword combinations based on dual-language strategy
+   * Strategy: Entity A + Entity B (bilingual) + Custom Keyword
+   */
+  private generateCustomKeywordCombinations(metaPromptResult: MetaPromptResult): string[] {
+    const customKeyword = metaPromptResult.Custom_Keyword!.trim();
+    const entityA = metaPromptResult.entity_a.original_name;
+    const entityB = metaPromptResult.entity_b.original_name;
+    const combinations: string[] = [];
+
+    // Detect if Entity B contains local language (non-ASCII characters)
+    const entityBHasLocalLanguage = /[^\x00-\x7F]/.test(entityB);
+
+    if (entityBHasLocalLanguage) {
+      // Dual-language combinations
+      combinations.push(`"${entityA}" "${entityB}" ${customKeyword}`);
+
+      // Add English fallback if original input available
+      if (metaPromptResult.Original_Risk_Entity) {
+        combinations.push(`"${entityA}" "${metaPromptResult.Original_Risk_Entity}" ${customKeyword}`);
+      }
+    } else {
+      // Single English combination
+      combinations.push(`"${entityA}" "${entityB}" ${customKeyword}`);
+    }
+
+    console.log(`🔍 Generated ${combinations.length} custom keyword combination(s):`);
+    combinations.forEach((combo, index) => {
+      console.log(`   ${index + 1}. ${combo}`);
+    });
+
+    return combinations;
   }
 }

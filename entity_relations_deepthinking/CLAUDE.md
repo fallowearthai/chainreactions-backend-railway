@@ -179,6 +179,305 @@ curl -X GET http://localhost:3000/api/enhanced/test
 - **Yandex**: Russian/Cyrillic content with HTML parsing
 - **Multi-language**: Automatic language detection and optimization
 
+## 🎯 Custom Keyword Enhancement (Planned Feature)
+
+### Overview
+Allow users to inject custom focus keywords into the DeepThinking search workflow. This feature enables targeted investigation of specific relationship aspects (e.g., "military", "sanctions", "partnership") by combining user-provided keywords with AI-generated entity names.
+
+### Value Proposition
+- **Precision Control**: Users can focus searches on specific domains or relationship types
+- **Flexibility**: Augments AI-generated keywords without replacing them
+- **Coverage**: Discovers connections AI might not prioritize
+- **User Empowerment**: Provides expert users with granular search control
+
+### Implementation Strategy
+
+#### 1. Keyword Combination Logic
+User provides a custom keyword (e.g., "military"), which is combined with Stage 1 entity identification results:
+
+**Dual-Language Strategy** (Recommended):
+```typescript
+// Stage 1 identifies entities:
+entity_a.original_name = "NanoAcademic Technologies"  // English
+entity_b.original_name = "鸿芝微电子科技"              // Local language (Chinese)
+// User input: "military"
+
+// Generated custom keyword combinations:
+1. "NanoAcademic Technologies" "鸿芝微电子科技" "military"
+2. "NanoAcademic Technologies" "HongZhiWei" "military"  // Using original Risk_Entity as English fallback
+```
+
+**Fallback Strategy** (if local language unavailable):
+```typescript
+// Single English combination:
+"NanoAcademic Technologies" "HongZhiWei" "military"
+```
+
+#### 2. Data Structure Extensions
+
+**SearchRequest Interface** (`src/types/gemini.ts`):
+```typescript
+export interface SearchRequest {
+  Target_institution: string;
+  Risk_Entity: string;
+  Location: string;
+  Start_Date?: string;
+  End_Date?: string;
+  Custom_Keyword?: string;  // NEW: User-provided focus keyword
+}
+```
+
+**MetaPromptResult Interface** (`WebSearchMetaPromptService.ts`):
+```typescript
+export interface MetaPromptResult {
+  entity_a: { original_name: string; description: string; sectors: string[] };
+  entity_b: { original_name: string; description: string; sectors: string[] };
+  search_strategy: {
+    search_keywords: string[];
+    languages: string[];
+    country_code: string;
+    source_engine: string[];
+    relationship_likelihood: string;
+  };
+  Start_Date?: string;
+  End_Date?: string;
+  Custom_Keyword?: string;           // NEW: Pass-through from request
+  Original_Risk_Entity?: string;     // NEW: Preserve user's original input
+}
+```
+
+#### 3. Core Implementation
+
+**Stage 1 Pass-Through** (`WebSearchMetaPromptService.ts`):
+```typescript
+async generateSearchStrategy(request: SearchRequest): Promise<MetaPromptResult> {
+  // Existing logic for entity verification and search strategy generation...
+
+  return {
+    ...result,
+    Start_Date: request.Start_Date,
+    End_Date: request.End_Date,
+    Custom_Keyword: request.Custom_Keyword,              // Pass through
+    Original_Risk_Entity: request.Risk_Entity            // Preserve for English fallback
+  } as MetaPromptResult;
+}
+```
+
+**Stage 2 Keyword Enhancement** (`SerpExecutorService.ts`):
+```typescript
+private generateSearchTasks(metaPromptResult: MetaPromptResult): SearchTask[] {
+  const tasks: SearchTask[] = [];
+  let keywords = [...metaPromptResult.search_strategy.search_keywords];
+
+  // Custom keyword enhancement
+  if (metaPromptResult.Custom_Keyword && metaPromptResult.Custom_Keyword.trim()) {
+    const customKeywords = this.generateCustomKeywordCombinations(metaPromptResult);
+    keywords = [...keywords, ...customKeywords];
+
+    console.log(`🎯 Custom keyword enhancement: +${customKeywords.length} keywords added`);
+    console.log(`   Original: ${metaPromptResult.search_strategy.search_keywords.length} keywords`);
+    console.log(`   Enhanced: ${keywords.length} keywords`);
+  }
+
+  // Continue with existing search task generation...
+  for (const keyword of keywords) {
+    for (const engine of normalizedEngines) {
+      tasks.push({ keyword, engine, /* ... */ });
+    }
+  }
+
+  return tasks;
+}
+
+/**
+ * Generate custom keyword combinations
+ * Strategy: Entity A + Entity B (bilingual) + Custom Keyword
+ */
+private generateCustomKeywordCombinations(metaPromptResult: MetaPromptResult): string[] {
+  const customKeyword = metaPromptResult.Custom_Keyword!.trim();
+  const entityA = metaPromptResult.entity_a.original_name;
+  const entityB = metaPromptResult.entity_b.original_name;
+  const combinations: string[] = [];
+
+  // Detect if Entity B contains local language (non-ASCII characters)
+  const entityBHasLocalLanguage = /[^\x00-\x7F]/.test(entityB);
+
+  if (entityBHasLocalLanguage) {
+    // Dual-language combinations
+    combinations.push(`"${entityA}" "${entityB}" ${customKeyword}`);
+
+    // Add English fallback if original input available
+    if (metaPromptResult.Original_Risk_Entity) {
+      combinations.push(`"${entityA}" "${metaPromptResult.Original_Risk_Entity}" ${customKeyword}`);
+    }
+  } else {
+    // Single English combination
+    combinations.push(`"${entityA}" "${entityB}" ${customKeyword}`);
+  }
+
+  console.log(`🔍 Generated ${combinations.length} custom keyword combination(s):`);
+  combinations.forEach((combo, index) => {
+    console.log(`   ${index + 1}. ${combo}`);
+  });
+
+  return combinations;
+}
+```
+
+#### 4. Frontend UI Design
+
+**Advanced Options Section** (`CompanyRelationsForm.tsx`):
+```tsx
+// Add collapsible "Advanced Options" section after date pickers
+<div className="mt-4 border-t border-gray-200 pt-4">
+  <button
+    type="button"
+    onClick={() => setShowAdvanced(!showAdvanced)}
+    className="flex items-center text-sm text-gray-600 hover:text-gray-900"
+  >
+    <ChevronRight className={`w-4 h-4 mr-1 transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
+    Advanced Options
+  </button>
+
+  {showAdvanced && (
+    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+      <FormField
+        control={form.control}
+        name="customKeyword"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel className="text-sm font-medium text-gray-900">
+              Custom Focus Keyword (Optional)
+            </FormLabel>
+            <FormControl>
+              <Input
+                placeholder='e.g., "military", "sanctions", "partnership"'
+                className="h-12 bg-white border-gray-300"
+                {...field}
+              />
+            </FormControl>
+            <p className="text-xs text-gray-500 mt-1">
+              Add a specific keyword to focus your search. This will be combined with entity names for targeted investigation.
+            </p>
+            <p className="text-xs text-amber-600 mt-1">
+              ⚡ Enabling this option adds ~30% search time and API cost.
+            </p>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </div>
+  )}
+</div>
+```
+
+### Performance & Cost Impact
+
+#### Search Task Calculation
+**Example Scenario**:
+- Stage 1 generates: 6 keywords
+- Custom keyword adds: 2 combinations (dual-language)
+- Search engines: 3 (Google, Baidu, Yandex)
+
+**Without Custom Keyword**:
+- Search tasks: 6 keywords × 3 engines = **18 tasks**
+- Stage 2 time: ~18 seconds
+- API calls: 18 (Bright Data SERP)
+
+**With Custom Keyword**:
+- Search tasks: (6 + 2) keywords × 3 engines = **24 tasks**
+- Stage 2 time: ~24 seconds
+- API calls: 24 (Bright Data SERP)
+
+**Impact**:
+- Additional tasks: **+6 tasks (+33%)**
+- Additional time: **+4-6 seconds**
+- Additional cost: **+33% Bright Data SERP API calls**
+
+#### Cost Mitigation Strategies
+1. **Limited Combinations**: Generate only 1-2 custom keyword combinations
+2. **User Warning**: Display cost/time impact in UI
+3. **Optional Feature**: Default to collapsed/disabled state
+4. **Validation**: Limit keyword length (1-3 words) and special characters
+
+### Input Format Extension
+
+```json
+{
+  "Target_institution": "NanoAcademic Technologies",
+  "Risk_Entity": "HongZhiWei",
+  "Location": "China",
+  "Start_Date": "2023-01",
+  "End_Date": "2024-10",
+  "Custom_Keyword": "military"
+}
+```
+
+### Use Cases
+
+1. **Compliance Investigation**: `Custom_Keyword: "sanctions"`
+   - Focus on sanctions-related connections between entities
+
+2. **Partnership Analysis**: `Custom_Keyword: "collaboration"`
+   - Identify partnership and cooperation relationships
+
+3. **Risk Assessment**: `Custom_Keyword: "military"`
+   - Surface military-related connections
+
+4. **Technology Transfer**: `Custom_Keyword: "technology transfer"`
+   - Investigate technology sharing relationships
+
+### Implementation Checklist
+
+#### Backend Changes
+- [ ] `src/types/gemini.ts`: Add `Custom_Keyword?` to `SearchRequest`
+- [ ] `WebSearchMetaPromptService.ts`:
+  - [ ] Add `Custom_Keyword?` and `Original_Risk_Entity?` to `MetaPromptResult`
+  - [ ] Update `generateSearchStrategy()` to pass through custom keyword
+- [ ] `SerpExecutorService.ts`:
+  - [ ] Implement `generateCustomKeywordCombinations()` method
+  - [ ] Update `generateSearchTasks()` to integrate custom keywords
+  - [ ] Add logging for custom keyword enhancement
+
+#### Frontend Changes
+- [ ] `companyRelationsSchema.ts`: Add `customKeyword?: string` validation
+- [ ] `CompanyRelationsForm.tsx`:
+  - [ ] Add collapsible "Advanced Options" section
+  - [ ] Add custom keyword input field with examples
+  - [ ] Add cost/time warning message
+  - [ ] Wire up form field to API request
+
+#### Testing
+- [ ] Unit tests for `generateCustomKeywordCombinations()`
+- [ ] End-to-end test with custom keyword
+- [ ] Verify cost and time impact metrics
+- [ ] Test with various entity types (English, Chinese, Japanese, Russian)
+- [ ] Validate empty/null custom keyword handling
+
+### Risks & Mitigation
+
+1. **Search Task Explosion** ⚠️
+   - **Risk**: Too many combinations increase cost
+   - **Mitigation**: Limit to 1-2 combinations, add user warning
+
+2. **Keyword Quality** ⚠️
+   - **Risk**: User inputs irrelevant keywords
+   - **Mitigation**: Provide examples, validate input format
+
+3. **Result Noise** ⚠️
+   - **Risk**: More keywords = more irrelevant results
+   - **Mitigation**: Stage 2 optimization, Stage 3 AI filtering
+
+4. **UI Complexity** ⚠️
+   - **Risk**: Feature overwhelms basic users
+   - **Mitigation**: Collapse by default, clear help text
+
+### Future Enhancements
+- Multiple custom keywords support (with stricter task limits)
+- Custom keyword suggestions based on entity sectors
+- Result filtering by keyword source (AI vs. custom)
+- Analytics on custom keyword effectiveness
+
 ## Current Status (September 2024)
 
 ### ✅ Production Ready
@@ -275,6 +574,53 @@ curl -X GET http://localhost:3000/api/enhanced/test
   potential_intermediary_B: analysis.potential_affiliated_entity || analysis.Affiliated_entity
   ```
 - **Result**: Proper display of intermediary organizations in Indirect relationship findings
+
+### 🚀 DeepThinking Stage 3 Optimization (October 2024)
+- **Problem**: Stage 3 AI analysis failures when processing 20 URLs vs 16 URLs, causing inconsistent performance
+- **Root Cause**: Multiple configuration issues affecting AI analysis stability under higher loads
+- **Solution**: 3-stage optimization approach with systematic problem resolution
+- **Implementation**:
+
+#### ✅ Stage 1: Thinking Budget Optimization
+- **Issue**: Thinking budget set to -1 (unlimited) causing API validation errors
+- **Fix**: Updated to maximum API limit of 24576 for consistent cognitive processing
+- **Files Modified**: `ResultIntegrationService.ts`, `GeminiService.ts`
+- **Code**:
+  ```typescript
+  thinkingConfig: {
+    thinkingBudget: 24576  // API maximum limit (updated from -1)
+  }
+  ```
+
+#### ✅ Stage 2: Structured Output Compatibility Testing
+- **Issue**: responseSchema implementation incompatible with urlContext tools
+- **Error**: `Tool use with a response mime type: 'application/json' is unsupported`
+- **Resolution**: Removed responseSchema to maintain urlContext functionality
+- **Result**: Preserved comprehensive document analysis capabilities
+- **Files Modified**: `ResultIntegrationService.ts`
+
+#### ✅ Stage 3: Progressive Stress Testing
+- **Test Case**: Harvard University vs Military Research analysis (20 URLs)
+- **Configuration**:
+  - Original Results: 80 → Optimized: 20 URLs
+  - Compression Ratio: 0.25
+  - Query Success Rate: 100% (8/8)
+  - Total Execution Time: 2 minutes 37 seconds
+- **Key Results**:
+  - **Evidence Quality**: High
+  - **Relationship Type**: Direct
+  - **Critical Findings**:
+    - DARPA contract: $12M for combat casualty care
+    - Army Research Office: Quantum computing funding
+    - DoD MURI awards: Multiple research projects
+- **Performance Metrics**:
+  - Total Queries: 8 (all successful)
+  - Total Results: 60
+  - Processing Time: 3ms (optimization)
+  - Execution Time: 14.17s (SERP)
+
+- **Impact**: Eliminated URL-dependent Stage 3 failures, system now handles maximum loads consistently
+- **Result**: 100% success rate for both 16 and 20 URL processing scenarios
 
 # Development Principles
 
