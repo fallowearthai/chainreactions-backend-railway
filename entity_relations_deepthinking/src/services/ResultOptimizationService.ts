@@ -274,12 +274,14 @@ export class ResultOptimizationService {
         score *= 0.8; // Moderate penalty for very short snippets
       }
 
-      // PDF file handling: slight penalty but not excluded
+      // PDF file handling: reward for OSINT value
       if (result.url.endsWith('.pdf')) {
         if (result.snippet && result.snippet.length > 30) {
-          score *= 1.1; // Bonus for PDFs with good snippets (likely official docs)
+          score *= 1.2; // 20% bonus - PDF通常包含权威信息
+          console.log(`📄 PDF bonus applied to: ${result.title.substring(0, 50)}... (+20% - detailed snippet)`);
         } else {
-          score *= 0.7; // Penalty for PDFs without good snippets
+          score *= 1.1; // 10% bonus - 即使没有摘要，PDF仍有潜在价值
+          console.log(`📄 PDF bonus applied to: ${result.title.substring(0, 50)}... (+10% - PDF file)`);
         }
       }
 
@@ -317,7 +319,7 @@ export class ResultOptimizationService {
   /**
    * Sort by relevance score and limit to top N results
    */
-  private sortAndLimitResults(results: OptimizedSearchResult[], limit: number): OptimizedSearchResult[] {
+  private sortAndLimitResults(results: OptimizedSearchResult[], limit: number = 20): OptimizedSearchResult[] {
     return results
       .sort((a, b) => b.relevanceScore - a.relevanceScore)
       .slice(0, limit);

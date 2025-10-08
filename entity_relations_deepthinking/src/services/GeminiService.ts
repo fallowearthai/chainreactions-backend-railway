@@ -121,7 +121,7 @@ export class GeminiService {
       topP: 0.95,
       topK: 10,
       thinkingConfig: {
-        thinkingBudget: 24576  // API maximum limit
+        thinkingBudget: 16384  // Optimized for stability with urlContext - validated through isolation testing
       }
     };
 
@@ -134,6 +134,14 @@ export class GeminiService {
 
     // Fallback location if empty
     const effectiveLocation = location && location.trim() !== '' ? location : 'Global';
+
+    console.log('🌍 Location processing:', {
+      originalLocation: location,
+      locationType: typeof location,
+      locationTrimmed: location?.trim(),
+      effectiveLocation,
+      isConverted: effectiveLocation !== location
+    });
 
     // User Prompt from prompt.md
     const userPrompt = `Analyze the following entity entities and generate an optimized relationship search strategy:

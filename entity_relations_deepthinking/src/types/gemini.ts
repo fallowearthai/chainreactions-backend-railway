@@ -109,7 +109,7 @@ export interface OSINTFinding {
   institution_A: string;
   relationship_type: 'Direct' | 'Indirect' | 'Significant Mention' | 'Unknown' | 'No Evidence Found';
   finding_summary: string;
-  potential_intermediary_B?: string;
+  potential_intermediary_B?: string;  // 保持向后兼容，但实际使用 affiliated_company
   sources: string[];
   key_evidence?: string[];
   evidence_quality?: 'high' | 'medium' | 'low';
@@ -170,7 +170,7 @@ export interface NormalSearchResult {
   institution_A: string;
   relationship_type: 'Direct' | 'Indirect' | 'Significant Mention' | 'Unknown' | 'No Evidence Found';
   finding_summary: string;
-  potential_intermediary_B: string[] | null;
+  potential_intermediary_B: string[] | null;  // Normal Search 保持数组格式
   sources: string[];
 }
 

@@ -200,12 +200,42 @@ export class EnhancedSearchController {
 
       // Use stable non-SSE method with manual progress updates
       stage3ProgressCallback('Starting AI analysis...');
-      const finalResult = await this.resultIntegrationService.integrateAndAnalyzeOptimized(
-        searchRequest,
-        metaPromptResult,
-        optimizedResults
-      );
-      stage3ProgressCallback('Analysis completed');
+
+      // 添加调试信息
+      console.log('🎯 About to call integrateAndAnalyzeOptimized');
+      console.log('📋 Request:', {
+        Target_institution: searchRequest.Target_institution,
+        Risk_Entity: searchRequest.Risk_Entity,
+        resultsCount: optimizedResults.consolidatedResults.length
+      });
+
+      let finalResult;
+      try {
+        finalResult = await this.resultIntegrationService.integrateAndAnalyzeOptimized(
+          searchRequest,
+          metaPromptResult,
+          optimizedResults
+        );
+        stage3ProgressCallback('Analysis completed');
+      } catch (stage3Error) {
+        console.error('❌ Stage 3 analysis failed:', stage3Error);
+
+        // 发送具体的Stage3错误信息
+        sendEvent({
+          stage: 'error',
+          status: 'failed',
+          error: 'Stage 3 AI analysis failed',
+          message: `AI analysis error: ${stage3Error instanceof Error ? stage3Error.message : 'Unknown error'}`,
+          timestamp: new Date().toISOString()
+        });
+
+        // 延迟关闭连接
+        setTimeout(() => {
+          res.end();
+        }, 100);
+
+        return; // 不继续到final completion
+      }
 
       const totalTime = Date.now() - startTime;
 
@@ -242,7 +272,10 @@ export class EnhancedSearchController {
         timestamp: new Date().toISOString()
       })}\n\n`);
 
-      res.end();
+      // 添加延迟以确保错误事件被完全接收
+      setTimeout(() => {
+        res.end();
+      }, 100); // 100ms延迟
     }
   }
 

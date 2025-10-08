@@ -8,7 +8,7 @@ export interface OSINTAnalysisResult {
   institution_A: string;
   relationship_type: 'Direct' | 'Indirect' | 'Significant Mention' | 'No Evidence Found';
   finding_summary: string;
-  potential_intermediary_B?: string;
+  affiliated_company?: string;
   sources: string[];
   key_evidence: string[];
   evidence_quality: 'high' | 'medium' | 'low';
@@ -36,21 +36,19 @@ Instructions:
    - Significant Mention: Both entities are referenced together in a context that suggests relevance, but no direct or indirect link is established.
    - No Evidence Found: No meaningful connection identified in the sources.
 3. For each finding, include:
-   - Numbered inline citations in the finding_summary in [1], [2], etc., matching the search results.
    - Specific details such as dates, transaction amounts, or named individuals when available.
    - Assessment of source credibility (e.g., official site, reputable news, academic publication).
    - Conservative classification: Only assign 'Direct' if there is unambiguous supporting evidence; for 'Indirect', name the intermediary.
 4. Structure your output as a JSON object with the following fields:
 {
   "relationship_type": "Direct|Indirect|Significant Mention|No Evidence Found",
-  "finding_summary": "Concise, evidence-based summary with numbered inline citations.",
-  "Affiliated_entity": "Name of affiliated entity if Indirect, else null",
+  "finding_summary": "Concise, evidence-based summary",
+  "affiliated_company": "Name of affiliated company if Direct, else null",
   "sources": ["List of URLs used as evidence"],
   "confidence_score": Numeric value between 0 and 1 reflecting certainty,
   "evidence_quality": "high|medium|low",
   "key_evidence": ["Bullet points of the strongest supporting facts"]
 }
-
 Prioritize factual accuracy, source attribution, and clarity in your analysis. Do not speculate or infer beyond the evidence presented.`;
 
   constructor() {
@@ -68,7 +66,7 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
   ): Promise<SearchResult> {
 
     try {
-      console.log('🧠 Starting AI analysis with optimized results...');
+      // Starting AI analysis with optimized results
       const riskEntities = request.Risk_Entity.split(',').map(entity => entity.trim());
       const analysisResults: OSINTAnalysisResult[] = [];
 
@@ -157,171 +155,134 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
   }
 
   /**
-   * Parse JSON with multiple fallback strategies
+   * Extract JSON answer from thinking response parts
+   * CRITICAL: Fixes the issue where we were incorrectly taking thinking content as the final answer
+   */
+  private extractJsonAnswerFromParts(parts: any[]): string | null {
+    // Strategy 1: Look for explicit thought flags (new API format)
+    const nonThinkingParts = parts.filter(part => part.thought === false);
+    if (nonThinkingParts.length > 0) {
+      return nonThinkingParts[nonThinkingParts.length - 1].text; // Take the last non-thinking part
+    }
+
+    // Strategy 2: Look for JSON content in parts (current API format)
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i];
+      if (!part.text) continue;
+
+      const text = part.text.trim();
+      if (text.startsWith('```json') || text.startsWith('{') || text.includes('"relationship_type"')) {
+        return text;
+      }
+    }
+
+    // Strategy 3: Look for non-thinking content by text analysis
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i];
+      if (!part.text) continue;
+
+      const text = part.text.trim();
+      if (this.isThinkingContent(text)) {
+        continue; // Skip thinking content
+      }
+
+      // If not thinking content, assume it's the answer
+      return text;
+    }
+
+    // Strategy 4: Fallback to last part (historical behavior)
+    if (parts.length > 0) {
+      const lastPart = parts[parts.length - 1];
+      if (lastPart.text) {
+        return lastPart.text;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Check if text content appears to be thinking content
+   */
+  private isThinkingContent(text: string): boolean {
+    const thinkingIndicators = [
+      'let me analyze',
+      'let me consider',
+      'let me think',
+      'i need to analyze',
+      'i should consider',
+      'first, i will',
+      'next, i will',
+      'then, i will',
+      'finally, i will',
+      'step by step',
+      'to analyze this',
+      'to perform this analysis',
+      'thinking about',
+      'considering the',
+      'based on the analysis',
+      'after reviewing',
+      'let me check'
+    ];
+
+    const lowerText = text.toLowerCase();
+
+    // Check for thinking indicators
+    for (const indicator of thinkingIndicators) {
+      if (lowerText.includes(indicator)) {
+        return true;
+      }
+    }
+
+    // Check for narrative thinking style
+    if (lowerText.length > 200 &&
+        (lowerText.includes('i ') || lowerText.includes('let me') || lowerText.includes('i need to'))) {
+      // Long narrative text with first-person perspective is likely thinking
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Parse JSON with simplified fallback strategy
+   * Based on test analysis: Gemini returns proper JSON, so complex parsing is unnecessary
    */
   private parseJsonWithFallback(rawResponse: string, entityName: string): any {
-    // Strategy 1: Clean and parse
+    // Strategy 1: Extract JSON from response and parse
     let cleaned = this.cleanAndRepairJsonResponse(rawResponse);
 
     try {
       return JSON.parse(cleaned);
     } catch (error1) {
-      console.warn(`❌ JSON parse failed for ${entityName} (attempt 1):`, error1);
-      console.log(`📝 Cleaned response: ${cleaned.substring(0, 500)}...`);
+      console.warn(`❌ JSON parse failed for ${entityName}:`, error1);
+      console.log(`📝 Cleaned response (first 500 chars): ${cleaned.substring(0, 500)}...`);
 
-      // Strategy 2: Attempt repair and parse
+      // Strategy 2: Basic JSON repair for common formatting issues
       try {
         const repaired = this.attemptJsonRepair(cleaned);
         console.log(`📝 Repaired response (first 500 chars): ${repaired.substring(0, 500)}...`);
         return JSON.parse(repaired);
       } catch (error2) {
-        console.warn(`❌ JSON parse failed for ${entityName} (attempt 2):`, error2);
+        console.warn(`❌ JSON repair failed for ${entityName}:`, error2);
+        console.error(`❌ FULL RAW RESPONSE for ${entityName}:`, rawResponse);
 
-        // Strategy 3: Aggressive string cleaning for JSON
-        try {
-          const aggressiveCleaned = this.aggressiveJsonCleaning(cleaned);
-          console.log(`📝 Aggressively cleaned response (first 500 chars): ${aggressiveCleaned.substring(0, 500)}...`);
-          return JSON.parse(aggressiveCleaned);
-        } catch (error3) {
-          console.warn(`❌ JSON parse failed for ${entityName} (attempt 3):`, error3);
-
-          // Strategy 4: Extract information from text and reconstruct JSON
-          try {
-            console.log(`🔧 Attempting text extraction strategy for ${entityName}...`);
-            const reconstructedJson = this.extractJsonFromText(rawResponse, entityName);
-            console.log(`✅ Successfully reconstructed JSON from text for ${entityName}`);
-            return reconstructedJson;
-          } catch (error4) {
-            console.warn(`❌ Text extraction failed for ${entityName} (attempt 4):`, error4);
-
-            // Strategy 5: Log full response and throw detailed error
-            console.error(`❌ FULL RAW RESPONSE for ${entityName}:`, rawResponse);
-            console.error(`❌ FULL CLEANED RESPONSE for ${entityName}:`, cleaned);
-
-            throw new Error(`JSON parsing failed for ${entityName}. Original error: ${error1 instanceof Error ? error1.message : String(error1)}. Repair attempt error: ${error2 instanceof Error ? error2.message : String(error2)}. Aggressive cleaning error: ${error3 instanceof Error ? error3.message : String(error3)}. Text extraction error: ${error4 instanceof Error ? error4.message : String(error4)}`);
-          }
-        }
+        // Strategy 3: Return structured error response instead of throwing
+        console.log(`🔧 Returning error response for ${entityName} to maintain workflow stability`);
+        return {
+          relationship_type: "No Evidence Found",
+          finding_summary: `Analysis failed for ${entityName} due to response parsing error. Original error: ${error1 instanceof Error ? error1.message : String(error1)}`,
+          affiliated_company: null,
+          sources: [],
+          confidence_score: 0.0,
+          evidence_quality: "low",
+          key_evidence: [`JSON parsing failed: ${error1 instanceof Error ? error1.message : String(error1)}`]
+        };
       }
     }
   }
 
-  /**
-   * Extract structured information from text response and reconstruct JSON
-   * Fallback strategy when Gemini returns text analysis instead of JSON
-   */
-  private extractJsonFromText(textResponse: string, entityName: string): any {
-    console.log(`🔍 Extracting information from text for ${entityName}...`);
-
-    // Extract relationship type
-    let relationship_type = 'No Evidence Found';
-    const relationshipMatch = textResponse.match(/relationship type should be ["']?(Direct|Indirect|Significant Mention|No Evidence Found)["']?/i) ||
-                             textResponse.match(/relationship.*is.*["']?(Direct|Indirect|Significant Mention|No Evidence Found)["']?/i) ||
-                             textResponse.match(/\*\*Relationship Type:\*\*\s*["']?(Direct|Indirect|Significant Mention|No Evidence Found)["']?/i);
-    if (relationshipMatch) {
-      relationship_type = relationshipMatch[1];
-    }
-
-    // Extract finding summary
-    let finding_summary = '';
-    const summaryMatch = textResponse.match(/\*\*Finding Summary:\*\*\s*([\s\S]*?)(?=\*\*|$)/i) ||
-                        textResponse.match(/finding[_ ]summary[:\s]+([\s\S]*?)(?=\n\*\*|$)/i);
-    if (summaryMatch) {
-      finding_summary = summaryMatch[1].trim().replace(/\n+/g, ' ');
-    }
-
-    // Extract affiliated entity / intermediary
-    let Affiliated_entity = null;
-    const affiliatedMatch = textResponse.match(/\*\*Affiliated Entity:\*\*\s*([^\n]+)/i) ||
-                           textResponse.match(/affiliated[_ ]entity[:\s]+([^\n]+)/i) ||
-                           textResponse.match(/potential[_ ]intermediary[:\s]+([^\n]+)/i);
-    if (affiliatedMatch) {
-      Affiliated_entity = affiliatedMatch[1].trim();
-      // Clean up any markdown or extra formatting
-      Affiliated_entity = Affiliated_entity.replace(/\*\*/g, '').replace(/["']/g, '').trim();
-      if (Affiliated_entity.toLowerCase() === 'null' || Affiliated_entity.toLowerCase() === 'none') {
-        Affiliated_entity = null;
-      }
-    }
-
-    // Extract sources
-    const sources: string[] = [];
-    const sourcesMatch = textResponse.match(/\*\*Sources:\*\*\s*([\s\S]*?)(?=\n\*\*|$)/i) ||
-                        textResponse.match(/sources?[:\s]+([\s\S]*?)(?=\n\*\*|$)/i);
-    if (sourcesMatch) {
-      const sourceText = sourcesMatch[1];
-      // Extract URLs using regex
-      const urlMatches = sourceText.match(/https?:\/\/[^\s\)]+/g);
-      if (urlMatches) {
-        sources.push(...urlMatches);
-      }
-    }
-
-    // Extract key evidence
-    const key_evidence: string[] = [];
-    const evidenceMatch = textResponse.match(/\*\*Key Evidence:\*\*\s*([\s\S]*?)(?=\n\*\*|$)/i) ||
-                         textResponse.match(/key[_ ]evidence[:\s]+([\s\S]*?)(?=\n\*\*|$)/i);
-    if (evidenceMatch) {
-      const evidenceText = evidenceMatch[1];
-      // Split by bullet points or line breaks
-      const evidenceItems = evidenceText.split(/\n\s*[\*\-•]\s*/);
-      key_evidence.push(...evidenceItems.filter(item => item.trim().length > 0).map(item => item.trim()));
-    }
-
-    // Extract confidence score
-    let confidence_score = 0.5;
-    const confidenceMatch = textResponse.match(/\*\*Confidence Score:\*\*\s*([\d.]+)/i) ||
-                           textResponse.match(/confidence[_ ]score[:\s]+([\d.]+)/i);
-    if (confidenceMatch) {
-      confidence_score = parseFloat(confidenceMatch[1]);
-    }
-
-    // Extract evidence quality
-    let evidence_quality: 'high' | 'medium' | 'low' = 'medium';
-    const qualityMatch = textResponse.match(/\*\*Evidence Quality:\*\*\s*(high|medium|low)/i) ||
-                        textResponse.match(/evidence[_ ]quality[:\s]+(high|medium|low)/i);
-    if (qualityMatch) {
-      evidence_quality = qualityMatch[1].toLowerCase() as 'high' | 'medium' | 'low';
-    }
-
-    // Construct JSON object
-    const reconstructedJson = {
-      relationship_type,
-      finding_summary: finding_summary || `Analysis for ${entityName} completed.`,
-      Affiliated_entity,
-      sources,
-      confidence_score,
-      evidence_quality,
-      key_evidence: key_evidence.length > 0 ? key_evidence : ['Analysis based on available search results']
-    };
-
-    console.log(`📋 Reconstructed JSON for ${entityName}:`, JSON.stringify(reconstructedJson, null, 2));
-
-    return reconstructedJson;
-  }
-
-  /**
-   * Aggressive JSON cleaning for problematic responses
-   */
-  private aggressiveJsonCleaning(jsonString: string): string {
-    let cleaned = jsonString;
-
-    // Remove all control characters and non-printable characters
-    cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
-
-    // Fix string values that contain unescaped newlines
-    cleaned = cleaned.replace(/("finding_summary"\s*:\s*"[^"]*?)[\r\n]+([^"]*?")/g, '$1 $2');
-    cleaned = cleaned.replace(/("potential_affiliated_entity"\s*:\s*"[^"]*?)[\r\n]+([^"]*?")/g, '$1 $2');
-
-    // Remove any remaining newlines within string values
-    cleaned = cleaned.replace(/("\s*:\s*"[^"]*)\r?\n([^"]*")/g, '$1 $2');
-
-    // Fix common JSON structure issues
-    cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1'); // trailing commas
-    cleaned = cleaned.replace(/([}\]])([{\[])/g, '$1,$2'); // missing commas between objects/arrays
-
-    return cleaned;
-  }
-
+  
   /**
    * Optimized version that works with pre-scored and filtered results
    */
@@ -350,12 +311,8 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
     };
 
     try {
-      console.log(`🔗 Gemini API Request Details for ${riskEntity} (Non-SSE):`);
-      console.log(`   - Prompt length: ${analysisPrompt.length} chars`);
-      console.log(`   - Number of URLs for urlContext: ${relevantResults.length}`);
-      console.log(`   - System instruction length: ${this.OSINT_ANALYST_SYSTEM_PROMPT.length} chars`);
-      console.log(`   - 🧪 Structured Output: DISABLED (urlContext tool incompatibility)`);
-      console.log(`   - ⚠️  Removed responseSchema to enable urlContext tool functionality`);
+      const apiStartTime = Date.now();
+      console.log(`📡 Calling Gemini API for ${riskEntity} (${relevantResults.length} sources)...`);
 
       const response = await this.geminiService.generateContent(
         [{
@@ -364,43 +321,36 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
         systemInstruction,
         [{
           urlContext: {}
-        }], // URL context tool for document analysis
+        }], // URL context tool for document analysis - CORE FEATURE
         {
           temperature: 0,
           thinkingConfig: {
-            thinkingBudget: 24576  // API maximum limit
+            thinkingBudget: 24576  // Maximum API limit for enhanced reasoning
           }
-          // Note: responseSchema and responseMimeType removed due to urlContext tool incompatibility
+          // Note: responseSchema and responseMimeType removed due to tool incompatibility
           // Error: "Tool use with a response mime type: 'application/json' is unsupported"
         }
       );
 
-      console.log(`📨 Gemini API Response Details for ${riskEntity} (Non-SSE):`);
-      console.log(`   - Response received: ${!!response}`);
-      console.log(`   - Candidates exists: ${!!response.candidates}`);
-      console.log(`   - Candidates count: ${response.candidates?.length || 0}`);
-      if (response.candidates && response.candidates.length > 0) {
-        console.log(`   - First candidate exists: ${!!response.candidates[0]}`);
-        console.log(`   - Content exists: ${!!response.candidates[0].content}`);
-        console.log(`   - Parts exists: ${!!response.candidates[0].content?.parts}`);
-        console.log(`   - Parts count: ${response.candidates[0].content?.parts?.length || 0}`);
-        console.log(`   - Finish reason: ${response.candidates[0].finishReason || 'N/A'}`);
-        console.log(`   - Index: ${response.candidates[0].index || 0}`);
-      }
+      const apiEndTime = Date.now();
+      console.log(`📡 Gemini API completed for ${riskEntity} (${apiEndTime - apiStartTime}ms)`);
 
-      if (!response.candidates || !response.candidates[0] || !response.candidates[0].content || !response.candidates[0].content.parts || !response.candidates[0].content.parts[0]) {
+      if (!response || !response.candidates || !response.candidates[0] || !response.candidates[0].content || !response.candidates[0].content.parts || !response.candidates[0].content.parts[0]) {
         console.error(`❌ Invalid Gemini API Response Structure for ${riskEntity} (Non-SSE):`);
         console.error(`   Full response object:`, JSON.stringify(response, null, 2));
         throw new Error('Invalid Gemini API response structure: Missing candidates or content');
       }
 
-      let rawResponse = response.candidates[0].content.parts[0].text;
+      // 🔧 CRITICAL FIX: Properly extract JSON answer from thinking responses
+      // The response may contain multiple parts: thinking content + JSON answer
+      // We need to identify which part contains the actual JSON answer
+      let rawResponse = this.extractJsonAnswerFromParts(response.candidates[0].content.parts);
+
       if (!rawResponse) {
-        throw new Error('Empty response from Gemini API');
+        throw new Error('No JSON answer found in Gemini API response');
       }
 
-      console.log(`📝 Raw Gemini response length: ${rawResponse.length} chars`);
-      console.log(`📝 Raw response preview: ${rawResponse.substring(0, 200)}...`);
+      console.log(`📝 Extracted JSON answer (${rawResponse.length} chars) from ${response.candidates[0].content.parts.length} parts`);
 
       // Use enhanced JSON parsing with fallback strategies
       const analysis = this.parseJsonWithFallback(rawResponse, riskEntity);
@@ -410,7 +360,7 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
         institution_A: request.Target_institution,
         relationship_type: analysis.relationship_type || 'No Evidence Found',
         finding_summary: analysis.finding_summary || 'No significant evidence found.',
-        potential_intermediary_B: analysis.potential_affiliated_entity || analysis.Affiliated_entity,
+        affiliated_company: analysis.affiliated_company || analysis.potential_affiliated_entity || analysis.Affiliated_entity,
         sources: analysis.sources || [],
         key_evidence: analysis.key_evidence || [],
         evidence_quality: analysis.evidence_quality || 'medium',
@@ -465,7 +415,7 @@ Analysis Summary:
     request: SearchRequest,
     riskEntity: string,
     relevantResults: OptimizedSearchResult[],
-    metaPromptResult: MetaPromptResult
+    _metaPromptResult: MetaPromptResult
   ): string {
 
     const resultsText = relevantResults
@@ -500,7 +450,7 @@ TASK: Analyze the search results above and determine the relationship between th
       institution_A: result.institution_A,
       relationship_type: result.relationship_type,
       finding_summary: result.finding_summary,
-      potential_intermediary_B: result.potential_intermediary_B,
+      potential_intermediary_B: result.affiliated_company, // 映射新字段名到前端兼容字段名
       sources: result.sources,
       key_evidence: result.key_evidence,
       evidence_quality: result.evidence_quality
