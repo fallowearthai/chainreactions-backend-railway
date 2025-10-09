@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { SearchRequest, SearchResult } from '../types/gemini';
-import { WebSearchMetaPromptService } from '../services/WebSearchMetaPromptService';
-import { SerpExecutorService } from '../services/SerpExecutorService';
-import { ResultIntegrationService } from '../services/ResultIntegrationService';
+import { WebSearchMetaPromptService } from '../services/deepthinking/WebSearchMetaPromptService';
+import { SerpExecutorService } from '../services/deepthinking/SerpExecutorService';
+import { ResultIntegrationService } from '../services/deepthinking/ResultIntegrationService';
 
 export class EnhancedSearchController {
   private metaPromptService: WebSearchMetaPromptService;
