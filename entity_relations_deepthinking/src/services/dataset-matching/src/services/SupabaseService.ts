@@ -511,47 +511,57 @@ export class SupabaseService {
         }
       }
 
-      // Strategy 3: Alias matches (check aliases array)
+      // Strategy 3: Database-level alias matching (scalable - uses PostgreSQL array operators)
       if (allMatches.length < 5) {
-        const { data: allEntries, error: aliasError } = await this.client
-          .from('dataset_entries')
-          .select(`
-            organization_name,
-            category,
-            aliases,
-            datasets!inner(name, updated_at, is_active)
-          `)
-          .eq('datasets.is_active', true)
-          .not('aliases', 'is', null)
-          .limit(50);
+        // Query database directly for each search query variation using PostgreSQL array containment
+        for (const query of searchQueries) {
+          const queryLower = query.toLowerCase();
 
-        if (aliasError) throw aliasError;
+          // Use PostgreSQL array contains operator for efficient database-level matching
+          const { data: aliasMatches, error: aliasError } = await this.client
+            .from('dataset_entries')
+            .select(`
+              organization_name,
+              category,
+              aliases,
+              datasets!inner(name, updated_at, is_active)
+            `)
+            .eq('datasets.is_active', true)
+            .filter('aliases', 'cs', `{${query}}`)  // PostgreSQL array contains - case sensitive
+            .limit(5);
 
-        // Check aliases in application layer (more efficient than complex SQL)
-        if (allEntries && allEntries.length > 0) {
-          allEntries.forEach((entry: any) => {
-            if (entry.aliases && Array.isArray(entry.aliases)) {
-              for (const alias of entry.aliases) {
-                if (alias) {
-                  const aliasLower = alias.toLowerCase();
-                  // Check against all search queries (original, base name, acronym)
-                  for (const query of searchQueries) {
-                    if (aliasLower === query.toLowerCase()) {
-                      allMatches.push({
-                        dataset_name: entry.datasets.name,
-                        organization_name: entry.organization_name,
-                        match_type: 'alias',
-                        category: entry.category,
-                        confidence_score: 0.95,
-                        last_updated: entry.datasets.updated_at
-                      });
-                      return; // Found alias match, no need to check more entries
-                    }
+          if (aliasError) throw aliasError;
+
+          // Process alias matches from database query
+          if (aliasMatches && aliasMatches.length > 0) {
+            aliasMatches.forEach((entry: any) => {
+              // Verify case-insensitive match (since PostgreSQL cs operator is case-sensitive)
+              if (entry.aliases && Array.isArray(entry.aliases)) {
+                const hasMatch = entry.aliases.some((alias: string) =>
+                  alias && alias.toLowerCase() === queryLower
+                );
+
+                if (hasMatch) {
+                  // Check if already added to avoid duplicates
+                  const isDuplicate = allMatches.some(existing =>
+                    existing.organization_name === entry.organization_name &&
+                    existing.dataset_name === entry.datasets.name
+                  );
+
+                  if (!isDuplicate) {
+                    allMatches.push({
+                      dataset_name: entry.datasets.name,
+                      organization_name: entry.organization_name,
+                      match_type: 'alias',
+                      category: entry.category,
+                      confidence_score: 0.95,
+                      last_updated: entry.datasets.updated_at
+                    });
                   }
                 }
               }
-            }
-          });
+            });
+          }
         }
       }
 
