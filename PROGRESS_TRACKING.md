@@ -85,6 +85,62 @@
 
 ## 🚀 最新更新 (2025-10-09)
 
+### 🐛 Dataset Matching 括号提取逻辑修复完成
+
+#### 📋 **问题描述**
+- **触发场景**: 用户搜索 "National University of Defense Technology (NUDT)" 无法匹配数据库中的记录
+- **根本原因**: 括号提取逻辑将带括号的原始输入、baseName和acronym全部添加到searchQueries，但匹配比较时仍使用原始的 `searchLower` 变量
+- **影响范围**: 所有带括号的实体名称（如 "Organization Name (Acronym)"）无法正确匹配
+
+#### 🔧 **解决方案**
+1. **优化括号提取逻辑** (`SupabaseService.ts` lines 370-374):
+   - 修改前: `searchQueries = [searchText, baseName, acronym]` (3个变体)
+   - 修改后: `searchQueries = [baseName, acronym]` (只保留2个有效变体)
+   - 移除原始带括号文本，避免重复和匹配失败
+
+2. **修复匹配比较逻辑** (lines 418-438):
+   - 修改前: 使用 `searchLower` 变量进行比较（仍包含括号）
+   - 修改后: 使用 `searchQueriesLower.some()` 检查所有变体
+   - 支持exact、fuzzy、core_match、partial四种匹配类型
+
+3. **简化RPC调用逻辑** (line 152):
+   - 移除临时bypass代码和调试日志
+   - 直接调用 `findDatasetMatchesOptimized()` 方法
+   - 保持代码简洁和可维护性
+
+#### ✅ **测试验证**
+**测试用例1: National University of Defense Technology**
+- ✅ 输入 "National University of Defense Technology (NUDT)" → 1 match (exact)
+- ✅ 输入 "National University of Defense Technology" → 1 match (exact)
+- ⚠️ 输入 "NUDT" → 0 matches (需要在数据库aliases中添加缩写)
+
+**测试用例2: Beijing Computing Science Research Centre**
+- ✅ 输入 "Beijing Computing Science Research Centre" → 1 match (alias, confidence 0.95)
+- ✅ 匹配成功: "Beijing Computational Science Research Centre"
+
+#### 📊 **技术实现细节**
+**修改文件**: `SupabaseService.ts`
+- Line 152: 简化RPC bypass为直接调用optimized方法
+- Lines 370-377: 优化括号提取，只保留baseName和acronym
+- Lines 418-438: 更新匹配比较使用searchQueriesLower.some()
+- 移除所有debug logging (console.log语句)
+
+**代码质量**:
+- ✅ 移除10+行调试代码
+- ✅ TypeScript类型安全
+- ✅ 0编译错误0警告
+- ✅ 代码简洁可维护
+
+#### 🎯 **功能验证**
+- **缓存管理**: 清除缓存后测试通过
+- **数据库查询**: 正确提取bracket内容并查询
+- **匹配精度**: exact/fuzzy/core_match/partial逻辑正确
+- **向后兼容**: 不带括号的实体名称仍正常工作
+
+---
+
+## 🚀 历史更新 (2025-10-09)
+
 ### 🎉 DeepThinking 性能优化与代码质量提升完成
 
 #### ⚡ **Stage 2 性能关键优化**

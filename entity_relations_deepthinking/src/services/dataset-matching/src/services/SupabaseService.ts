@@ -148,43 +148,8 @@ export class SupabaseService {
         return this.findDatasetMatchesWithLocation(searchText, searchLocation, options);
       }
 
-      // Try the enhanced function first
-      const { data, error } = await this.client.rpc('find_dataset_matches_enhanced', {
-        search_text: searchText
-      });
-
-      if (error) {
-        console.warn('Enhanced function failed, using optimized fallback:', error.message);
-        return this.findDatasetMatchesOptimized(searchText, undefined, options);
-      }
-
-      const processingTime = this.getProcessingTime(startTime);
-
-      // Map the database results to our type
-      const matches: DatasetMatch[] = (data || []).map((item: any) => ({
-        dataset_name: item.dataset_name,
-        organization_name: item.organization_name,
-        match_type: item.match_type as DatasetMatch['match_type'],
-        category: item.category,
-        confidence_score: item.confidence_score,
-        last_updated: item.last_updated,
-        quality_metrics: {
-          specificity_score: 0.8,
-          length_ratio: 1.0,
-          word_count_ratio: 1.0,
-          match_coverage: 1.0
-        }
-      }));
-
-      return {
-        success: true,
-        data: matches,
-        metadata: {
-          processing_time_ms: processingTime,
-          cache_used: false,
-          algorithm_version: '1.0.0'
-        }
-      };
+      // Use optimized matching with bracket extraction support
+      return this.findDatasetMatchesOptimized(searchText, undefined, options);
 
     } catch (error: any) {
       const dbError = createDatabaseError(
@@ -405,8 +370,11 @@ export class SupabaseService {
       if (acronymMatch && acronymMatch[1] && acronymMatch[2]) {
         const baseName = acronymMatch[1].trim();
         const acronym = acronymMatch[2].trim();
-        searchQueries = [searchText, baseName, acronym];
+        searchQueries = [baseName, acronym]; // Use baseName and acronym only
       }
+
+      // Create lowercase versions for comparison
+      const searchQueriesLower = searchQueries.map(q => q.toLowerCase().trim());
 
       // Strategy 1: Exact and partial name matches (fastest - uses index)
       let query = this.client
@@ -420,10 +388,18 @@ export class SupabaseService {
         .eq('datasets.is_active', true);
 
       // Apply search conditions for all query variations
+      // CRITICAL FIX: URL-encode parentheses to prevent Supabase from treating () as SQL grouping operators
       if (searchQueries.length === 1) {
-        query = query.ilike('organization_name', `%${searchQueries[0]}%`);
+        const encoded = searchQueries[0].replace(/\(/g, '%28').replace(/\)/g, '%29');
+        query = query.ilike('organization_name', `%${encoded}%`);
       } else {
-        const orConditions = searchQueries.map(q => `organization_name.ilike.%${q}%`).join(',');
+        const orConditions = searchQueries
+          .map(q => {
+            // URL encode parentheses in each query
+            const encoded = q.replace(/\(/g, '%28').replace(/\)/g, '%29');
+            return `organization_name.ilike.%${encoded}%`;
+          })
+          .join(',');
         query = query.or(orConditions);
       }
 
@@ -431,30 +407,33 @@ export class SupabaseService {
 
       if (exactError) throw exactError;
 
-      // Process matches with better logic
+      // Process matches with better logic - check against all search query variations
       if (exactMatches && exactMatches.length > 0) {
         exactMatches.forEach((entry: any) => {
           const orgNameLower = entry.organization_name.toLowerCase();
           let matchType: DatasetMatch['match_type'] = 'partial';
           let confidence = 0.6;
 
-          // Exact match
-          if (orgNameLower === searchLower) {
+          // Check exact match against any search query variation
+          if (searchQueriesLower.some(queryLower => orgNameLower === queryLower)) {
             matchType = 'exact';
             confidence = 1.0;
           }
-          // Fuzzy match (remove spaces)
-          else if (orgNameLower.replace(/\s+/g, '') === searchLower.replace(/\s+/g, '')) {
+          // Fuzzy match (remove spaces) - check all variations
+          else if (searchQueriesLower.some(queryLower =>
+            orgNameLower.replace(/\s+/g, '') === queryLower.replace(/\s+/g, ''))) {
             matchType = 'fuzzy';
             confidence = 0.9;
           }
-          // Core match (remove parentheses and spaces)
-          else if (orgNameLower.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, '') === searchLower.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, '')) {
+          // Core match (remove parentheses and spaces) - check all variations
+          else if (searchQueriesLower.some(queryLower =>
+            orgNameLower.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, '') === queryLower.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ''))) {
             matchType = 'core_match';
             confidence = 0.8;
           }
-          // Partial match
-          else if (orgNameLower.includes(searchLower) || searchLower.includes(orgNameLower)) {
+          // Partial match - check all variations
+          else if (searchQueriesLower.some(queryLower =>
+            orgNameLower.includes(queryLower) || queryLower.includes(orgNameLower))) {
             matchType = 'partial';
             confidence = 0.6;
           }
@@ -482,11 +461,17 @@ export class SupabaseService {
           `)
           .eq('datasets.is_active', true);
 
-        // Apply same search logic as Strategy 1
+        // Apply same search logic as Strategy 1 (with URL encoding for parentheses)
         if (searchQueries.length === 1) {
-          partialQuery = partialQuery.ilike('organization_name', `%${searchQueries[0]}%`);
+          const encoded = searchQueries[0].replace(/\(/g, '%28').replace(/\)/g, '%29');
+          partialQuery = partialQuery.ilike('organization_name', `%${encoded}%`);
         } else {
-          const orConditions = searchQueries.map(q => `organization_name.ilike.%${q}%`).join(',');
+          const orConditions = searchQueries
+            .map(q => {
+              const encoded = q.replace(/\(/g, '%28').replace(/\)/g, '%29');
+              return `organization_name.ilike.%${encoded}%`;
+            })
+            .join(',');
           partialQuery = partialQuery.or(orConditions);
         }
 
@@ -494,22 +479,22 @@ export class SupabaseService {
 
         if (partialError) throw partialError;
 
-        // Process partial matches
+        // Process partial matches - check against all search query variations
         if (partialMatches && partialMatches.length > 0) {
           partialMatches.forEach((entry: any) => {
             const orgNameLower = entry.organization_name.toLowerCase();
-
-            // Check for fuzzy match (remove spaces)
-            const normalizedOrg = orgNameLower.replace(/\s+/g, '');
-            const normalizedSearch = searchLower.replace(/\s+/g, '');
-
             let matchType: DatasetMatch['match_type'] = 'partial';
             let confidence = 0.6;
 
-            if (normalizedOrg === normalizedSearch) {
+            // Check for fuzzy match (remove spaces) against all variations
+            if (searchQueriesLower.some(queryLower =>
+              orgNameLower.replace(/\s+/g, '') === queryLower.replace(/\s+/g, ''))) {
               matchType = 'fuzzy';
               confidence = 0.9;
-            } else if (orgNameLower.includes(searchLower) || searchLower.includes(orgNameLower)) {
+            }
+            // Check partial match against all variations
+            else if (searchQueriesLower.some(queryLower =>
+              orgNameLower.includes(queryLower) || queryLower.includes(orgNameLower))) {
               matchType = 'partial';
               confidence = 0.6;
             }
