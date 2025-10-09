@@ -132,9 +132,9 @@ export class SerpExecutorService {
       // Step 1: Execute standard search strategy
       const standardResults = await this.executeSearchStrategy(request, metaPromptResult);
 
-      // Step 2: Apply optimization
-      console.log('🔧 Applying result optimization...');
-      const optimizedResults = this.optimizationService.optimizeResults(standardResults);
+      // Step 2: Apply optimization with entity information for dynamic keyword extraction
+      console.log('🔧 Applying result optimization with dynamic keyword extraction...');
+      const optimizedResults = this.optimizationService.optimizeResults(standardResults, metaPromptResult);
 
       console.log(`✅ Optimization complete: ${standardResults.allResults.reduce((sum, r) => sum + r.results.length, 0)} → ${optimizedResults.consolidatedResults.length} results`);
 
@@ -161,10 +161,10 @@ export class SerpExecutorService {
       // Step 1: Execute standard search strategy with progress
       const standardResults = await this.executeSearchStrategyWithProgress(request, metaPromptResult, progressCallback);
 
-      // Step 2: Apply optimization
-      progressCallback('Optimizing and consolidating results...');
-      console.log('🔧 Applying result optimization...');
-      const optimizedResults = this.optimizationService.optimizeResults(standardResults);
+      // Step 2: Apply optimization with entity information for dynamic keyword extraction
+      progressCallback('Optimizing and consolidating results with dynamic keywords...');
+      console.log('🔧 Applying result optimization with dynamic keyword extraction...');
+      const optimizedResults = this.optimizationService.optimizeResults(standardResults, metaPromptResult);
 
       console.log(`✅ Optimization complete: ${standardResults.allResults.reduce((sum, r) => sum + r.results.length, 0)} → ${optimizedResults.consolidatedResults.length} results`);
       progressCallback(`Optimization complete: ${optimizedResults.consolidatedResults.length} consolidated results`);
@@ -495,7 +495,7 @@ export class SerpExecutorService {
     for (let i = 0; i < tasks.length; i += concurrency) {
       const batch = tasks.slice(i, i + concurrency);
 
-      const batchPromises = batch.map(task => this.executeSingleSearchWithTimeout(task, 30000));
+      const batchPromises = batch.map(task => this.executeSingleSearchWithTimeout(task, 25000));  // Timeout: 25 seconds (reduced from 30s for faster failure recovery)
       const batchResults = await Promise.allSettled(batchPromises);
 
       // Process results
@@ -607,110 +607,32 @@ export class SerpExecutorService {
   }
 
   private consolidateResults(serpResults: SerpExecutionResult[], metaPromptResult: MetaPromptResult): any[] {
-    const resultMap = new Map<string, any>();
-    const seenUrls = new Set<string>();
+    const allResults: any[] = [];
 
-    // Collect and deduplicate results
+    // Basic consolidation - only filter out invalid results
+    // All optimization (deduplication, scoring, sorting) is handled by ResultOptimizationService
     for (const serpResult of serpResults) {
       for (const result of serpResult.results) {
         const url = result.url || result.link;
-        if (!url) continue;
 
-        // Filter out image search results
-        if (this.isImageSearchResult(url)) continue;
+        // Only basic filtering
+        if (!url) continue;  // Skip results without URL
+        if (this.isImageSearchResult(url)) continue;  // Skip image search results
 
-        const normalizedUrl = this.normalizeUrl(url);
-        if (seenUrls.has(normalizedUrl)) continue;
-
-        seenUrls.add(normalizedUrl);
-
-        // Enhanced result with metadata
-        const enhancedResult = {
+        // Add basic metadata
+        allResults.push({
           ...result,
           searchMetadata: {
             originalKeyword: serpResult.searchKeyword,
-            engine: serpResult.engine,
-            relevanceScore: this.calculateEnhancedRelevanceScore(result, serpResult, metaPromptResult)
+            engine: serpResult.engine
           }
-        };
-
-        resultMap.set(normalizedUrl, enhancedResult);
+        });
       }
     }
 
-    // Sort by relevance and return top results
-    const consolidatedResults = Array.from(resultMap.values());
-    return consolidatedResults
-      .sort((a, b) => b.searchMetadata.relevanceScore - a.searchMetadata.relevanceScore)
-      .slice(0, 60);
-  }
-
-  private calculateEnhancedRelevanceScore(result: any, serpResult: SerpExecutionResult, metaPromptResult: MetaPromptResult): number {
-    const keyword = serpResult.searchKeyword.toLowerCase();
-    const title = (result.title || '').toLowerCase();
-    const snippet = (result.snippet || '').toLowerCase();
-    const url = (result.url || '').toLowerCase();
-
-    let score = 0;
-
-    // Entity matching
-    if (this.containsEntityNames(title + ' ' + snippet, metaPromptResult)) score += 5;
-
-    // Title relevance
-    if (title.includes(keyword.split(' ')[0])) score += 3;
-
-    // Snippet relevance
-    if (snippet.includes(keyword.split(' ')[0])) score += 2;
-
-    // Domain authority
-    if (url.includes('.edu') || url.includes('.gov')) score += 2;
-    if (url.includes('.org')) score += 1;
-    if (url.includes('.cn') && keyword.includes('china')) score += 1;
-
-    // Penalty for social media
-    if (url.includes('twitter.com') || url.includes('facebook.com')) score -= 1;
-
-    // Search type bonus
-    if (serpResult.searchKeyword.includes('"') || serpResult.searchKeyword.includes('AND')) {
-      score += 2;
-    }
-
-    return Math.max(score, 0);
-  }
-
-  private containsEntityNames(content: string, metaPromptResult: MetaPromptResult): boolean {
-    // Extract entity names from Stage 1 results
-    const entityAName = metaPromptResult.entity_a.original_name.toLowerCase();
-    const entityBName = metaPromptResult.entity_b.original_name.toLowerCase();
-
-    // Create entity terms for matching
-    const entityTerms: string[] = [];
-
-    // Add full entity names
-    entityTerms.push(entityAName, entityBName);
-
-    // Add significant words from entity names (longer than 3 characters)
-    const entityAWords = entityAName.split(/\s+/).filter(word => word.length > 3);
-    const entityBWords = entityBName.split(/\s+/).filter(word => word.length > 3);
-    entityTerms.push(...entityAWords, ...entityBWords);
-
-    // Check if content contains any entity terms
-    return entityTerms.some(term => content.includes(term));
-  }
-
-  private normalizeUrl(url: string): string {
-    try {
-      const urlObj = new URL(url);
-      // Remove tracking parameters
-      urlObj.searchParams.delete('utm_source');
-      urlObj.searchParams.delete('utm_medium');
-      urlObj.searchParams.delete('utm_campaign');
-      urlObj.searchParams.delete('fbclid');
-      urlObj.searchParams.delete('gclid');
-      return urlObj.toString();
-    } catch {
-      return url;
-    }
+    // Return all results without deduplication, sorting, or limiting
+    // ResultOptimizationService will handle advanced processing
+    return allResults;
   }
 
   /**

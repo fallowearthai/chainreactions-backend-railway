@@ -1,4 +1,5 @@
 import { AggregatedSerpResults } from './SerpExecutorService';
+import { MetaPromptResult } from './WebSearchMetaPromptService';
 
 export interface OptimizedSearchResult {
   title: string;
@@ -41,7 +42,7 @@ export class ResultOptimizationService {
    * Main optimization method that removes duplicates, filters invalid results,
    * and compresses the data structure
    */
-  optimizeResults(serpResults: AggregatedSerpResults): OptimizedSerpResults {
+  optimizeResults(serpResults: AggregatedSerpResults, metaPromptResult: MetaPromptResult): OptimizedSerpResults {
     const startTime = Date.now();
     const originalCount = serpResults.allResults.reduce((sum, result) => sum + result.results.length, 0);
 
@@ -54,8 +55,8 @@ export class ResultOptimizationService {
     // Step 3: Filter out invalid/low-quality results
     const filteredResults = this.filterInvalidResults(deduplicatedResults);
 
-    // Step 4: Calculate relevance scores
-    const scoredResults = this.calculateRelevanceScores(filteredResults);
+    // Step 4: Calculate relevance scores with dynamic keywords from metaPromptResult
+    const scoredResults = this.calculateRelevanceScores(filteredResults, metaPromptResult);
 
     // Step 5: Sort by relevance and limit results
     const finalResults = this.sortAndLimitResults(scoredResults, 20);
@@ -235,8 +236,9 @@ export class ResultOptimizationService {
   /**
    * Calculate relevance scores based on multiple factors
    */
-  private calculateRelevanceScores(results: Array<any>): OptimizedSearchResult[] {
-    const targetKeywords = ['nanoacademic', 'hongzhiwei', '鸿之微', 'partnership', 'collaboration', '合作'];
+  private calculateRelevanceScores(results: Array<any>, metaPromptResult: MetaPromptResult): OptimizedSearchResult[] {
+    // Dynamically extract keywords from entity information
+    const targetKeywords = this.extractTargetKeywords(metaPromptResult);
 
     return results.map(result => {
       let score = 0;
@@ -323,6 +325,42 @@ export class ResultOptimizationService {
     return results
       .sort((a, b) => b.relevanceScore - a.relevanceScore)
       .slice(0, limit);
+  }
+
+  /**
+   * Extract target keywords dynamically from entity information
+   * Replaces hardcoded keywords for better generalization
+   */
+  private extractTargetKeywords(metaPromptResult: MetaPromptResult): string[] {
+    const keywords: string[] = [];
+
+    // Entity A full name
+    keywords.push(metaPromptResult.entity_a.original_name.toLowerCase());
+
+    // Entity B full name
+    keywords.push(metaPromptResult.entity_b.original_name.toLowerCase());
+
+    // Entity A name words (longer than 3 characters)
+    const entityAWords = metaPromptResult.entity_a.original_name
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(word => word.length > 3);
+    keywords.push(...entityAWords);
+
+    // Entity B name words (longer than 3 characters)
+    const entityBWords = metaPromptResult.entity_b.original_name
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(word => word.length > 3);
+    keywords.push(...entityBWords);
+
+    // Generic relationship keywords (multilingual)
+    keywords.push(
+      'partnership', 'collaboration', 'cooperation', 'agreement', 'contract',
+      '合作', '伙伴', '协议', '合同', 'alliance', 'joint venture'
+    );
+
+    return keywords;
   }
 
   /**
