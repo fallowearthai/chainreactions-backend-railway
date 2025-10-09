@@ -315,18 +315,21 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
       console.log(`📡 Calling Gemini API for ${riskEntity} (${relevantResults.length} sources)...`);
 
       // Build tools for analysis
-      // DISABLED: urlContext tools temporarily disabled due to API configuration issues
-      // TODO: Research correct urlContext tool specification and re-enable
-      const tools: GeminiTool[] = []; // No tools for now - urlContext configuration needs research
+      // ✅ ENABLED: urlContext tool re-enabled with correct API specification
+      // Reference: https://ai.google.dev/gemini-api/docs/url-context
+      // Format: { urlContext: {} } allows AI to analyze full webpage/PDF content from URLs
+      const tools: GeminiTool[] = [
+        { urlContext: {} }  // Enables comprehensive document analysis
+      ];
 
-      console.log(`📡 Calling Gemini API for ${riskEntity} (${relevantResults.length} sources)...`);
+      console.log(`📡 Calling Gemini API for ${riskEntity} (${relevantResults.length} sources) with URL Context enabled...`);
 
       const response = await this.geminiService.generateContent(
         [{
           parts: [{ text: analysisPrompt }]
         }],
         systemInstruction,
-        tools, // DISABLED: urlContext temporarily until correct spec found
+        tools, // ✅ ENABLED: urlContext now active with correct specification
         {
           temperature: 0,
           thinkingConfig: {

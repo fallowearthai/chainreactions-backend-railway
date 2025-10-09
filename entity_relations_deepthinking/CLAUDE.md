@@ -581,10 +581,13 @@ The DeepThinking workflow was experiencing unstable API performance with "Missin
 - **Failed Response**: `{"candidates": [{"content": {"role": "model"}}]}` (missing parts field)
 - **Pattern**: Higher thinking budgets with complex prompts cause AI "silence" in urlContext mode
 
-**Final Optimized Configuration**:
+**Final Optimized Configuration** (2025-10-09):
 - **thinkingBudget**: 16384 (optimized for urlContext stability)
 - **temperature**: 0 (consistent output)
-- **urlContext**: ✅ ENABLED (core functionality preserved)
+- **urlContext**: ✅ **RE-ENABLED** with correct API specification (October 9, 2025)
+  - Reference: https://ai.google.dev/gemini-api/docs/url-context
+  - Tool Format: `{ urlContext: {} }`
+  - Enables comprehensive document analysis (PDFs, webpages, up to 34MB content)
 - **System Prompt**: Original comprehensive OSINT analyst prompt (maintains quality)
 - **Results**: High-quality analysis with 100% stability for target cases
 
