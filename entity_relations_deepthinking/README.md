@@ -1,21 +1,48 @@
-# Gemini OSINT Search API
+# ChainReactions OSINT Platform
 
-A powerful Node.js/TypeScript implementation of an OSINT (Open-Source Intelligence) search tool that investigates institutional relationships and risk associations using advanced AI and multi-search engine architecture.
+A comprehensive Node.js/TypeScript implementation of a unified OSINT (Open-Source Intelligence) platform that combines multiple advanced search and analysis services for institutional relationship investigation and risk assessment.
 
-## 🚀 Features
+## 🚀 Unified Services Architecture
 
-### Enhanced Multi-Engine Architecture
-- **Meta Prompting System**: Two-stage AI analysis for intelligent search strategy generation
-- **Multi-Search Engine Integration**: Supports Google, Baidu, and Yandex engines
-- **Geographic Engine Selection**: Automatically selects appropriate engines based on location and risk category
-- **Result Aggregation**: Deduplicates and scores results from multiple search engines
-- **MCP Tools Integration**: Planned integration with specialized OSINT tools
+### 🔬 Entity Relations (DeepThinking Mode)
+- **3-Stage OSINT Workflow**: Meta-prompting → Multi-engine SERP → AI Analysis
+- **Google Gemini 2.5 Flash**: Advanced AI analysis with thinking mode and URL context
+- **Bright Data SERP API**: Multi-engine search (Google, Baidu, Yandex)
+- **Geographic Engine Selection**: Automatic engine optimization based on location
+- **Real-time Progress**: Server-Sent Events (SSE) for live workflow updates
 
-### Original Gemini Search
-- **Google Gemini 2.5 Flash**: Advanced AI analysis with Google Search grounding
-- **Multi-language Support**: Automatically searches in English and native languages
-- **Time Range Filtering**: Precise date constraints for targeted searches
-- **Structured Output**: JSON-formatted relationship analysis with source citations
+### ⚡ Entity Relations (Normal Search Mode)
+- **Google Web Search Integration**: Direct Gemini googleSearch tool usage
+- **Fast Processing**: 10-30 seconds typical response time
+- **Multi-language Support**: Automatic English + native language searches
+- **Time Range Filtering**: Optional date constraints for targeted searches
+- **N8N Compatible**: Drop-in replacement for existing workflows
+
+### 🔍 Entity Search Service
+- **Linkup API Integration**: Professional business intelligence search
+- **Smart Domain Filtering**: Excludes 12+ low-quality sources (Wikipedia, Reddit, etc.)
+- **Multi-strategy JSON Parsing**: 4-layer fallback mechanism for reliable responses
+- **Custom Domain Exclusion**: User-defined domain filtering support
+
+### 🎯 Dataset Matching Service
+- **Advanced Algorithms**: Jaro-Winkler, Levenshtein, N-gram similarity matching
+- **8 Match Types**: exact, alias, fuzzy, partial, core_match, core_acronym, word_match
+- **Database-level Optimization**: PostgreSQL array operations for scalable performance
+- **Intelligent Bracket Processing**: Handles entity names with acronyms (e.g., "Organization (ACRONYM)")
+- **Batch Processing**: Support for up to 100 entities per request
+
+### 🔍 Dataset Search Service
+- **SSE Streaming**: Real-time search progress updates
+- **Dual Linkup API**: Parallel processing with 2 API keys for 84% speed improvement
+- **Canadian NRO Database**: 103 Canadian organizations integrated
+- **Test/Production Modes**: Token-saving test mode for development
+- **Intelligent JSON Parsing**: Structured data extraction from Linkup responses
+
+### 📊 Data Management Service
+- **CSV/XML/JSON Upload**: Smart parsing with automatic field mapping
+- **Supabase Integration**: Complete dataset CRUD operations
+- **Priority Field Detection**: Intelligent organization_name, aliases, countries identification
+- **Metadata Preservation**: Complete dataset information management
 
 ## 🛠 Technology Stack
 
@@ -33,7 +60,7 @@ A powerful Node.js/TypeScript implementation of an OSINT (Open-Source Intelligen
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd gemini-osint-search
+cd chainreactions-osint-platform
 
 # Install dependencies
 npm install
@@ -50,6 +77,19 @@ npm run build        # Compile TypeScript to JavaScript
 npm start            # Start production server
 npm run type-check   # Run TypeScript type checking
 npm run lint         # Run code quality checks
+npm test             # Run tests
+```
+
+### Production Deployment
+```bash
+# Build the application
+npm run build
+
+# Start production server
+npm start
+
+# The unified platform will be available on port 3000
+# All services are accessible through unified API endpoints
 ```
 
 ## 🔧 Configuration
@@ -68,22 +108,58 @@ All configuration is centralized in the `.env` file:
 
 See `.env.example` for complete configuration options.
 
-## 📡 API Endpoints
+## 📡 Unified API Endpoints
 
-### Original Gemini Search
-- **POST** `/api/search` - Main institutional relationship analysis
-- **GET** `/api/health` - System health check
+All services are unified on port 3000 with consistent API structure.
 
-### Multi-Search Engine System
-- **GET** `/api/multisearch/health` - Search engine health check
-- **POST** `/api/multisearch/search` - Execute multi-engine search
-- **GET** `/api/multisearch/test` - Quick test with sample query
-- **POST** `/api/multisearch/compare` - Compare results across engines
-- **GET** `/api/multisearch/engines` - Test engine selection logic
+### 🔬 Entity Relations (DeepThinking Mode)
+- **POST** `/api/enhanced/search` - Complete 3-stage OSINT workflow
+- **GET** `/api/enhanced/search-stream` - SSE streaming 3-stage workflow
+- **POST** `/api/enhanced/strategy` - Stage 1 only (meta-prompting)
+- **GET** `/api/enhanced/test` - Test with sample data
+- **GET** `/api/enhanced/info` - Workflow information
 
-### Meta Prompting System
-- **POST** `/api/meta/strategy` - Generate search strategy for entities
-- **GET** `/api/meta/test` - Test meta prompting with sample data
+### ⚡ Entity Relations (Normal Search Mode)
+- **POST** `/api/normal-search` - Fast Google Web Search analysis
+- **GET** `/api/normal-search/info` - Service information
+
+### 🔍 Entity Search Service
+- **POST** `/api/entity-search` - Professional business intelligence search
+- **GET** `/api/entity-search/test` - Test Linkup API connection
+
+### 🎯 Dataset Matching Service
+- **POST** `/api/dataset-matching/match` - Single entity matching
+- **POST** `/api/dataset-matching/batch` - Batch entity matching
+- **GET** `/api/dataset-matching/health` - Matching service health
+- **GET** `/api/dataset-matching/stats` - Service statistics
+- **GET** `/api/dataset-matching/test` - Test matching with sample entity
+- **GET** `/api/dataset-matching/cache/clear` - Clear cache
+- **POST** `/api/dataset-matching/cache/warmup` - Warmup cache
+
+### 🔍 Dataset Search Service
+- **POST** `/api/dataset-search/stream` - Start streaming search
+- **DELETE** `/api/dataset-search/stream/:execution_id` - Cancel search
+- **GET** `/api/dataset-search/stream/:execution_id/status` - Get search status
+- **GET** `/api/dataset-search/nro-stats` - Get NRO statistics
+- **GET** `/api/dataset-search/health` - Service health check
+- **GET** `/api/dataset-search/test` - Service test endpoint
+
+### 📊 Data Management Service
+- **GET** `/api/data-management/datasets` - List all datasets
+- **POST** `/api/data-management/datasets` - Create new dataset
+- **GET** `/api/data-management/datasets/:id` - Get dataset details
+- **PUT** `/api/data-management/datasets/:id` - Update dataset
+- **DELETE** `/api/data-management/datasets/:id` - Delete dataset
+- **POST** `/api/data-management/datasets/:id/upload` - Upload CSV file
+- **GET** `/api/data-management/datasets/:id/entries` - Get dataset entries
+- **GET** `/api/data-management/datasets/:id/stats` - Dataset statistics
+- **GET** `/api/data-management/datasets/:id/export` - Export dataset
+- **POST** `/api/data-management/import/nro-targets` - Import NRO targets
+- **GET** `/api/data-management/health` - Service health check
+
+### 🔧 System Endpoints
+- **GET** `/api/health` - Unified health check for all services
+- **GET** `/api` - Service information and endpoint overview
 
 ## 🧪 Example Usage
 

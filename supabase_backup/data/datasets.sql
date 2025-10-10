@@ -1,3 +1,0 @@
--- Datasets table data export
-INSERT INTO public.datasets (id, name, description, is_system, created_by, created_at, updated_at, is_active) VALUES ('23c3384e-cb30-428b-92bf-7667c18bc365', 'Canadian Named Research Organizations', '', true, '4a2f144c-62b7-4b3f-8c52-554175ff7bff', '2025-06-08 21:12:10.945779+00', '2025-06-08 21:12:10.945779+00', true);
-INSERT INTO public.datasets (id, name, description, is_system, created_by, created_at, updated_at, is_active) VALUES ('b0e9100d-fc2d-46b8-8c94-49f7de005368', ' Canadian Listed Terrorist Entities', '', true, '4a2f144c-62b7-4b3f-8c52-554175ff7bff', '2025-06-09 03:22:40.484795+00', '2025-06-09 03:22:40.484795+00', true);

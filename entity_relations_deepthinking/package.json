@@ -1,7 +1,7 @@
 {
-  "name": "gemini-test",
-  "version": "1.0.0",
-  "description": "",
+  "name": "chainreactions-osint-platform",
+  "version": "3.0.0",
+  "description": "Comprehensive OSINT platform with unified Entity Relations, Entity Search, Dataset Matching, Dataset Search, and Data Management services",
   "main": "index.js",
   "scripts": {
     "start": "node dist/app.js",
