@@ -4,27 +4,229 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Node.js/TypeScript implementation of a 3-stage OSINT (Open-Source Intelligence) search tool that combines WebSearch meta-prompting, SERP API execution, and AI analysis for investigating institutional relationships and risk associations.
+**ChainReactions Unified OSINT Platform v3.0** - A comprehensive Node.js/TypeScript implementation that unifies 6 OSINT services into a single SaaS platform. This project combines advanced search capabilities, AI analysis, and data management for investigating institutional relationships and risk associations.
 
-## 3-Stage Architecture
+### 🚀 Unified Services Architecture (Port 3000)
 
-### Stage 1: WebSearch Meta-Prompting
-- **Intelligence Gathering**: Uses WebSearch to gather entity information and relationship context
-- **Search Strategy Generation**: AI analyzes web search results to create precise keyword combinations
-- **Geographic Optimization**: Selects appropriate search engines based on location (e.g., Baidu for China)
-- **Multi-language Support**: Generates search terms in both English and native languages
+The platform integrates 6 services into a unified architecture:
 
-### Stage 2: SERP API Execution
-- **Multi-Engine Search**: Parallel execution across Google, Baidu, Yandex via Bright Data
-- **Concurrency Control**: Rate-limited parallel searches to manage API costs
-- **Result Aggregation**: Deduplication and relevance scoring of search results
-- **Geographic Targeting**: Engine selection optimized for target location
+1. **Entity Relations** (DeepThinking + Normal modes) - 3-stage OSINT workflow
+2. **Entity Search** - Linkup API professional business intelligence
+3. **Dataset Matching** - Advanced entity matching with multiple algorithms
+4. **Data Management** - CSV upload and intelligent parsing
+5. **Dataset Search** - SSE streaming search with dual API processing
+6. **Demo Email Service** - Gmail SMTP integration for demo requests **(NEW)**
 
-### Stage 3: AI Analysis & Integration
-- **Relationship Analysis**: Gemini analyzes aggregated search results for relationship evidence
-- **Structured Output**: Produces standardized OSINT findings format
-- **Source Attribution**: Maps evidence to specific sources with citation tracking
-- **Confidence Scoring**: Assesses reliability based on multi-engine consensus
+### 🐳 Docker Deployment Ready
+
+- **Production-ready Docker configuration** with multi-stage builds
+- **Redis caching service** for enhanced performance
+- **Complete environment configuration** management
+- **Health monitoring** and logging system
+
+### 📊 Recent Major Updates (October 2025)
+
+#### ✅ **Demo Email Service Integration (2025-10-10)**
+- **Unified Architecture**: Successfully integrated Port 3001 email service into unified Port 3000 platform
+- **Complete Integration**: Added `/api/demo-request` and `/api/test-email` endpoints
+- **Health Monitoring**: Email service integrated into unified health check system
+- **Docker Ready**: Full Docker deployment configuration with Redis service
+- **Testing Verified**: All 6 services operational with comprehensive testing
+
+#### ✅ **Port Unification Complete**
+- **Single Port**: All services now unified on Port 3000
+- **Simplified Architecture**: From 6 separate ports to 1 unified entry point
+- **Frontend Compatibility**: Single backend URL for all services
+- **Production Ready**: Enterprise-grade deployment configuration
+
+## Technology Stack
+
+- **Runtime**: Node.js with TypeScript
+- **Framework**: Express.js for API handling
+- **AI**: Google Gemini 2.5 Flash with thinking mode and URL context tools
+- **Search**: Bright Data SERP API (multi-engine)
+- **WebSearch**: Built-in WebSearch functionality
+- **Email**: Nodemailer with Gmail SMTP integration
+- **Caching**: Redis for enhanced performance (optional, falls back to memory cache)
+
+## 🐳 Docker Deployment
+
+### Quick Start Commands
+```bash
+# Configure environment variables
+cp .env.docker.example .env.docker
+# Edit .env.docker with your actual API keys
+
+# Build and start all services
+docker-compose up -d
+
+# Check service status
+docker-compose ps
+
+# View logs
+docker-compose logs -f
+```
+
+### Docker Services
+- **chainreactions-app**: Main application (Port 3000)
+- **redis**: Redis caching service (Port 6379 - internal only)
+- **Health Monitoring**: Built-in health checks for all services
+
+### Production Features
+- Multi-stage Docker builds for optimized image size
+- Non-root user execution for security
+- Persistent Redis data volume
+- Comprehensive error handling and logging
+- Automatic restart policies
+
+## Development Commands
+
+```bash
+npm install          # Install dependencies
+npm run build        # Compile TypeScript to JavaScript
+npm start            # Start the production server
+npm run dev          # Start development server with hot reload
+npm test             # Run tests
+npm run lint         # Run ESLint
+npm run type-check   # Run TypeScript type checking
+```
+
+## 🚀 Unified API Endpoints (All on Port 3000)
+
+### Complete Workflow
+- **POST `/api/enhanced/search`** - Full 3-stage OSINT analysis
+- **GET `/api/enhanced/search-stream`** - Full 3-stage analysis with Server-Sent Events progress
+- **POST `/api/enhanced/strategy`** - Stage 1 only (meta-prompting)
+- **GET `/api/enhanced/test`** - Test with sample data
+- **GET `/api/enhanced/info`** - Workflow information
+
+### Normal Search Mode
+- **POST `/api/normal-search`** - Fast Google Web Search based OSINT
+
+### Entity Search
+- **POST `/api/entity-search` - Entity search with domain filtering
+- **GET `/api/entity-search/test` - Test Linkup API connection
+
+### Dataset Matching
+- **POST `/api/dataset-matching/match` - Single entity matching
+- **POST `/api/dataset-matching/batch` - Batch entity matching
+- **GET `/api/dataset-matching/health` - Matching service health
+- **GET `/api/dataset-matching/stats` - Service statistics
+- **GET `/api/dataset-matching/test` - Test matching with sample entity
+- **GET `/api/dataset-matching/cache/clear` - Clear cache
+- **POST `/api/dataset-matching/cache/warmup` - Warmup cache
+
+### Data Management
+- **GET `/api/data-management/datasets` - List all datasets
+- **POST `/api/data-management/datasets` - Create new dataset
+- **GET `/api/data-management/datasets/:id` - Get dataset details
+- **PUT `/api/data-management/datasets/:id` - Update dataset
+- **DELETE `/api/data-management/datasets/:id` - Delete dataset
+- **POST `/api/data-management/datasets/:id/upload` - Upload CSV file
+- **GET `/api/data-management/datasets/:id/entries` - Get dataset entries
+- **GET `/api/data-management/datasets/:id/stats` - Dataset statistics
+- **POST `/api/data-management/import/nro-targets` - Import NRO targets
+- **GET `/api/data-management/health` - Service health check
+
+### Dataset Search
+- **POST `/api/dataset-search/stream` - Start streaming search
+- **DELETE /api/dataset-search/stream/:execution_id` - Cancel search
+- **GET `/api/dataset-search/stream/:execution_id/status` - Get search status
+- **GET `/api/dataset-search/nro-stats` - Get NRO statistics
+- **GET `/api/dataset-search/health` - Service health check
+- **GET /api/dataset-search/test` - Service test endpoint
+
+### Demo Email Service (NEW)
+- **POST `/api/demo-request` - Send demo request email
+- **GET `/api/test-email` - Test email service connection
+
+### System Endpoints
+- **GET `/api/health` - Unified health check for all 6 services
+- **GET `/api` - Service information and endpoint overview
+
+## Project Structure
+
+```
+src/
+├── app.ts                           # Express server and unified routes
+├── controllers/
+│   ├── EnhancedSearchController.ts  # 3-stage workflow orchestration
+│   ├── NormalSearchController.ts  # Normal search mode
+│   ├── EntitySearchController.ts  # Entity search integration
+│   ├── DatasetMatchingController.ts # Dataset matching integration
+│   ├── DataManagementController.ts # Data management integration
+│   ├── DatasetSearchController.ts # Dataset search integration
+│   └── DemoRequestController.ts  # Demo email service integration (NEW)
+├── services/
+│   ├── entity-search/           # Entity Search service integration
+│   ├── dataset-matching/        # Dataset Matching service integration
+│   ├── dataset-search/          # Dataset Search service integration
+│   ├── data-management/        # Data Management service integration
+│   ├── EmailService.ts          # Demo email service (NEW)
+│   └── ...
+├── types/
+│   ├── gemini.ts                    # Gemini API and search types
+│   ├── DemoRequestTypes.ts          # Demo email types (NEW)
+│   └── ...
+└── templates/
+    └── demoRequestTemplate.ts       # Email template (NEW)
+```
+
+## 🔑 Required API Keys
+
+### Core API Keys
+- `GEMINI_API_KEY`: Google Gemini API key (required for Entity Relations)
+- `BRIGHT_DATA_API_KEY`: Bright Data SERP API (required for DeepThinking mode)
+- `BRIGHT_DATA_SERP_ZONE`: Bright Data SERP zone identifier
+
+### Database API Keys
+- `LINKUP_API_KEY`: Primary Linkup API key (required for Entity Search & Dataset Search)
+- `LINKUP_API_KEY_2`: Secondary Linkup API key (required for Dataset Search)
+- `SUPABASE_URL`: Supabase project URL (required for Dataset Matching & Data Management)
+- `SUPABASE_ANON_KEY`: Supabase anonymous key (required for Dataset Matching & Data Management)
+- `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key (optional)
+
+### Email Service Configuration
+- `GMAIL_USER`: Gmail address (required for Demo Email Service)
+- `GMAIL_APP_PASSWORD`: Gmail app password (required for Demo Email Service)
+
+### Optional Configuration
+- **Redis Configuration**: `REDIS_URL`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`
+- **Additional APIs**: Various search engine and MCP tool APIs for future enhancements
+
+## 🚀 Unified Services Status
+
+### Current Architecture (Port 3000)
+All 6 services now operate from a single unified codebase:
+
+1. **Entity Relations**:
+   - DeepThinking mode: 3-stage OSINT workflow
+   - Normal mode: Google Web Search based OSINT
+
+2. **Entity Search**: Linkup API professional business intelligence
+
+3. **Dataset Matching**: Advanced entity matching with multiple algorithms
+
+4. **Data Management**: CSV upload and intelligent parsing
+
+5. **Dataset Search**: SSE streaming search with dual API processing
+
+6. **Demo Email Service**: Gmail SMTP integration (NEW)
+
+### Port Migration History
+- **Entity Relations**: Port 3000 → Port 3000 ✓
+- **Entity Search**: Port 3002 → Port 3000 ✓
+- **Dataset Matching**: Port 3003 → Port 3000 ✓
+- **Data Management**: Port 3006 → Port 3000 ✓
+- **Dataset Search**: Port 3004 → Port 3000 ✓
+- **Demo Email**: Port 3001 → Port 3000 ✓
+
+### Benefits
+- **Simplified Deployment**: Single port for all services
+- **Reduced Complexity**: No need to manage multiple services
+- **Unified Monitoring**: Single health check for all services
+- **Enhanced Scalability**: Easier to scale and load balance
+- **Better User Experience**: Single backend URL for all functionality
 
 ## Technology Stack
 

@@ -7,6 +7,7 @@ import { EntitySearchController } from './controllers/EntitySearchController';
 import { DatasetMatchingController } from './controllers/DatasetMatchingController';
 import { DataManagementController } from './controllers/DataManagementController';
 import { DatasetSearchController } from './controllers/DatasetSearchController';
+import { DemoRequestController } from './controllers/DemoRequestController';
 import { upload, handleUploadError } from './services/data-management/middleware/upload';
 import dotenv from 'dotenv';
 
@@ -56,6 +57,7 @@ const entitySearchController = new EntitySearchController();
 const datasetMatchingController = new DatasetMatchingController();
 const dataManagementController = new DataManagementController();
 const datasetSearchController = new DatasetSearchController();
+const demoRequestController = new DemoRequestController();
 
 // Routes - 3-Stage OSINT Workflow (DeepThinking Mode)
 app.post('/api/enhanced/search', (req, res) => enhancedSearchController.enhancedSearch(req, res));
@@ -104,6 +106,10 @@ app.get('/api/dataset-search/nro-stats', (req, res, next) => datasetSearchContro
 app.get('/api/dataset-search/health', (req, res, next) => datasetSearchController.healthCheck(req, res, next));
 app.get('/api/dataset-search/test', (req, res) => datasetSearchController.testDatasetSearch(req, res));
 
+// Routes - Demo Email Service (Integrated from port 3001)
+app.post('/api/demo-request', (req, res) => demoRequestController.handleDemoRequest(req, res));
+app.get('/api/test-email', (req, res) => demoRequestController.testEmailService(req, res));
+
 // Health check endpoint - Combined service
 app.get('/api/health', async (req, res) => {
   try {
@@ -114,6 +120,7 @@ app.get('/api/health', async (req, res) => {
     // Check new services health
     let dataManagementHealth: { status: string; error?: string } = { status: 'operational' };
     let datasetSearchHealth: { status: string; error?: string } = { status: 'operational' };
+    let emailServiceHealth: { status: string; error?: string } = { status: 'operational' };
 
     try {
       // For new services, we need to call the health check methods differently
@@ -135,6 +142,21 @@ app.get('/api/health', async (req, res) => {
 
       await dataManagementController.healthCheck(mockReq, mockRes);
       await datasetSearchController.healthCheck(mockReq, mockRes, {} as any);
+
+      // Check email service health
+      try {
+        await demoRequestController.testEmailService(mockReq, {
+          status: () => ({ json: () => {} }),
+          json: (data: any) => {
+            if (!data.success) {
+              emailServiceHealth = { status: 'unhealthy', error: data.error };
+            }
+          }
+        } as any);
+      } catch (error) {
+        console.warn('Email service health check failed:', error);
+        emailServiceHealth = { status: 'unhealthy', error: 'Email service unavailable' };
+      }
     } catch (error) {
       console.warn('Health check warning for new services:', error);
     }
@@ -143,7 +165,8 @@ app.get('/api/health', async (req, res) => {
     const allHealthy = entitySearchHealth.status === 'operational' &&
                       datasetMatchingHealth.status === 'operational' &&
                       dataManagementHealth.status === 'operational' &&
-                      datasetSearchHealth.status === 'operational';
+                      datasetSearchHealth.status === 'operational' &&
+                      emailServiceHealth.status === 'operational';
 
     res.json({
       status: allHealthy ? 'healthy' : 'degraded',
@@ -197,6 +220,14 @@ app.get('/api/health', async (req, res) => {
             health: '/api/dataset-search/health'
           },
           health: datasetSearchHealth
+        },
+        email_service: {
+          description: 'Demo request email service with Gmail SMTP integration',
+          endpoints: {
+            demo_request: '/api/demo-request - Send demo request email',
+            test_email: '/api/test-email - Test email service connection'
+          },
+          health: emailServiceHealth
         }
       },
       environment: process.env.NODE_ENV || 'development',
@@ -296,6 +327,14 @@ app.get('/api', (req, res) => {
           health: 'GET /api/dataset-search/health - Service health check',
           test: 'GET /api/dataset-search/test - Service test endpoint'
         }
+      },
+      email_service: {
+        name: 'Demo Email Service',
+        description: 'Demo request email service with Gmail SMTP integration',
+        endpoints: {
+          demo_request: 'POST /api/demo-request - Send demo request email',
+          test_email: 'GET /api/test-email - Test email service connection'
+        }
       }
     },
     common_endpoints: {
@@ -309,7 +348,8 @@ app.get('/api', (req, res) => {
         entity_search: 3002,
         dataset_matching: 3003,
         data_management: 3006,
-        dataset_search: 3004
+        dataset_search: 3004,
+        email_service: 3001
       },
       current_port: 3000
     },
@@ -393,6 +433,10 @@ if (require.main === module) {
     console.log(`    GET  /api/dataset-search/health - Service health check`);
     console.log(`    GET  /api/dataset-search/test - Service test endpoint`);
     console.log('');
+    console.log('📧 Demo Email Service (Integrated from port 3001):');
+    console.log(`    POST /api/demo-request - Send demo request email`);
+    console.log(`    GET  /api/test-email - Test email service connection`);
+    console.log('');
 
     // Check if environment variables are set
     console.log('🔧 Environment Configuration:');
@@ -420,6 +464,12 @@ if (require.main === module) {
       console.log('✅ SUPABASE credentials are configured');
     }
 
+    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+      console.warn('⚠️  GMAIL_USER or GMAIL_APP_PASSWORD not set (required for Demo Email Service)');
+    } else {
+      console.log('✅ Gmail credentials are configured');
+    }
+
     console.log('');
     console.log('🎉 Port Unification Complete!');
     console.log('   • Entity Relations: port 3000 → port 3000 ✓');
@@ -427,6 +477,7 @@ if (require.main === module) {
     console.log('   • Dataset Matching: port 3003 → port 3000 ✓');
     console.log('   • Data Management: port 3006 → port 3000 ✓');
     console.log('   • Dataset Search: port 3004 → port 3000 ✓');
+    console.log('   • Demo Email Service: port 3001 → port 3000 ✓');
     console.log('✅ Ready to accept requests...');
   });
 }
