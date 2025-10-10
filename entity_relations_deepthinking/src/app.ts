@@ -5,6 +5,9 @@ import { EnhancedSearchController } from './controllers/EnhancedSearchController
 import { NormalSearchController } from './controllers/NormalSearchController';
 import { EntitySearchController } from './controllers/EntitySearchController';
 import { DatasetMatchingController } from './controllers/DatasetMatchingController';
+import { DataManagementController } from './controllers/DataManagementController';
+import { DatasetSearchController } from './controllers/DatasetSearchController';
+import { upload, handleUploadError } from './services/data-management/middleware/upload';
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -51,6 +54,8 @@ const enhancedSearchController = new EnhancedSearchController();
 const normalSearchController = new NormalSearchController();
 const entitySearchController = new EntitySearchController();
 const datasetMatchingController = new DatasetMatchingController();
+const dataManagementController = new DataManagementController();
+const datasetSearchController = new DatasetSearchController();
 
 // Routes - 3-Stage OSINT Workflow (DeepThinking Mode)
 app.post('/api/enhanced/search', (req, res) => enhancedSearchController.enhancedSearch(req, res));
@@ -76,6 +81,29 @@ app.get('/api/dataset-matching/stats', (req, res, next) => datasetMatchingContro
 app.get('/api/dataset-matching/health', (req, res, next) => datasetMatchingController.handleHealthCheck(req, res, next));
 app.get('/api/dataset-matching/test', (req, res, next) => datasetMatchingController.handleTestMatch(req, res, next));
 
+// Routes - Data Management (Integrated from port 3006)
+app.get('/api/data-management/datasets', (req, res) => dataManagementController.getDatasets(req, res));
+app.get('/api/data-management/datasets/:id', (req, res) => dataManagementController.getDatasetById(req, res));
+app.post('/api/data-management/datasets', (req, res) => dataManagementController.createDataset(req, res));
+app.put('/api/data-management/datasets/:id', (req, res) => dataManagementController.updateDataset(req, res));
+app.delete('/api/data-management/datasets/:id', (req, res) => dataManagementController.deleteDataset(req, res));
+app.get('/api/data-management/datasets/:id/entries', (req, res) => dataManagementController.getDatasetEntries(req, res));
+app.get('/api/data-management/datasets/:id/stats', (req, res) => dataManagementController.getDatasetStats(req, res));
+app.post('/api/data-management/datasets/:id/upload', upload.single('file'), handleUploadError, (req: any, res: any) => dataManagementController.uploadFile(req, res));
+app.post('/api/data-management/import/nro-targets', (req: any, res: any) => dataManagementController.importNroTargets(req, res));
+app.post('/api/data-management/datasets/:id/validate-file', upload.single('file'), handleUploadError, (req: any, res: any) => dataManagementController.validateFile(req, res));
+app.get('/api/data-management/datasets/:id/export', (req, res) => dataManagementController.exportDataset(req, res));
+app.get('/api/data-management/health', (req, res) => dataManagementController.healthCheck(req, res));
+app.get('/api/data-management/test', (req, res) => dataManagementController.testDataManagement(req, res));
+
+// Routes - Dataset Search (Integrated from port 3004)
+app.post('/api/dataset-search/stream', (req, res, next) => datasetSearchController.streamSearch(req, res, next));
+app.delete('/api/dataset-search/stream/:execution_id', (req, res, next) => datasetSearchController.cancelStreamSearch(req, res, next));
+app.get('/api/dataset-search/stream/:execution_id/status', (req, res, next) => datasetSearchController.getStreamSearchStatus(req, res, next));
+app.get('/api/dataset-search/nro-stats', (req, res, next) => datasetSearchController.getNROStats(req, res, next));
+app.get('/api/dataset-search/health', (req, res, next) => datasetSearchController.healthCheck(req, res, next));
+app.get('/api/dataset-search/test', (req, res) => datasetSearchController.testDatasetSearch(req, res));
+
 // Health check endpoint - Combined service
 app.get('/api/health', async (req, res) => {
   try {
@@ -83,9 +111,39 @@ app.get('/api/health', async (req, res) => {
     const entitySearchHealth = await entitySearchController.healthCheck();
     const datasetMatchingHealth = await datasetMatchingController.healthCheck();
 
+    // Check new services health
+    let dataManagementHealth: { status: string; error?: string } = { status: 'operational' };
+    let datasetSearchHealth: { status: string; error?: string } = { status: 'operational' };
+
+    try {
+      // For new services, we need to call the health check methods differently
+      // since they're wrapper controllers
+      const mockReq = {} as any;
+      const mockRes = {
+        status: () => mockRes,
+        json: (data: any) => {
+          if (data.status === 'unhealthy' || data.status === 'error') {
+            if (data.service === 'data-management') {
+              dataManagementHealth = { status: 'unhealthy', error: data.error };
+            } else if (data.service === 'dataset-search') {
+              datasetSearchHealth = { status: 'unhealthy', error: data.error };
+            }
+          }
+          return mockRes;
+        }
+      } as any;
+
+      await dataManagementController.healthCheck(mockReq, mockRes);
+      await datasetSearchController.healthCheck(mockReq, mockRes, {} as any);
+    } catch (error) {
+      console.warn('Health check warning for new services:', error);
+    }
+
     // Overall service health
     const allHealthy = entitySearchHealth.status === 'operational' &&
-                      datasetMatchingHealth.status === 'operational';
+                      datasetMatchingHealth.status === 'operational' &&
+                      dataManagementHealth.status === 'operational' &&
+                      datasetSearchHealth.status === 'operational';
 
     res.json({
       status: allHealthy ? 'healthy' : 'degraded',
@@ -120,6 +178,25 @@ app.get('/api/health', async (req, res) => {
             health: '/api/dataset-matching/health'
           },
           health: datasetMatchingHealth
+        },
+        data_management: {
+          description: 'CSV upload and intelligent parsing service',
+          endpoints: {
+            datasets: '/api/data-management/datasets',
+            upload: '/api/data-management/datasets/:id/upload',
+            export: '/api/data-management/datasets/:id/export',
+            health: '/api/data-management/health'
+          },
+          health: dataManagementHealth
+        },
+        dataset_search: {
+          description: 'Dataset search with SSE streaming and dual Linkup API processing',
+          endpoints: {
+            stream: '/api/dataset-search/stream',
+            nro_stats: '/api/dataset-search/nro-stats',
+            health: '/api/dataset-search/health'
+          },
+          health: datasetSearchHealth
         }
       },
       environment: process.env.NODE_ENV || 'development',
@@ -188,6 +265,37 @@ app.get('/api', (req, res) => {
           cache_clear: 'GET /api/dataset-matching/cache/clear - Clear cache',
           cache_warmup: 'POST /api/dataset-matching/cache/warmup - Warmup cache'
         }
+      },
+      data_management: {
+        name: 'Data Management Service',
+        description: 'CSV upload and intelligent parsing service',
+        endpoints: {
+          datasets: 'GET /api/data-management/datasets - List all datasets',
+          create_dataset: 'POST /api/data-management/datasets - Create new dataset',
+          dataset_detail: 'GET /api/data-management/datasets/:id - Get dataset details',
+          update_dataset: 'PUT /api/data-management/datasets/:id - Update dataset',
+          delete_dataset: 'DELETE /api/data-management/datasets/:id - Delete dataset',
+          upload: 'POST /api/data-management/datasets/:id/upload - Upload CSV file',
+          entries: 'GET /api/data-management/datasets/:id/entries - Get dataset entries',
+          stats: 'GET /api/data-management/datasets/:id/stats - Dataset statistics',
+          validate: 'POST /api/data-management/datasets/:id/validate-file - Validate file format',
+          export: 'GET /api/data-management/datasets/:id/export - Export dataset',
+          import_nro: 'POST /api/data-management/import/nro-targets - Import NRO targets',
+          health: 'GET /api/data-management/health - Service health check',
+          test: 'GET /api/data-management/test - Service test endpoint'
+        }
+      },
+      dataset_search: {
+        name: 'Dataset Search Service',
+        description: 'Dataset search with SSE streaming and dual Linkup API processing',
+        endpoints: {
+          stream_search: 'POST /api/dataset-search/stream - Start streaming search',
+          cancel_search: 'DELETE /api/dataset-search/stream/:execution_id - Cancel search',
+          search_status: 'GET /api/dataset-search/stream/:execution_id/status - Get search status',
+          nro_stats: 'GET /api/dataset-search/nro-stats - Get NRO statistics',
+          health: 'GET /api/dataset-search/health - Service health check',
+          test: 'GET /api/dataset-search/test - Service test endpoint'
+        }
       }
     },
     common_endpoints: {
@@ -199,7 +307,9 @@ app.get('/api', (req, res) => {
       previous_ports: {
         entity_relations: 3000,
         entity_search: 3002,
-        dataset_matching: 3003
+        dataset_matching: 3003,
+        data_management: 3006,
+        dataset_search: 3004
       },
       current_port: 3000
     },
@@ -260,6 +370,29 @@ if (require.main === module) {
     console.log(`    GET  /api/dataset-matching/cache/clear - Clear cache`);
     console.log(`    POST /api/dataset-matching/cache/warmup - Warmup cache`);
     console.log('');
+    console.log('📊 Data Management Service (Integrated from port 3006):');
+    console.log(`    GET  /api/data-management/datasets - List all datasets`);
+    console.log(`    POST /api/data-management/datasets - Create new dataset`);
+    console.log(`    GET  /api/data-management/datasets/:id - Get dataset details`);
+    console.log(`    PUT  /api/data-management/datasets/:id - Update dataset`);
+    console.log(`    DELETE /api/data-management/datasets/:id - Delete dataset`);
+    console.log(`    POST /api/data-management/datasets/:id/upload - Upload CSV file`);
+    console.log(`    GET  /api/data-management/datasets/:id/entries - Get dataset entries`);
+    console.log(`    GET  /api/data-management/datasets/:id/stats - Dataset statistics`);
+    console.log(`    POST /api/data-management/datasets/:id/validate-file - Validate file format`);
+    console.log(`    GET  /api/data-management/datasets/:id/export - Export dataset`);
+    console.log(`    POST /api/data-management/import/nro-targets - Import NRO targets`);
+    console.log(`    GET  /api/data-management/health - Service health check`);
+    console.log(`    GET  /api/data-management/test - Service test endpoint`);
+    console.log('');
+    console.log('🔍 Dataset Search Service (Integrated from port 3004):');
+    console.log(`    POST /api/dataset-search/stream - Start streaming search`);
+    console.log(`    DELETE /api/dataset-search/stream/:execution_id - Cancel search`);
+    console.log(`    GET  /api/dataset-search/stream/:execution_id/status - Get search status`);
+    console.log(`    GET  /api/dataset-search/nro-stats - Get NRO statistics`);
+    console.log(`    GET  /api/dataset-search/health - Service health check`);
+    console.log(`    GET  /api/dataset-search/test - Service test endpoint`);
+    console.log('');
 
     // Check if environment variables are set
     console.log('🔧 Environment Configuration:');
@@ -292,6 +425,8 @@ if (require.main === module) {
     console.log('   • Entity Relations: port 3000 → port 3000 ✓');
     console.log('   • Entity Search: port 3002 → port 3000 ✓');
     console.log('   • Dataset Matching: port 3003 → port 3000 ✓');
+    console.log('   • Data Management: port 3006 → port 3000 ✓');
+    console.log('   • Dataset Search: port 3004 → port 3000 ✓');
     console.log('✅ Ready to accept requests...');
   });
 }
