@@ -11,14 +11,18 @@ ChainReactions Backend is a microservices architecture implementing OSINT (Open-
 ### Microservices Design
 The project consists of independent services running on separate ports:
 
-1. **Entity Relations Service** (Port 3000) - Unified dual-mode OSINT service
+1. **Entity Relations Service** (Port 3000) - **Unified OSINT Platform**
+   - **Integrated Services**: Entity Search, Dataset Matching, DeepThinking & Normal Search modes
    - DeepThinking Mode: 3-stage workflow with multi-engine SERP
    - Normal Search Mode: Fast Google Web Search analysis
 2. **Demo Request Email Service** (Port 3001) - Email handling service
-3. **Entity Search Service** (Port 3002) - Linkup API integration for entity search
-4. **Dataset Matching Service** (Port 3003) - Advanced entity matching algorithms
-5. **Dataset Search Service** (Port 3004) - Dataset search with dual Linkup API integration
-6. **Data Management Service** (Port 3006) - CSV upload and intelligent parsing service
+3. **Dataset Search Service** (Port 3004) - Dataset search with dual Linkup API integration
+4. **Data Management Service** (Port 3006) - CSV upload and intelligent parsing service
+
+### Integrated Services (Legacy)
+The following services have been fully integrated into the Entity Relations Service (Port 3000):
+- ~~Entity Search Service~~ (Port 3002) - Now integrated as `entity-search` module
+- ~~Dataset Matching Service~~ (Port 3003) - Now integrated as `dataset-matching` module
 
 ### Common Technology Stack
 - **Runtime**: Node.js with TypeScript
@@ -47,12 +51,14 @@ npm run type-check   # Run TypeScript type checking without compilation
 
 **FIXED PORT ALLOCATION - DO NOT CHANGE**:
 - **Frontend**: `8080` (STRICT - no auto-increment allowed)
-- **Entity Relations Service**: `3000` (Unified: DeepThinking + Normal Search)
+- **Entity Relations Service**: `3000` (Unified OSINT Platform - includes Entity Search & Dataset Matching)
 - **Demo Email Service**: `3001`
-- **Entity Search Service**: `3002`
-- **Dataset Matching Service**: `3003`
 - **Dataset Search Service**: `3004`
 - **Data Management Service**: `3006`
+
+**DEPRECATED PORTS** (No longer in use - services integrated into Port 3000):
+- ~~Port 3002~~ - Entity Search Service (integrated into Port 3000)
+- ~~Port 3003~~ - Dataset Matching Service (integrated into Port 3000)
 
 **Port Conflict Resolution**:
 ```bash
@@ -69,12 +75,18 @@ kill PID_NUMBER
 **Testing Ports**: Use range `9000-9999` to avoid conflicts with production ports
 
 ### Service-Specific Directories
-- `entity_relations_deepthinking/` - **Unified OSINT Service** with dual modes (DeepThinking + Normal Search)
-- `entity_search/` - Entity search via Linkup API
-- `demo_email/` - Email service for demo requests
-- `dataset_matching/` - Entity matching algorithms
-- `data_management/` - CSV upload and intelligent parsing service
-- `dataset_search/` - Dataset search with dual Linkup API integration
+- `entity_relations_deepthinking/` - **Unified OSINT Platform** (Port 3000)
+  - **Core**: DeepThinking & Normal Search modes
+  - **Integrated**: Entity Search (`src/services/entity-search/`) and Dataset Matching (`src/services/dataset-matching/`)
+  - **Complete**: All OSINT capabilities unified in single service
+- `demo_email/` - Email service for demo requests (Port 3001)
+- `dataset_search/` - Dataset search with dual Linkup API integration (Port 3004)
+- `data_management/` - CSV upload and intelligent parsing service (Port 3006)
+
+### Removed Directories (Fully Integrated)
+The following directories have been completely removed as their functionality is now integrated into the unified Entity Relations Service:
+- ~~`entity_search/`~~ - Integrated as `entity_relations_deepthinking/src/services/entity-search/`
+- ~~`dataset_matching/`~~ - Integrated as `entity_relations_deepthinking/src/services/dataset-matching/`
 
 ## Key Services Documentation
 
@@ -115,21 +127,106 @@ Simplified OSINT analysis with Google Web Search:
 - Includes intelligent search engine normalization
 
 ### Entity Search Service
-Linkup API integration for professional business intelligence:
+**[INTEGRATED INTO Port 3000]** Linkup API integration for professional business intelligence:
+
+#### Core Features
 - Intelligent domain filtering (excludes 12+ low-quality sources)
 - Custom exclude_domains parameter support
 - Multi-strategy JSON parsing with 4 fallback mechanisms
+- **Default Domain Filtering**: Automatically excludes low-quality sources:
+  - `wikipedia.org` - 维基百科
+  - `reddit.com` - Reddit论坛
+  - `quora.com` - Quora问答
+  - `pinterest.com` - Pinterest
+  - Social media platforms: `twitter.com`, `facebook.com`, `instagram.com`, `youtube.com`
+  - Other: `wiki.fandom.com`, `wikimedia.org`, `tiktok.com`, `snapchat.com`
+
+#### API Usage
+```bash
+# Standalone testing (integrated into Port 3000 for production)
+curl -X POST http://localhost:3002/api/entity-search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "company_name": "Apple Inc.",
+    "location": "United States",
+    "exclude_domains": ["wikipedia.org", "reddit.com"]
+  }'
+```
+
+#### Performance & Troubleshooting
+- **Expected Response Time**: 30-35 seconds
+- **Debug Mode**: Set `NODE_ENV=development` for detailed logging
+- **Common Issues**:
+  - Linkup API connection failures: Check API key and network connectivity
+  - Port conflicts: Ensure port 3002 is available
+  - JSON parsing failures: Review service logs for parsing errors
+- **Health Check**: `curl http://localhost:3002/api/health`
 
 ### Dataset Matching Service
-Advanced entity matching with multiple algorithms:
-- Jaro-Winkler, Levenshtein, N-gram similarity algorithms
-- Quality assessment system with false positive filtering
-- 8 match types: exact, alias, alias_partial, fuzzy, partial, core_match, core_acronym, word_match
-- Memory caching with 5-minute expiry
-- Batch processing support (up to 100 entities)
-- Intelligent bracket processing for entity names with acronyms (e.g., "National University of Defense Technology (NUDT)")
-- Geographic matching and regional boosting algorithms
-- Configurable similarity thresholds and algorithm weights
+**[INTEGRATED INTO Port 3000]** Advanced entity matching with multiple algorithms:
+
+#### Core Features
+- **Multi-Algorithm Matching**: Jaro-Winkler, Levenshtein, N-gram similarity algorithms
+- **Quality Assessment**: Intelligent scoring to reduce false positives
+- **8 Match Types**: exact, alias, alias_partial, fuzzy, partial, core_match, core_acronym, word_match
+- **Memory Caching**: 5-minute expiry for performance optimization
+- **Batch Processing**: Support up to 100 entities per request
+- **Intelligent Bracket Processing**: Handles entity names with acronyms (e.g., "National University of Defense Technology (NUDT)")
+- **Geographic Matching**: Regional boosting algorithms
+- **Configurable Parameters**: Similarity thresholds and algorithm weights
+
+#### Performance Characteristics
+- **Expected Performance**:
+  - Single Match: < 50ms average response time
+  - Batch Match (10 entities): < 200ms average response time
+  - Cache Hit Ratio: 90%+ for repeated queries
+  - Concurrent Requests: Supports 100+ concurrent requests
+- **Optimization Features**:
+  - Multi-level caching (memory + Redis)
+  - Batch processing with parallel execution
+  - Database connection pooling
+  - Response compression
+  - Query optimization
+
+#### API Usage
+```bash
+# Standalone testing (integrated into Port 3000 for production)
+curl -X POST http://localhost:3003/api/dataset-matching/match \
+  -H "Content-Type: application/json" \
+  -d '{
+    "entity": "Apple Inc",
+    "minConfidence": 0.7,
+    "matchTypes": ["exact", "alias", "fuzzy"]
+  }'
+
+# Batch match
+curl -X POST http://localhost:3003/api/dataset-matching/batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "entities": ["Tesla Inc", "Microsoft", "Apple"],
+    "options": {
+      "minConfidence": 0.6,
+      "forceRefresh": false
+    }
+  }'
+```
+
+#### Algorithm Details
+- **Text Normalization**: Removes parentheses and organizational suffixes, standardizes spacing
+- **Quality Assessment**:
+  - Generic Term Detection: Filters common words
+  - Length Validation: Ensures reasonable proportions
+  - Context Scoring: Improves accuracy based on usage
+  - Confidence Calibration: Dynamic threshold adjustment
+- **Fuzzy Matching**: Levenshtein distance, Jaro-Winkler similarity, N-gram analysis, Phonetic matching
+
+#### Troubleshooting
+- **Debug Mode**: Set `NODE_ENV=development` for detailed logging including request/response logging, algorithm performance metrics, cache hit/miss statistics
+- **Common Issues**:
+  - Supabase Connection Fails: Verify `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `.env`
+  - Low Match Quality: Adjust `DEFAULT_MIN_CONFIDENCE` threshold, check dataset quality
+  - Performance Issues: Enable Redis caching, increase `CACHE_EXPIRATION_MINUTES`
+- **Health Check**: `curl http://localhost:3003/api/health`
 
 ### Data Management Service
 CSV upload and intelligent parsing with Supabase integration:
@@ -246,7 +343,16 @@ All services provide health check endpoints:
 1. **Unified API Gateway** - Service orchestration and routing
 2. **Production Deployment** - Containerization and scaling
 
-### Recent Achievements (Oct 4, 2025)
+### Recent Achievements (Oct 10, 2025)
+- 🚀 **Dataset Search Concurrent Pool Architecture**: Implemented true concurrent pool processing for stable, predictable performance
+  - **Concurrent Pool Design**: Separate sequential pools per API key for true parallelism
+  - **Rate Limiter Removal**: Eliminated 100ms wait per entity, removed ~10.3s overhead for 103 entities
+  - **Stable Performance**: Fixed "越来越慢" issue - consistent speed throughout entire 103-entity search
+  - **Architecture Pattern**: Pool 1 (API 1) and Pool 2 (API 2) run in parallel, each processing entities sequentially
+  - **Production Ready**: Successfully tested with full 103-entity Canadian NRO dataset
+  - **Code Location**: `entity_relations_deepthinking/src/services/dataset-search/services/LinkupSearchService.ts:200-437`
+
+### Previous Achievements (Oct 4, 2025)
 - 🔗 **Entity Relations Service Unification**: Merged DeepThinking and Normal Search into single service
   - **Unified Port 3000**: Both modes now run on same server instance
   - **Dual Endpoints**: `/api/enhanced/search` (DeepThinking) and `/api/normal-search` (Normal)
@@ -342,12 +448,191 @@ All services provide health check endpoints:
 - ESLint configuration for consistent code style
 - Automated linting via `npm run lint`
 
+## SaaS架构演进策略
+
+### 🎯 **战略决策：先迁移部署，后SaaS重构**
+
+经过深入分析，我们采用渐进式架构演进策略：**优先完成生产迁移和部署，稳定后再进行SaaS级架构重构**。
+
+### 📊 **当前架构评估**
+
+#### ✅ **现有优势**
+- **统一API入口**：Port 3000统一对外，符合现代SaaS最佳实践
+- **功能完整性**：所有服务正常运行，前端集成良好
+- **API兼容性**：保持稳定的接口契约，无破坏性变更
+- **运维简洁性**：单体结构，部署和监控相对简单
+
+#### ⚠️ **待改进方面**
+- **内部服务耦合**：43个服务文件混杂，缺乏清晰的业务边界
+- **缺乏企业级基础设施**：认证授权、限流熔断、结构化日志等
+- **可扩展性限制**：单体架构，难以独立扩展和部署
+- **数据库设计**：缺乏数据访问层和事务管理
+
+### 🗺️ **演进路线图**
+
+#### **Phase 1: 稳定部署 (当前优先级 - 2周)**
+```
+Week 1-2: 生产就绪
+├── 环境配置完善
+│   ├── 生产环境 .env 配置
+│   ├── 数据库连接优化
+│   └── CORS 和安全设置
+├── 基础部署能力
+│   ├── Docker 容器化
+│   ├── PM2 进程管理
+│   └── 反向代理配置
+├── 监控和日志
+│   ├── 结构化日志基础
+│   ├── 健康检查增强
+│   └── 错误追踪系统
+└── 部署验证
+    ├── API 功能完整性测试
+    ├── 前端集成验证
+    └── 性能基准建立
+```
+
+**关键目标**：确保有稳定可用的生产环境，为后续重构奠定基础。
+
+#### **Phase 2: SaaS架构重构 (部署完成后 - 4-6周)**
+```
+Week 3-8: 企业级架构
+├── 内部微服务化
+│   ├── 服务拆分：Entity Relations, Entity Search, Dataset Matching等
+│   ├── 内部端口分配：3001-3005
+│   ├── 服务间通信机制
+│   └── 数据访问层实现
+├── API网关实现
+│   ├── 统一入口：保持Port 3000对外
+│   ├── 请求路由和负载均衡
+│   ├── 认证授权系统
+│   └── 限流熔断机制
+├── 企业级中间件
+│   ├── JWT认证和RBAC权限控制
+│   ├── 结构化日志(Winston)
+│   ├── 缓存层(Redis)
+│   └── 异步任务队列(Bull Queue)
+└── 可观测性
+    ├── 性能监控指标
+    ├── 分布式追踪
+    └── 健康状态检查
+```
+
+**架构目标**：对外单端口 + 对内微服务的现代SaaS架构。
+
+#### **Phase 3: 持续优化 (长期)**
+```
+Week 9+: 生产增强
+├── 性能优化
+│   ├── 查询优化
+│   ├── 缓存策略
+│   └── 数据库索引优化
+├── 运维自动化
+│   ├── CI/CD流水线
+│   ├── 自动化测试
+│   └── 容器编排(Kubernetes)
+└── 安全加固
+    ├── 安全扫描
+    ├── 漏洞管理
+    └── 合规性检查
+```
+
+### 🔧 **技术架构目标**
+
+#### **目标架构模式**
+```
+Frontend (Port 8080)
+    ↓
+Load Balancer (Port 443/80)
+    ↓
+API Gateway (Port 3000) - 统一入口
+    ↓
+Internal Microservices
+├── Entity Relations: 3001
+├── Entity Search: 3002
+├── Dataset Matching: 3003
+├── Data Management: 3004
+└── Dataset Search: 3005
+```
+
+#### **企业级技术栈**
+- **API网关**: http-proxy-middleware + express-rate-limit
+- **认证授权**: JWT + RBAC权限控制
+- **日志系统**: Winston + 结构化日志
+- **缓存策略**: Redis + 内存缓存
+- **任务队列**: Bull Queue + Redis
+- **监控系统**: Prometheus + Grafana
+- **容器化**: Docker + Kubernetes
+
+### 💡 **决策依据**
+
+#### **为什么选择先迁移后重构？**
+
+1. **风险控制**
+   - ✅ 保持现有功能稳定，避免重构引入新bug
+   - ✅ 基于真实使用情况优化架构决策
+   - ✅ 渐进式改进，降低业务中断风险
+
+2. **业务价值**
+   - ✅ 尽早为用户提供稳定服务
+   - ✅ 快速收集生产环境反馈
+   - ✅ 基于实际负载优化架构
+
+3. **学习收益**
+   - ✅ 先了解真实部署挑战和性能瓶颈
+   - ✅ 积累生产环境运维经验
+   - ✅ 基于实际数据指导架构优化
+
+4. **资源效率**
+   - ✅ 避免过度设计和无用功能
+   - ✅ 精准投资，解决真实问题
+   - ✅ 渐进式成本控制
+
+### ⚠️ **风险缓解策略**
+
+#### **Phase 1 风险控制**
+- **功能回归风险**: 完整的API测试套件
+- **部署风险**: 蓝绿部署和回滚机制
+- **性能风险**: 建立性能基准和监控
+
+#### **Phase 2 风险控制**
+- **架构复杂性**: 分阶段拆分，保持向后兼容
+- **服务间通信**: 实现熔断器和降级策略
+- **数据一致性**: 分布式事务管理
+
+### 📈 **成功指标**
+
+#### **Phase 1 成功标准**
+- [ ] 生产环境稳定运行7天
+- [ ] 所有API功能100%正常
+- [ ] 前端集成无问题
+- [ ] 基础监控和日志完备
+
+#### **Phase 2 成功标准**
+- [ ] 内部服务完全解耦
+- [ ] API网关稳定运行
+- [ ] 认证授权系统完善
+- [ ] 企业级监控就绪
+
+#### **长期目标**
+- [ ] 支持水平扩展
+- [ ] 99.9%服务可用性
+- [ ] 完整的CI/CD流水线
+- [ ] 自动化运维能力
+
+### 📚 **开发指导原则**
+
+1. **向后兼容优先**: 所有架构改进必须保持API兼容性
+2. **渐进式改进**: 每个阶段都要有可用的生产环境
+3. **数据驱动决策**: 基于生产环境数据指导架构优化
+4. **安全第一**: 每个阶段都要考虑安全影响
+
 ## Architecture Evolution
 
-The project is designed for evolution from independent microservices to a unified system:
+基于SaaS架构演进策略，项目发展路线更新为：
 
 1. **Phase 1**: ✅ Independent service development
-2. **Phase 2**: 🚧 Service integration and API gateway
-3. **Phase 3**: 🎯 Production deployment and scaling
+2. **Phase 2**: 🚧 **Production deployment and stabilization** (当前重点)
+3. **Phase 3**: 🎯 SaaS architecture refactoring (internal microservices)
+4. **Phase 4**: 🚀 Production scaling and optimization
 
-This modular approach ensures each component is fully functional before integration, reducing complexity and enabling independent testing and development.
+这个演进策略确保我们在保持业务连续性的同时，逐步构建企业级SaaS架构能力。
