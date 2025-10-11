@@ -42,7 +42,11 @@ app.use((req, res, next) => {
 // CORS middleware
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
-    ? ['https://your-frontend-domain.com'] // Replace with actual frontend domain
+    ? [
+        'https://chainreactions-frontend-dev.vercel.app',
+        'https://chainreactions-frontend-dev-fallowearths-projects-06c459ff.vercel.app',
+        'https://chainreactions-fronte-git-584dee-fallowearths-projects-06c459ff.vercel.app'
+      ]
     : ['http://localhost:8080'], // Fixed frontend port
   credentials: true
 }));

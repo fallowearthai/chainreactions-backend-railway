@@ -4,7 +4,7 @@
 # Multi-stage build for production optimization
 
 # Stage 1: Builder Stage
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -22,7 +22,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Production Stage
-FROM node:18-alpine AS production
+FROM node:20-alpine AS production
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
@@ -46,9 +46,10 @@ COPY --from=builder /app/dist ./dist
 # Copy any other necessary files
 COPY --from=builder /app/README.md ./
 COPY --from=builder /app/.env.example ./
+COPY --from=builder /app/src/services/dataset-matching/src/config ./dist/services/dataset-matching/src/config
 
-# Create logs directory
-RUN mkdir -p /app/logs && chown -R chainreactions:nodejs /app/logs
+# Create logs and uploads directory
+RUN mkdir -p /app/logs /app/uploads && chown -R chainreactions:nodejs /app/logs /app/uploads
 
 # Switch to non-root user
 USER chainreactions
