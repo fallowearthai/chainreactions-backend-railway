@@ -42,9 +42,18 @@ app.use((req, res, next) => {
 // CORS middleware
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
-    ? ['https://your-frontend-domain.com'] // Replace with actual frontend domain
-    : ['http://localhost:8080'], // Fixed frontend port
-  credentials: true
+    ? [
+        'https://chainreactions-frontend-dev.vercel.app', // Vercel production domain
+        'https://chainreactions-frontend-dev.vercel.app' // Alternative Vercel domain
+      ]
+    : [
+        'http://localhost:8080', // Fixed frontend port
+        'http://localhost:3000', // Development backend port (if needed)
+        'http://127.0.0.1:8080'  // Local development fallback
+      ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 // Serve static files from public directory
