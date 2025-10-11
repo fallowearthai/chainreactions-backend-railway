@@ -413,6 +413,35 @@ All services provide health check endpoints:
 
 ## Critical Development Rules
 
+### 🚨 Production Deployment Configuration (CRITICAL)
+
+**IMPORTANT: Railway Deployment Repository**
+- **Local Development Repository**: `/Users/kanbei/Code/chainreactions_backend`
+- **Railway Deployment Repository**: `/Users/kanbei/Code/chainreactions-backend-railway`
+- **⚠️ WARNING**: Changes to `chainreactions_backend` are NOT automatically deployed to Railway
+- **Deployment Process**:
+  1. Make changes in `chainreactions_backend` (this repository)
+  2. Test locally to ensure everything works
+  3. Manually sync changes to `chainreactions-backend-railway` repository
+  4. Push to `chainreactions-backend-railway` to trigger Railway deployment
+- **Why Two Repositories?**:
+  - `chainreactions_backend`: Development and testing environment
+  - `chainreactions-backend-railway`: Production deployment environment with Railway-specific configurations
+
+### 🌐 Production CORS Configuration
+
+**Current Production Deployment (Oct 11, 2025)**:
+- **Frontend Domains** (Vercel):
+  - `https://chainreactions-frontend-dev.vercel.app`
+  - `https://chainreactions-frontend-dev-fallowearths-projects-06c459ff.vercel.app`
+  - `https://chainreactions-fronte-git-584dee-fallowearths-projects-06c459ff.vercel.app`
+- **Backend Domain** (Railway):
+  - `https://chainreactions-backend-railway-production.up.railway.app`
+- **CORS Configuration**: Located in `entity_relations_deepthinking/src/app.ts:43-52`
+  - Development: `http://localhost:8080`
+  - Production: All three Vercel domains listed above
+  - **Must Update Both Repositories**: When adding new domains, update CORS in both repos
+
 ### Frontend Project Location
 **IMPORTANT**: The frontend project is located at `/Users/kanbei/Code/chainreactions_frontend_dev/`
 - **NEVER** start services from `entity_relations_deepthinking` as frontend
