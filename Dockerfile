@@ -36,8 +36,8 @@ USER chainreactions
 # Expose the application port
 EXPOSE 3000
 
-# Add health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+# Add health check with longer startup time
+HEALTHCHECK --interval=60s --timeout=30s --start-period=180s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"
 
 # Set environment variables
