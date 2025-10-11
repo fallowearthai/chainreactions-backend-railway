@@ -355,7 +355,8 @@ export class SupabaseService {
 
       if (totalCount.error) throw totalCount.error;
       if (aliasesCount.error) throw aliasesCount.error;
-      if (lastUpdated.error) throw lastUpdated.error;
+      // Handle case where no entries exist for lastUpdated query
+      if (lastUpdated.error && lastUpdated.error.code !== 'PGRST116') throw lastUpdated.error;
       if (countryData.error) throw countryData.error;
       if (entityTypesData.error) throw entityTypesData.error;
 

@@ -15,7 +15,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = parseInt(process.env.PORT || '3000', 10);
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));
@@ -380,10 +380,11 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 
 // Start server
 if (require.main === module) {
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log('🚀 ChainReactions Unified API Gateway - All Services Integrated');
-    console.log(`📡 Server running on port ${PORT}`);
+    console.log(`📡 Server running on port ${PORT} (0.0.0.0)`);
     console.log(`🔗 API: http://localhost:${PORT}`);
+    console.log(`🌐 Network Access: http://0.0.0.0:${PORT}`);
     console.log(`🏥 Health: http://localhost:${PORT}/api/health`);
     console.log(`📋 Info: http://localhost:${PORT}/api`);
     console.log('');
@@ -478,6 +479,7 @@ if (require.main === module) {
     console.log('   • Data Management: port 3006 → port 3000 ✓');
     console.log('   • Dataset Search: port 3004 → port 3000 ✓');
     console.log('   • Demo Email Service: port 3001 → port 3000 ✓');
+    console.log('🌐 Network Binding: 0.0.0.0 (Accepts connections from all interfaces)');
     console.log('✅ Ready to accept requests...');
   });
 }

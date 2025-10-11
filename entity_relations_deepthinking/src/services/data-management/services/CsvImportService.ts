@@ -21,6 +21,112 @@ export class CsvImportService {
   }
 
   /**
+   * 智能导入CSV文件到指定数据集ID - 自动检测字段格式
+   */
+  async importCsvFileSmartToDataset(
+    filePath: string,
+    datasetId: string
+  ): Promise<ImportResult> {
+    const startTime = process.hrtime.bigint();
+
+    const result: ImportResult = {
+      success: false,
+      totalRows: 0,
+      importedRows: 0,
+      skippedRows: 0,
+      duplicateRows: 0,
+      errors: [],
+      warnings: [],
+      processing_time_ms: 0,
+      dataset_id: datasetId,
+      file_info: {
+        filename: path.basename(filePath),
+        size: 0,
+        format: 'csv'
+      }
+    };
+
+    try {
+      // 验证文件存在
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`CSV file not found: ${filePath}`);
+      }
+
+      const stats = fs.statSync(filePath);
+      result.file_info.size = stats.size;
+
+      // 智能检测字段映射
+      console.log('🔍 Analyzing CSV structure...');
+      const fieldAnalysis = await SmartCsvParser.detectFieldMapping(filePath);
+
+      console.log('📊 Field mapping analysis:', {
+        confidence: fieldAnalysis.confidence,
+        prioritiesFound: fieldAnalysis.priorities.found,
+        prioritiesMissing: fieldAnalysis.priorities.missing,
+        totalFields: fieldAnalysis.headers.length
+      });
+
+      result.warnings.push(`Field detection confidence: ${fieldAnalysis.confidence}`);
+      result.warnings.push(`Priority fields found: ${fieldAnalysis.priorities.found.join(', ')}`);
+
+      if (fieldAnalysis.priorities.missing.length > 0) {
+        result.warnings.push(`Missing priority fields: ${fieldAnalysis.priorities.missing.join(', ')}`);
+      }
+
+      // 解析CSV数据
+      console.log('📄 Parsing CSV data...');
+      const rows = await this.parseSmartCsvFile(filePath, fieldAnalysis.mapping);
+      result.totalRows = rows.length;
+
+      console.log(`Processing ${rows.length} rows with smart mapping to dataset ${datasetId}...`);
+
+      // 验证解析质量
+      const qualityCheck = SmartCsvParser.validateParseResult(rows, fieldAnalysis.mapping);
+      console.log('✅ Data quality assessment:', qualityCheck);
+
+      result.warnings.push(`Data quality: ${qualityCheck.quality}`);
+      result.warnings.push(`Valid rows: ${qualityCheck.stats.validRows}/${qualityCheck.stats.totalRows}`);
+
+      // 批量处理数据到指定dataset
+      const batchSize = 50;
+
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize);
+        const batchResult = await this.processSmartBatch(batch, datasetId);
+
+        result.importedRows += batchResult.imported;
+        result.skippedRows += batchResult.skipped;
+        result.duplicateRows += batchResult.duplicates;
+        result.errors.push(...batchResult.errors);
+        result.warnings.push(...batchResult.warnings);
+
+        // 进度日志
+        if (i % (batchSize * 2) === 0) {
+          console.log(`Processed ${Math.min(i + batchSize, rows.length)}/${rows.length} rows`);
+        }
+      }
+
+      result.success = result.importedRows > 0;
+
+      const endTime = process.hrtime.bigint();
+      result.processing_time_ms = Number(endTime - startTime) / 1000000;
+
+      console.log(`✅ Smart import to dataset ${datasetId} completed: ${result.importedRows}/${result.totalRows} rows imported`);
+
+      return result;
+
+    } catch (error) {
+      console.error('❌ Smart CSV import to dataset failed:', error);
+      result.errors.push(`Import failed: ${error instanceof Error ? error.message : String(error)}`);
+
+      const endTime = process.hrtime.bigint();
+      result.processing_time_ms = Number(endTime - startTime) / 1000000;
+
+      return result;
+    }
+  }
+
+  /**
    * 智能导入CSV文件 - 自动检测字段格式
    */
   async importCsvFileSmart(
@@ -412,7 +518,8 @@ export class CsvImportService {
    * Import the targets.simple.csv file specifically
    */
   async importNroTargetsFile(filePath: string = '/Users/kanbei/Code/chainreactions_backend/targets.simple.csv'): Promise<ImportResult> {
-    return this.importCsvFile(
+    console.log('🚀 Starting NRO targets import using smart import method...');
+    return this.importCsvFileSmart(
       filePath,
       'Canadian Named Research Organizations',
       'Canadian government list of named research organizations with security concerns',

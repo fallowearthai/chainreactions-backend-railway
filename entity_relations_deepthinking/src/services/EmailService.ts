@@ -27,7 +27,7 @@ export class EmailService {
       tls: {
         rejectUnauthorized: false
       }
-    });
+    } as any);
   }
 
   async sendDemoRequest(data: DemoRequestData): Promise<EmailResult> {
