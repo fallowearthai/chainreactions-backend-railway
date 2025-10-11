@@ -43,17 +43,12 @@ app.use((req, res, next) => {
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
     ? [
-        'https://chainreactions-frontend-dev.vercel.app', // Vercel production domain
-        'https://chainreactions-frontend-dev.vercel.app' // Alternative Vercel domain
+        'https://chainreactions-frontend-dev.vercel.app',
+        'https://chainreactions-frontend-dev-fallowearths-projects-06c459ff.vercel.app',
+        'https://chainreactions-fronte-git-584dee-fallowearths-projects-06c459ff.vercel.app'
       ]
-    : [
-        'http://localhost:8080', // Fixed frontend port
-        'http://localhost:3000', // Development backend port (if needed)
-        'http://127.0.0.1:8080'  // Local development fallback
-      ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    : ['http://localhost:8080'], // Fixed frontend port
+  credentials: true
 }));
 
 // Serve static files from public directory
