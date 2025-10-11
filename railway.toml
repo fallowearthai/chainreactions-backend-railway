@@ -1,0 +1,16 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+healthcheckPath = "/api/health"
+healthcheckTimeout = 100
+restartPolicyType = "on_failure"
+startCommand = "npm start"
+
+[[services]]
+name = "chainreactions-backend"
+source = "."
+
+[services.variables]
+NODE_ENV = "production"
+PORT = "3000"

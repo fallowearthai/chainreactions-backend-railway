@@ -1,0 +1,98 @@
+{
+  "similarity": {
+    "thresholds": {
+      "exact_match": 1.0,
+      "high_similarity": 0.95,
+      "good_similarity": 0.85,
+      "moderate_similarity": 0.75,
+      "low_similarity": 0.6,
+      "minimum_match": 0.3
+    },
+    "weights": {
+      "jaro_winkler": 0.4,
+      "levenshtein": 0.3,
+      "word_level": 0.2,
+      "character_ngram": 0.1
+    },
+    "preprocessing": {
+      "remove_punctuation": true,
+      "normalize_whitespace": true,
+      "convert_to_lowercase": true,
+      "remove_common_words": ["the", "of", "and", "for", "in", "at", "to", "a", "an"],
+      "normalize_organization_suffixes": ["inc", "ltd", "llc", "corp", "corporation", "company", "co", "institute", "university", "research", "center", "centre"]
+    }
+  },
+  "geographic": {
+    "enable_location_boost": true,
+    "location_boost_factor": 1.2,
+    "location_penalty_factor": 0.8,
+    "enable_regional_grouping": true
+  },
+  "query": {
+    "strategies": {
+      "exact_match_limit": 10,
+      "fuzzy_match_limit": 20,
+      "alias_match_limit": 30,
+      "full_text_limit": 50
+    },
+    "timeouts": {
+      "exact_match_ms": 100,
+      "fuzzy_match_ms": 300,
+      "alias_match_ms": 500,
+      "full_text_ms": 1000
+    },
+    "enable_progressive_search": true,
+    "minimum_results_before_next_strategy": 3
+  },
+  "cache": {
+    "enable_caching": true,
+    "default_ttl_minutes": 5,
+    "popular_queries_ttl_minutes": 30,
+    "max_cache_entries": 1000,
+    "enable_warmup": true,
+    "warmup_queries": [
+      "university", "institute", "research", "center", "academy",
+      "medical", "military", "aerospace", "technology", "laboratory"
+    ]
+  },
+  "match_types": {
+    "exact": {
+      "confidence": 1.0,
+      "description": "Perfect string match"
+    },
+    "core_acronym": {
+      "confidence": 0.95,
+      "description": "Core name matches with acronym in parentheses"
+    },
+    "alias": {
+      "confidence": 0.95,
+      "description": "Exact match with known alias"
+    },
+    "fuzzy": {
+      "confidence": 0.85,
+      "description": "High similarity match using multiple algorithms"
+    },
+    "word_match": {
+      "confidence": 0.8,
+      "description": "Strong word-level similarity"
+    },
+    "core_match": {
+      "confidence": 0.75,
+      "description": "Core organization name matches"
+    },
+    "alias_partial": {
+      "confidence": 0.7,
+      "description": "Partial match with alias"
+    },
+    "partial": {
+      "confidence": 0.6,
+      "description": "Substring or containment match"
+    }
+  },
+  "debugging": {
+    "enable_query_logging": true,
+    "enable_timing_metrics": true,
+    "log_similarity_scores": false,
+    "max_debug_results": 100
+  }
+}
