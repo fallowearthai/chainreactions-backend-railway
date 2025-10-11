@@ -19,7 +19,7 @@ RUN npm ci
 COPY . .
 
 # Build the TypeScript application
-RUN npm run build
+RUN npx tsc
 
 # Stage 2: Production Stage
 FROM node:20-alpine AS production
