@@ -417,16 +417,16 @@ All services provide health check endpoints:
 
 **IMPORTANT: Railway Deployment Repository**
 - **Local Development Repository**: `/Users/kanbei/Code/chainreactions_backend`
-- **Railway Deployment Repository**: `/Users/kanbei/Code/chainreactions-backend-railway`
+- **Railway Deployment Repository**: `/Users/kanbei/Code/chainreactions_backend_railway`
 - **⚠️ WARNING**: Changes to `chainreactions_backend` are NOT automatically deployed to Railway
 - **Deployment Process**:
   1. Make changes in `chainreactions_backend` (this repository)
   2. Test locally to ensure everything works
-  3. Manually sync changes to `chainreactions-backend-railway` repository
-  4. Push to `chainreactions-backend-railway` to trigger Railway deployment
+  3. Manually sync changes to `chainreactions_backend_railway` repository
+  4. Push to `chainreactions_backend_railway` to trigger Railway deployment
 - **Why Two Repositories?**:
   - `chainreactions_backend`: Development and testing environment
-  - `chainreactions-backend-railway`: Production deployment environment with Railway-specific configurations
+  - `chainreactions_backend_railway`: Production deployment environment with Railway-specific configurations
 
 ### 🌐 Production CORS Configuration
 
