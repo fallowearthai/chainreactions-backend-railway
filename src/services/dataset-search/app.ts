@@ -14,8 +14,13 @@ const PORT = process.env.PORT || 3004;
 // Middleware
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
-    ? ['https://your-frontend-domain.com'] // Replace with actual frontend domain
-    : ['http://localhost:8080', 'http://localhost:8081', 'null'], // Allow both frontend and test ports + local files
+    ? [
+        'https://chainreactions.site',
+        'https://chainreactions-frontend-dev.vercel.app',
+        'https://chainreactions-frontend-dev-fallowearths-projects-06c459ff.vercel.app',
+        'https://chainreactions-fronte-git-584dee-fallowearths-projects-06c459ff.vercel.app'
+      ]
+    : ['http://localhost:8080', 'http://localhost:3000', 'http://localhost:8081', 'null'], // Allow frontend, backend, test ports + local files
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));

@@ -18,13 +18,20 @@ app.use(helmet());
 
 // CORS configuration
 app.use(cors({
-  origin: [
-    'http://localhost:8080',
-    'http://localhost:3000',
-    'http://localhost:8081',
-    'http://localhost:8082',
-    'http://localhost:8083'
-  ].concat(process.env.CORS_ORIGIN ? [process.env.CORS_ORIGIN] : []),
+  origin: process.env.NODE_ENV === 'production'
+    ? [
+        'https://chainreactions.site',
+        'https://chainreactions-frontend-dev.vercel.app',
+        'https://chainreactions-frontend-dev-fallowearths-projects-06c459ff.vercel.app',
+        'https://chainreactions-fronte-git-584dee-fallowearths-projects-06c459ff.vercel.app'
+      ].concat(process.env.CORS_ORIGIN ? [process.env.CORS_ORIGIN] : [])
+    : [
+        'http://localhost:8080',
+        'http://localhost:3000',
+        'http://localhost:8081',
+        'http://localhost:8082',
+        'http://localhost:8083'
+      ].concat(process.env.CORS_ORIGIN ? [process.env.CORS_ORIGIN] : []),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
