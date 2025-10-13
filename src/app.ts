@@ -43,6 +43,7 @@ app.use((req, res, next) => {
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
     ? [
+        'https://chainreactions.site', // Production domain (Digital Ocean)
         'https://chainreactions-frontend-dev.vercel.app',
         'https://chainreactions-frontend-dev-fallowearths-projects-06c459ff.vercel.app',
         'https://chainreactions-fronte-git-584dee-fallowearths-projects-06c459ff.vercel.app'
