@@ -95,7 +95,8 @@ app.get('/api/normal-search/info', (req, res) => normalSearchController.getInfo(
 
 // Routes - Entity Search (Integrated from port 3002)
 app.post('/api/entity-search', (req, res, next) => entitySearchController.handleEntitySearch(req, res, next));
-app.get('/api/entity-search/test', apiTestRateLimiter, (req, res, next) => entitySearchController.testLinkupConnection(req, res, next));
+// ⚠️ CRITICAL: Disabled test endpoint to prevent automatic token consumption
+// app.get('/api/entity-search/test', apiTestRateLimiter, (req, res, next) => entitySearchController.testLinkupConnection(req, res, next));
 
 // Routes - Dataset Matching (Integrated from port 3003)
 app.post('/api/dataset-matching/match', (req, res, next) => datasetMatchingController.handleSingleMatch(req, res, next));
@@ -215,7 +216,7 @@ app.get('/api/health', healthCheckRateLimiter, async (req, res) => {
           description: 'Linkup API integration for professional business intelligence',
           endpoints: {
             search: '/api/entity-search',
-            test: '/api/entity-search/test (⚠️ Consumes credits!)'
+            test: '/api/entity-search/test (⚠️ DISABLED to prevent token consumption)'
           },
           health: entitySearchHealth
         },
@@ -307,7 +308,7 @@ app.get('/api', (req, res) => {
         description: 'Linkup API integration for professional business intelligence',
         endpoints: {
           search: 'POST /api/entity-search - Entity search with domain filtering',
-          test: 'GET /api/entity-search/test - Test Linkup API connection'
+          test: 'GET /api/entity-search/test - ⚠️ DISABLED to prevent token consumption'
         }
       },
       dataset_matching: {
@@ -427,7 +428,7 @@ if (require.main === module) {
       console.log('');
       console.log('🔍 Entity Search Service (Integrated from port 3002):');
       console.log(`    POST /api/entity-search - Entity search with domain filtering`);
-      console.log(`    GET  /api/entity-search/test - Test Linkup API connection`);
+      // console.log(`    GET  /api/entity-search/test - Test Linkup API connection (DISABLED)`);
       console.log('');
       console.log('🎯 Dataset Matching Service (Integrated from port 3003):');
       console.log(`    POST /api/dataset-matching/match - Single entity matching`);
