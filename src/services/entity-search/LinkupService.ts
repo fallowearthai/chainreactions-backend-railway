@@ -116,57 +116,15 @@ export class LinkupService {
   }
 
   async testConnection(): Promise<LinkupAPIResponse> {
-    try {
-      console.log('🧪 Testing Linkup API connection...');
-      console.warn('⚠️ WARNING: This will consume Linkup API credits by calling /credits/balance');
+    console.error('🚨 CRITICAL: testConnection() method has been DISABLED to prevent automatic token consumption');
+    console.error('This method was calling /credits/balance endpoint and consuming Linkup credits automatically');
+    console.error('For any testing needs, use manual API calls instead');
 
-      // IMPORTANT: This endpoint may consume credits!
-      // Use credits/balance endpoint for connection test
-      const response: AxiosResponse = await axios.get(
-        `${this.baseURL}/credits/balance`,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-          },
-          timeout: 10000, // 10 second timeout for test
-          proxy: false, // Disable proxy to avoid connection issues
-        }
-      );
-
-      console.log('✅ Linkup API connection test successful:', {
-        status: response.status,
-        data: response.data
-      });
-
-      // Record test API call
-      linkupAPIMonitor.recordCall('credits/balance', 'test-connection', true);
-
-      return {
-        success: true,
-        data: {
-          status: 'connected',
-          message: 'Linkup API connection successful (may have consumed credits)',
-          timestamp: new Date().toISOString(),
-          credits: response.data,
-          warning: 'This test may consume Linkup API credits'
-        }
-      };
-
-    } catch (error: any) {
-      console.error('❌ Linkup API connection test failed:', {
-        message: error.message,
-        status: error.response?.status,
-        statusText: error.response?.statusText
-      });
-
-      // Record failed test API call
-      linkupAPIMonitor.recordCall('credits/balance', 'test-connection', false);
-
-      return {
-        success: false,
-        error: error.response?.data?.message || error.message || 'Connection test failed'
-      };
-    }
+    // Always return failure to prevent any automatic retries
+    return {
+      success: false,
+      error: 'testConnection() method has been disabled to prevent automatic token consumption'
+    };
   }
 
   /**

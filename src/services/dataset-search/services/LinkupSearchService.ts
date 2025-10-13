@@ -511,36 +511,17 @@ User Query: Investigate and report on the relationship between '${institutionA}'
 
   /**
    * Test the Linkup API connection
-   * IMPORTANT: This will consume credits! Only call when explicitly requested
+   * 🚨 CRITICAL: DISABLED TO PREVENT AUTOMATIC TOKEN CONSUMPTION
+   * IMPORTANT: This method was consuming tokens automatically on startup!
    * For health checks, use checkConfiguration() instead
    */
   async testConnection(): Promise<boolean> {
-    try {
-      logger.warn('WARNING: testConnection() will consume Linkup API credits!');
-      logger.warn('For health checks, use checkConfiguration() instead');
+    logger.error('🚨 CRITICAL: testConnection() method has been DISABLED to prevent automatic token consumption');
+    logger.error('This method was causing automatic API calls and consuming Linkup credits on startup');
+    logger.error('For any testing needs, use manual API calls instead');
 
-      // Check if we're approaching API limits
-      const canCall = linkupAPIMonitor.canMakeCall();
-      if (!canCall.allowed) {
-        logger.error(`Cannot make test call: ${canCall.reason}`);
-        throw new Error(`API limit reached: ${canCall.reason}`);
-      }
-
-      const testResponse = await this.searchSingleRelationship(
-        'Test Institution',
-        'Test Entity',
-        'Test Country'
-      );
-
-      // Record test API call
-      linkupAPIMonitor.recordCall('test', 'test-connection', !!(testResponse && testResponse.answer));
-
-      return !!(testResponse && testResponse.answer);
-    } catch (error) {
-      logger.error('Linkup API connection test failed', error);
-      linkupAPIMonitor.recordCall('test', 'test-connection', false);
-      return false;
-    }
+    // Always return false to prevent any automatic retries
+    return false;
   }
 
   /**
