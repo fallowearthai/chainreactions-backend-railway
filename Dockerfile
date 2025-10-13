@@ -18,14 +18,14 @@ RUN addgroup -g 1001 -S nodejs && \
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies
-RUN npm install --force
+# Install all dependencies (remove --force to prevent corruption)
+RUN npm ci || npm install
 
 # Copy source code
 COPY . .
 
-# Build the TypeScript application
-RUN npm run build || echo "Build completed with warnings"
+# Ensure TypeScript is installed and build the application
+RUN npm install typescript --save-dev && npm run build
 
 # Create logs and uploads directory
 RUN mkdir -p /app/logs /app/uploads && chown -R chainreactions:nodejs /app/logs /app/uploads
