@@ -70,8 +70,19 @@ export declare class LinkupSearchService {
     searchSingleRelationship(institutionName: string, riskEntityName: string, country: string, signal?: AbortSignal): Promise<LinkupApiResponse>;
     /**
      * Test the Linkup API connection
+     * IMPORTANT: This will consume credits! Only call when explicitly requested
+     * For health checks, use checkConfiguration() instead
      */
     testConnection(): Promise<boolean>;
+    /**
+     * Lightweight configuration check - does NOT call any API
+     * Use this for health checks to avoid consuming credits
+     */
+    checkConfiguration(): {
+        configured: boolean;
+        apiCount: number;
+        hasApiKeys: boolean;
+    };
     /**
      * Get current rate limit status for all APIs
      */

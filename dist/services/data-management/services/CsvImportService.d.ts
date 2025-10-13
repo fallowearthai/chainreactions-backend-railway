@@ -5,6 +5,10 @@ export declare class CsvImportService {
     private constructor();
     static getInstance(): CsvImportService;
     /**
+     * 智能导入CSV文件到指定数据集ID - 自动检测字段格式
+     */
+    importCsvFileSmartToDataset(filePath: string, datasetId: string): Promise<ImportResult>;
+    /**
      * 智能导入CSV文件 - 自动检测字段格式
      */
     importCsvFileSmart(filePath: string, datasetName: string, description?: string, isSystem?: boolean): Promise<ImportResult>;

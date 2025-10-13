@@ -80,6 +80,7 @@ class DataManagementController {
      * GET /api/data-management/datasets/:id/stats
      */
     async getDatasetStats(req, res) {
+        console.log('🔍 DataManagementController.getDatasetStats called with dataset ID:', req.params.id);
         try {
             await this.originalController.getDatasetStats(req, res);
         }
@@ -191,12 +192,37 @@ class DataManagementController {
     // Error handling helper
     handleError(res, error, message) {
         console.error(`DataManagement Controller Error - ${message}:`, error);
+        console.error('Error type:', typeof error);
+        console.error('Error constructor:', error?.constructor?.name);
+        if (error instanceof Error) {
+            console.error('Error message:', error.message);
+            console.error('Error stack:', error.stack);
+        }
         const statusCode = error instanceof Error && error.message.includes('not found') ? 404 : 500;
+        let errorDetails;
+        if (error instanceof Error) {
+            errorDetails = error.message;
+        }
+        else if (typeof error === 'object' && error !== null) {
+            try {
+                errorDetails = JSON.stringify(error, null, 2);
+                console.error('Stringified error object:', errorDetails);
+            }
+            catch {
+                errorDetails = Object.prototype.toString.call(error);
+                console.error('Fallback error details:', errorDetails);
+            }
+        }
+        else {
+            errorDetails = String(error);
+            console.error('Final error details:', errorDetails);
+        }
+        console.error('Final error response details:', errorDetails);
         res.status(statusCode).json({
             success: false,
             error: message,
             service: 'data-management',
-            details: error instanceof Error ? error.message : String(error),
+            details: errorDetails,
             timestamp: new Date().toISOString()
         });
     }

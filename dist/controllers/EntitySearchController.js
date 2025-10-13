@@ -84,6 +84,7 @@ class EntitySearchController {
     async testLinkupConnection(req, res, next) {
         try {
             console.log('🧪 Testing Linkup API connection...');
+            console.warn('⚠️ WARNING: This endpoint will consume Linkup API credits!');
             if (!this.linkupService.isConfigured()) {
                 res.status(500).json({
                     success: false,
@@ -92,13 +93,15 @@ class EntitySearchController {
                 });
                 return;
             }
+            // IMPORTANT: This will consume credits! Only call when explicitly requested by user
             const testResult = await this.linkupService.testConnection();
             if (testResult.success) {
                 res.json({
                     success: true,
-                    message: 'Linkup API connection test successful',
+                    message: 'Linkup API connection test successful (1 credit consumed)',
                     data: testResult.data,
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
+                    warning: 'This test consumed Linkup API credits'
                 });
             }
             else {
@@ -121,21 +124,21 @@ class EntitySearchController {
         }
     }
     // Health check method for Entity Search service
+    // IMPORTANT: Does NOT call real Linkup API to prevent credit consumption
     async healthCheck() {
         const configured = this.linkupService.isConfigured();
-        let details = { configured };
+        let details = {
+            configured,
+            note: 'Health check does not call real API to prevent credit consumption'
+        };
+        // Only check configuration, DO NOT call real API
         if (configured) {
-            try {
-                const testResult = await this.linkupService.testConnection();
-                details.api_connection = testResult.success ? 'operational' : 'failed';
-                if (!testResult.success) {
-                    details.api_error = testResult.error;
-                }
-            }
-            catch (error) {
-                details.api_connection = 'error';
-                details.api_error = error.message;
-            }
+            details.api_key_status = 'configured';
+            details.api_connection = 'not_tested'; // Changed from 'operational' to 'not_tested'
+        }
+        else {
+            details.api_key_status = 'missing';
+            details.api_connection = 'unavailable';
         }
         return {
             status: configured ? 'operational' : 'misconfigured',

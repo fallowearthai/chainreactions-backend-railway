@@ -6,6 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LinkupSearchService = void 0;
 const axios_1 = __importDefault(require("axios"));
 const DatasetSearchTypes_1 = require("../types/DatasetSearchTypes");
+const LinkupAPIMonitor_1 = require("../../../utils/LinkupAPIMonitor");
+const Logger_1 = require("../../../utils/Logger");
 class LinkupSearchService {
     constructor() {
         this.activeCalls = new Set();
@@ -17,7 +19,7 @@ class LinkupSearchService {
         if (this.apiKeys.length === 0) {
             throw new DatasetSearchTypes_1.DatasetSearchError('At least one LINKUP_API_KEY environment variable is required', 'MISSING_API_KEY', 500);
         }
-        console.log(`🔗 LinkupSearchService initialized with ${this.apiKeys.length} API keys for parallel processing`);
+        Logger_1.logger.info(`🔗 LinkupSearchService initialized with ${this.apiKeys.length} API keys for parallel processing`);
         // Initialize rate limiters for each API key: 10 queries per second with burst capacity
         this.rateLimiters = this.apiKeys.map(() => ({
             tokens: 10,
@@ -113,12 +115,12 @@ User Query: Investigate and report on the relationship between '${institutionA}'
                 }
                 // For the last attempt, throw the error
                 if (attempt === maxRetries) {
-                    console.error(`❌ API ${apiIndex + 1} failed after ${maxRetries + 1} attempts:`, error.message);
+                    Logger_1.logger.error(`API ${apiIndex + 1} failed after ${maxRetries + 1} attempts`, error);
                     throw error;
                 }
                 // Calculate retry delay with exponential backoff
                 const retryDelay = this.calculateRetryDelay(attempt, error);
-                console.warn(`⚠️ API ${apiIndex + 1} attempt ${attempt + 1} failed, retrying in ${retryDelay}ms:`, error.message);
+                Logger_1.logger.warn(`API ${apiIndex + 1} attempt ${attempt + 1} failed, retrying in ${retryDelay}ms`, { error: error.message });
                 // Wait before retry
                 await this.delay(retryDelay);
             }
@@ -131,13 +133,14 @@ User Query: Investigate and report on the relationship between '${institutionA}'
      */
     async attemptSearch(institutionA, riskEntity, country, apiIndex, signal, fromDate, toDate, attempt = 0) {
         const prompt = this.buildOSINTPrompt(institutionA, riskEntity, country);
-        // Debug: Log the exact prompt being sent to API (only on first attempt to reduce noise)
+        // Debug: Log the exact prompt being sent to API (only on first attempt and in debug mode)
         if (attempt === 0) {
-            console.log(`🔍 API ${apiIndex + 1} sending prompt to Linkup API:`);
-            console.log(`--- START PROMPT ---`);
-            console.log(prompt);
-            console.log(`--- END PROMPT ---`);
-            console.log(`Variables: institutionA="${institutionA}", riskEntity="${riskEntity}", country="${country}"`);
+            Logger_1.logger.verbose(`API ${apiIndex + 1} sending prompt to Linkup API`, {
+                institutionA,
+                riskEntity,
+                country,
+                promptLength: prompt.length
+            });
         }
         // Rate limiting removed: Concurrent pool architecture provides natural rate limiting
         // Each pool processes entities sequentially, eliminating need for additional delays
@@ -156,12 +159,12 @@ User Query: Investigate and report on the relationship between '${institutionA}'
         if (fromDate) {
             requestData.fromDate = fromDate;
             if (attempt === 0)
-                console.log(`📅 Adding fromDate: ${fromDate}`);
+                Logger_1.logger.debug(`📅 Adding fromDate: ${fromDate}`);
         }
         if (toDate) {
             requestData.toDate = toDate;
             if (attempt === 0)
-                console.log(`📅 Adding toDate: ${toDate}`);
+                Logger_1.logger.debug(`📅 Adding toDate: ${toDate}`);
         }
         const response = await axios_1.default.post(this.apiUrl, requestData, {
             headers: {
@@ -172,11 +175,15 @@ User Query: Investigate and report on the relationship between '${institutionA}'
             signal
         });
         if (!response.data || typeof response.data.answer !== 'string') {
+            // Record failed API call
+            LinkupAPIMonitor_1.linkupAPIMonitor.recordCall('search', 'dataset-search', false);
             throw new DatasetSearchTypes_1.DatasetSearchError(`Invalid response format from Linkup API`, 'INVALID_API_RESPONSE', 502);
         }
-        // Log successful attempts (only for retries to reduce noise)
+        // Record successful API call
+        LinkupAPIMonitor_1.linkupAPIMonitor.recordCall('search', 'dataset-search', true);
+        // Log successful attempts (only for retries)
         if (attempt > 0) {
-            console.log(`✅ API ${apiIndex + 1} attempt ${attempt + 1} succeeded`);
+            Logger_1.logger.info(`✅ API ${apiIndex + 1} attempt ${attempt + 1} succeeded`);
         }
         return response.data;
     }
@@ -216,7 +223,7 @@ User Query: Investigate and report on the relationship between '${institutionA}'
         if (error.response?.status === 429) {
             // Use longer base delay for rate limiting
             baseDelay = Math.max(baseDelay, 5000); // Minimum 5 seconds for rate limits
-            console.log(`🚦 Rate limit detected on API, using extended delay: ${Math.round(baseDelay)}ms`);
+            Logger_1.logger.warn(`🚦 Rate limit detected on API, using extended delay: ${Math.round(baseDelay)}ms`);
         }
         // Cap the maximum delay to 30 seconds
         return Math.min(baseDelay, 30000);
@@ -234,16 +241,16 @@ User Query: Investigate and report on the relationship between '${institutionA}'
         // Combine external signal with timeout signal
         const combinedSignal = signal || timeoutController.signal;
         try {
-            console.log(`🚀 Starting TRUE CONCURRENT POOL search with ${this.apiKeys.length} APIs for ${riskEntities.length} entities`);
+            Logger_1.logger.info(`🚀 Starting concurrent pool search with ${this.apiKeys.length} APIs for ${riskEntities.length} entities`);
             // Distribute entities across API pools
             const pools = Array.from({ length: this.apiKeys.length }, () => []);
             riskEntities.forEach((entity, index) => {
                 const poolIndex = index % this.apiKeys.length;
                 pools[poolIndex].push(entity);
             });
-            // Log pool distribution
+            // Log pool distribution (debug only)
             pools.forEach((pool, apiIndex) => {
-                console.log(`📦 Pool ${apiIndex + 1} (API ${apiIndex + 1}): ${pool.length} entities - ${pool.map(e => e.organization_name).join(', ')}`);
+                Logger_1.logger.debug(`📦 Pool ${apiIndex + 1}: ${pool.length} entities`);
             });
             // Process pools in parallel with Promise.all
             const poolPromises = pools.map((pool, apiIndex) => this.processPool(pool, apiIndex, institutionName, institutionCountry, combinedSignal, fromDate, toDate, retryAttempts, onProgress, riskEntities.length));
@@ -252,7 +259,7 @@ User Query: Investigate and report on the relationship between '${institutionA}'
             clearTimeout(timeoutId);
             // Flatten and collect all results
             const allResults = poolResults.flat().filter(result => result !== null);
-            console.log(`🎯 Concurrent pool search completed: ${allResults.length}/${riskEntities.length} successful`);
+            Logger_1.logger.success(`Concurrent pool search completed: ${allResults.length}/${riskEntities.length} successful`);
             return allResults;
         }
         catch (error) {
@@ -274,27 +281,27 @@ User Query: Investigate and report on the relationship between '${institutionA}'
     async processPool(entities, apiIndex, institutionName, institutionCountry, signal, fromDate, toDate, retryAttempts = 3, onProgress, totalEntities = 0) {
         const results = [];
         let completedInPool = 0;
-        console.log(`🏊 Pool ${apiIndex + 1} starting sequential processing of ${entities.length} entities`);
+        Logger_1.logger.info(`Pool ${apiIndex + 1} starting sequential processing of ${entities.length} entities`);
         for (const entity of entities) {
             if (signal.aborted) {
-                console.log(`🛑 Pool ${apiIndex + 1} aborted`);
+                Logger_1.logger.warn(`Pool ${apiIndex + 1} aborted`);
                 throw new DatasetSearchTypes_1.DatasetSearchError('Search operation was cancelled', 'SEARCH_CANCELLED', 499);
             }
             try {
                 completedInPool++;
                 const globalCompleted = this.calculateGlobalProgress(apiIndex, completedInPool, entities.length);
-                console.log(`🔍 Pool ${apiIndex + 1} - Entity ${completedInPool}/${entities.length} (Global: ${globalCompleted}/${totalEntities}): ${entity.organization_name}`);
+                Logger_1.logger.debug(`Pool ${apiIndex + 1} - Entity ${completedInPool}/${entities.length}: ${entity.organization_name}`);
                 const result = await this.performSingleSearch(institutionName, entity.organization_name, entity.countries[0] || institutionCountry, apiIndex, signal, fromDate, toDate, retryAttempts);
                 results.push(result);
                 // Report progress with global count
                 if (onProgress) {
                     onProgress(globalCompleted, totalEntities, result, apiIndex);
                 }
-                console.log(`✅ Pool ${apiIndex + 1} - Entity ${completedInPool}/${entities.length} completed`);
+                Logger_1.logger.debug(`✅ Pool ${apiIndex + 1} - Entity ${completedInPool}/${entities.length} completed`);
             }
             catch (error) {
                 const globalCompleted = this.calculateGlobalProgress(apiIndex, completedInPool, entities.length);
-                console.error(`❌ Pool ${apiIndex + 1} - Entity ${completedInPool}/${entities.length} failed:`, error instanceof Error ? error.message : String(error));
+                Logger_1.logger.error(`Pool ${apiIndex + 1} - Entity ${completedInPool}/${entities.length} failed`, error);
                 results.push(null);
                 // Report failure progress
                 if (onProgress) {
@@ -302,7 +309,7 @@ User Query: Investigate and report on the relationship between '${institutionA}'
                 }
             }
         }
-        console.log(`✅ Pool ${apiIndex + 1} completed: ${results.filter(r => r !== null).length}/${entities.length} successful`);
+        Logger_1.logger.info(`Pool ${apiIndex + 1} completed: ${results.filter(r => r !== null).length}/${entities.length} successful`);
         return results;
     }
     /**
@@ -332,16 +339,40 @@ User Query: Investigate and report on the relationship between '${institutionA}'
     }
     /**
      * Test the Linkup API connection
+     * IMPORTANT: This will consume credits! Only call when explicitly requested
+     * For health checks, use checkConfiguration() instead
      */
     async testConnection() {
         try {
+            Logger_1.logger.warn('WARNING: testConnection() will consume Linkup API credits!');
+            Logger_1.logger.warn('For health checks, use checkConfiguration() instead');
+            // Check if we're approaching API limits
+            const canCall = LinkupAPIMonitor_1.linkupAPIMonitor.canMakeCall();
+            if (!canCall.allowed) {
+                Logger_1.logger.error(`Cannot make test call: ${canCall.reason}`);
+                throw new Error(`API limit reached: ${canCall.reason}`);
+            }
             const testResponse = await this.searchSingleRelationship('Test Institution', 'Test Entity', 'Test Country');
+            // Record test API call
+            LinkupAPIMonitor_1.linkupAPIMonitor.recordCall('test', 'test-connection', !!(testResponse && testResponse.answer));
             return !!(testResponse && testResponse.answer);
         }
         catch (error) {
-            console.error('Linkup API connection test failed:', error);
+            Logger_1.logger.error('Linkup API connection test failed', error);
+            LinkupAPIMonitor_1.linkupAPIMonitor.recordCall('test', 'test-connection', false);
             return false;
         }
+    }
+    /**
+     * Lightweight configuration check - does NOT call any API
+     * Use this for health checks to avoid consuming credits
+     */
+    checkConfiguration() {
+        return {
+            configured: this.apiKeys.length > 0,
+            apiCount: this.apiKeys.length,
+            hasApiKeys: this.apiKeys.every(key => key && key.length > 0)
+        };
     }
     /**
      * Get current rate limit status for all APIs

@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LinkupService = void 0;
 const axios_1 = __importDefault(require("axios"));
+const LinkupAPIMonitor_1 = require("../../utils/LinkupAPIMonitor");
 class LinkupService {
     constructor() {
         this.apiKey = process.env.LINKUP_API_KEY || '';
@@ -70,6 +71,8 @@ class LinkupService {
                 answerLength: response.data?.answer?.length || 0,
                 sourcesCount: response.data?.sources?.length || 0
             });
+            // Record successful API call
+            LinkupAPIMonitor_1.linkupAPIMonitor.recordCall('entity-search', 'entity-search', true);
             return {
                 success: true,
                 data: response.data
@@ -83,6 +86,8 @@ class LinkupService {
                 data: error.response?.data,
                 company: companyName
             });
+            // Record failed API call
+            LinkupAPIMonitor_1.linkupAPIMonitor.recordCall('entity-search', 'entity-search', false);
             return {
                 success: false,
                 error: error.response?.data?.message || error.message || 'Unknown error occurred'
@@ -92,6 +97,8 @@ class LinkupService {
     async testConnection() {
         try {
             console.log('🧪 Testing Linkup API connection...');
+            console.warn('⚠️ WARNING: This will consume Linkup API credits by calling /credits/balance');
+            // IMPORTANT: This endpoint may consume credits!
             // Use credits/balance endpoint for connection test
             const response = await axios_1.default.get(`${this.baseURL}/credits/balance`, {
                 headers: {
@@ -104,13 +111,16 @@ class LinkupService {
                 status: response.status,
                 data: response.data
             });
+            // Record test API call
+            LinkupAPIMonitor_1.linkupAPIMonitor.recordCall('credits/balance', 'test-connection', true);
             return {
                 success: true,
                 data: {
                     status: 'connected',
-                    message: 'Linkup API connection successful',
+                    message: 'Linkup API connection successful (may have consumed credits)',
                     timestamp: new Date().toISOString(),
-                    credits: response.data
+                    credits: response.data,
+                    warning: 'This test may consume Linkup API credits'
                 }
             };
         }
@@ -120,11 +130,24 @@ class LinkupService {
                 status: error.response?.status,
                 statusText: error.response?.statusText
             });
+            // Record failed test API call
+            LinkupAPIMonitor_1.linkupAPIMonitor.recordCall('credits/balance', 'test-connection', false);
             return {
                 success: false,
                 error: error.response?.data?.message || error.message || 'Connection test failed'
             };
         }
+    }
+    /**
+     * Lightweight configuration check - does NOT call any API
+     * Use this for health checks to avoid consuming credits
+     */
+    checkConfiguration() {
+        return {
+            configured: this.isConfigured(),
+            baseURL: this.baseURL,
+            hasApiKey: !!this.apiKey && this.apiKey.length > 0
+        };
     }
     isConfigured() {
         return !!this.apiKey;

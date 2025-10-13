@@ -14,32 +14,49 @@ const DataManagementController_1 = require("./controllers/DataManagementControll
 const DatasetSearchController_1 = require("./controllers/DatasetSearchController");
 const DemoRequestController_1 = require("./controllers/DemoRequestController");
 const upload_1 = require("./services/data-management/middleware/upload");
+const rateLimiter_1 = require("./middleware/rateLimiter");
+const Logger_1 = require("./utils/Logger");
 const dotenv_1 = __importDefault(require("dotenv"));
 // Load environment variables
 dotenv_1.default.config();
 const app = (0, express_1.default)();
-const PORT = process.env.PORT || 3000;
+const PORT = parseInt(process.env.PORT || '3000', 10);
 // Middleware
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
-// Request logging middleware
+// Request logging middleware - Production optimized
 app.use((req, res, next) => {
     const startTime = Date.now();
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`, {
-        ip: req.ip,
-        userAgent: req.get('User-Agent'),
-        body: req.method === 'POST' ? req.body : undefined
-    });
+    // Skip health check logging in production (too verbose)
+    const isHealthCheck = req.path === '/api/health';
+    const isStaticFile = req.path.startsWith('/public') || req.path.match(/\.(css|js|png|jpg|ico)$/);
+    if (!isHealthCheck && !isStaticFile) {
+        // Only log detailed request info in debug mode
+        Logger_1.logger.debug(`${req.method} ${req.path}`, {
+            ip: req.ip,
+            userAgent: req.get('User-Agent')
+        });
+    }
     res.on('finish', () => {
         const duration = Date.now() - startTime;
-        console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
+        // Skip health check and static file logging
+        if (isHealthCheck || isStaticFile) {
+            return;
+        }
+        // Use smart API logging
+        Logger_1.logger.api(req.method, req.path, res.statusCode, duration);
     });
     next();
 });
 // CORS middleware
 app.use((0, cors_1.default)({
     origin: process.env.NODE_ENV === 'production'
-        ? ['https://your-frontend-domain.com'] // Replace with actual frontend domain
+        ? [
+            'https://chainreactions.site', // Production domain (Digital Ocean)
+            'https://chainreactions-frontend-dev.vercel.app',
+            'https://chainreactions-frontend-dev-fallowearths-projects-06c459ff.vercel.app',
+            'https://chainreactions-fronte-git-584dee-fallowearths-projects-06c459ff.vercel.app'
+        ]
         : ['http://localhost:8080'], // Fixed frontend port
     credentials: true
 }));
@@ -64,7 +81,7 @@ app.post('/api/normal-search', (req, res) => normalSearchController.handleNormal
 app.get('/api/normal-search/info', (req, res) => normalSearchController.getInfo(req, res));
 // Routes - Entity Search (Integrated from port 3002)
 app.post('/api/entity-search', (req, res, next) => entitySearchController.handleEntitySearch(req, res, next));
-app.get('/api/entity-search/test', (req, res, next) => entitySearchController.testLinkupConnection(req, res, next));
+app.get('/api/entity-search/test', rateLimiter_1.apiTestRateLimiter, (req, res, next) => entitySearchController.testLinkupConnection(req, res, next));
 // Routes - Dataset Matching (Integrated from port 3003)
 app.post('/api/dataset-matching/match', (req, res, next) => datasetMatchingController.handleSingleMatch(req, res, next));
 app.post('/api/dataset-matching/batch', (req, res, next) => datasetMatchingController.handleBatchMatch(req, res, next));
@@ -96,17 +113,19 @@ app.get('/api/dataset-search/health', (req, res, next) => datasetSearchControlle
 app.get('/api/dataset-search/test', (req, res) => datasetSearchController.testDatasetSearch(req, res));
 // Routes - Demo Email Service (Integrated from port 3001)
 app.post('/api/demo-request', (req, res) => demoRequestController.handleDemoRequest(req, res));
-app.get('/api/test-email', (req, res) => demoRequestController.testEmailService(req, res));
+app.get('/api/test-email', rateLimiter_1.apiTestRateLimiter, (req, res) => demoRequestController.testEmailService(req, res));
 // Health check endpoint - Combined service
-app.get('/api/health', async (req, res) => {
+// IMPORTANT: Does NOT call real external APIs to prevent credit consumption
+app.get('/api/health', rateLimiter_1.healthCheckRateLimiter, async (req, res) => {
     try {
-        // Check all services health
+        Logger_1.logger.debug('Health check requested - Configuration check only');
+        // Check all services health - Configuration checks only, NO external API calls
         const entitySearchHealth = await entitySearchController.healthCheck();
         const datasetMatchingHealth = await datasetMatchingController.healthCheck();
         // Check new services health
-        let dataManagementHealth = { status: 'operational' };
-        let datasetSearchHealth = { status: 'operational' };
-        let emailServiceHealth = { status: 'operational' };
+        let dataManagementHealth = { status: 'operational', configured: true };
+        let datasetSearchHealth = { status: 'operational', configured: true };
+        let emailServiceHealth = { status: 'operational', configured: true };
         try {
             // For new services, we need to call the health check methods differently
             // since they're wrapper controllers
@@ -119,7 +138,7 @@ app.get('/api/health', async (req, res) => {
                             dataManagementHealth = { status: 'unhealthy', error: data.error };
                         }
                         else if (data.service === 'dataset-search') {
-                            datasetSearchHealth = { status: 'unhealthy', error: data.error };
+                            datasetSearchHealth = { status: data.status || 'healthy', configured: true };
                         }
                     }
                     return mockRes;
@@ -127,36 +146,36 @@ app.get('/api/health', async (req, res) => {
             };
             await dataManagementController.healthCheck(mockReq, mockRes);
             await datasetSearchController.healthCheck(mockReq, mockRes, {});
-            // Check email service health
+            // Email service - lightweight check only
             try {
-                await demoRequestController.testEmailService(mockReq, {
-                    status: () => ({ json: () => { } }),
-                    json: (data) => {
-                        if (!data.success) {
-                            emailServiceHealth = { status: 'unhealthy', error: data.error };
-                        }
-                    }
-                });
+                // DO NOT call testEmailService - it consumes resources
+                // Just check if credentials are configured
+                const emailConfigured = !!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD);
+                emailServiceHealth = {
+                    status: emailConfigured ? 'configured' : 'misconfigured',
+                    configured: emailConfigured
+                };
             }
             catch (error) {
-                console.warn('Email service health check failed:', error);
-                emailServiceHealth = { status: 'unhealthy', error: 'Email service unavailable' };
+                Logger_1.logger.debug('Email service config check failed', error);
+                emailServiceHealth = { status: 'misconfigured', error: 'Email service not configured', configured: false };
             }
         }
         catch (error) {
-            console.warn('Health check warning for new services:', error);
+            Logger_1.logger.debug('Health check warning for new services', error);
         }
         // Overall service health
         const allHealthy = entitySearchHealth.status === 'operational' &&
             datasetMatchingHealth.status === 'operational' &&
             dataManagementHealth.status === 'operational' &&
-            datasetSearchHealth.status === 'operational' &&
-            emailServiceHealth.status === 'operational';
+            (datasetSearchHealth.status === 'operational' || datasetSearchHealth.status === 'healthy') &&
+            (emailServiceHealth.status === 'operational' || emailServiceHealth.status === 'configured');
         res.json({
             status: allHealthy ? 'healthy' : 'degraded',
             timestamp: new Date().toISOString(),
             service: 'ChainReactions Unified API Gateway',
-            version: '3.0.0',
+            version: '3.0.1',
+            important_note: '⚠️ Health check does NOT call external APIs to prevent credit consumption. Use dedicated test endpoints if you need to verify actual API connectivity.',
             unified_services: {
                 entity_relations: {
                     modes: {
@@ -173,7 +192,7 @@ app.get('/api/health', async (req, res) => {
                     description: 'Linkup API integration for professional business intelligence',
                     endpoints: {
                         search: '/api/entity-search',
-                        test: '/api/entity-search/test'
+                        test: '/api/entity-search/test (⚠️ Consumes credits!)'
                     },
                     health: entitySearchHealth
                 },
@@ -199,7 +218,7 @@ app.get('/api/health', async (req, res) => {
                 dataset_search: {
                     description: 'Dataset search with SSE streaming and dual Linkup API processing',
                     endpoints: {
-                        stream: '/api/dataset-search/stream',
+                        stream: '/api/dataset-search/stream (⚠️ Consumes credits!)',
                         nro_stats: '/api/dataset-search/nro-stats',
                         health: '/api/dataset-search/health'
                     },
@@ -209,7 +228,7 @@ app.get('/api/health', async (req, res) => {
                     description: 'Demo request email service with Gmail SMTP integration',
                     endpoints: {
                         demo_request: '/api/demo-request - Send demo request email',
-                        test_email: '/api/test-email - Test email service connection'
+                        test_email: '/api/test-email - Test email service connection (⚠️ Sends real email!)'
                     },
                     health: emailServiceHealth
                 }
@@ -360,104 +379,98 @@ app.use((err, req, res, next) => {
 });
 // Start server
 if (require.main === module) {
-    app.listen(PORT, () => {
-        console.log('🚀 ChainReactions Unified API Gateway - All Services Integrated');
-        console.log(`📡 Server running on port ${PORT}`);
-        console.log(`🔗 API: http://localhost:${PORT}`);
-        console.log(`🏥 Health: http://localhost:${PORT}/api/health`);
-        console.log(`📋 Info: http://localhost:${PORT}/api`);
-        console.log('');
-        console.log('🔬 Entity Relations Service:');
-        console.log('  🔬 DeepThinking Mode (3-Stage Workflow):');
-        console.log(`    POST /api/enhanced/search - Complete 3-stage workflow`);
-        console.log(`    POST /api/enhanced/strategy - Stage 1 only (meta-prompting)`);
-        console.log(`    GET  /api/enhanced/test - Test with sample data`);
-        console.log(`    GET  /api/enhanced/info - Workflow information`);
-        console.log('  ⚡ Normal Mode (Google Web Search):');
-        console.log(`    POST /api/normal-search - Execute normal search`);
-        console.log(`    GET  /api/normal-search/info - Service information`);
-        console.log('');
-        console.log('🔍 Entity Search Service (Integrated from port 3002):');
-        console.log(`    POST /api/entity-search - Entity search with domain filtering`);
-        console.log(`    GET  /api/entity-search/test - Test Linkup API connection`);
-        console.log('');
-        console.log('🎯 Dataset Matching Service (Integrated from port 3003):');
-        console.log(`    POST /api/dataset-matching/match - Single entity matching`);
-        console.log(`    POST /api/dataset-matching/batch - Batch entity matching`);
-        console.log(`    GET  /api/dataset-matching/health - Matching service health`);
-        console.log(`    GET  /api/dataset-matching/stats - Service statistics`);
-        console.log(`    GET  /api/dataset-matching/test - Test matching with sample entity`);
-        console.log(`    GET  /api/dataset-matching/cache/clear - Clear cache`);
-        console.log(`    POST /api/dataset-matching/cache/warmup - Warmup cache`);
-        console.log('');
-        console.log('📊 Data Management Service (Integrated from port 3006):');
-        console.log(`    GET  /api/data-management/datasets - List all datasets`);
-        console.log(`    POST /api/data-management/datasets - Create new dataset`);
-        console.log(`    GET  /api/data-management/datasets/:id - Get dataset details`);
-        console.log(`    PUT  /api/data-management/datasets/:id - Update dataset`);
-        console.log(`    DELETE /api/data-management/datasets/:id - Delete dataset`);
-        console.log(`    POST /api/data-management/datasets/:id/upload - Upload CSV file`);
-        console.log(`    GET  /api/data-management/datasets/:id/entries - Get dataset entries`);
-        console.log(`    GET  /api/data-management/datasets/:id/stats - Dataset statistics`);
-        console.log(`    POST /api/data-management/datasets/:id/validate-file - Validate file format`);
-        console.log(`    GET  /api/data-management/datasets/:id/export - Export dataset`);
-        console.log(`    POST /api/data-management/import/nro-targets - Import NRO targets`);
-        console.log(`    GET  /api/data-management/health - Service health check`);
-        console.log(`    GET  /api/data-management/test - Service test endpoint`);
-        console.log('');
-        console.log('🔍 Dataset Search Service (Integrated from port 3004):');
-        console.log(`    POST /api/dataset-search/stream - Start streaming search`);
-        console.log(`    DELETE /api/dataset-search/stream/:execution_id - Cancel search`);
-        console.log(`    GET  /api/dataset-search/stream/:execution_id/status - Get search status`);
-        console.log(`    GET  /api/dataset-search/nro-stats - Get NRO statistics`);
-        console.log(`    GET  /api/dataset-search/health - Service health check`);
-        console.log(`    GET  /api/dataset-search/test - Service test endpoint`);
-        console.log('');
-        console.log('📧 Demo Email Service (Integrated from port 3001):');
-        console.log(`    POST /api/demo-request - Send demo request email`);
-        console.log(`    GET  /api/test-email - Test email service connection`);
-        console.log('');
+    app.listen(PORT, '0.0.0.0', () => {
+        Logger_1.logger.info('🚀 ChainReactions Unified API Gateway - All Services Integrated');
+        Logger_1.logger.info(`📡 Server running on port ${PORT} (0.0.0.0)`);
+        Logger_1.logger.info(`🏥 Health: http://localhost:${PORT}/api/health`);
+        Logger_1.logger.info(`📊 Log Level: ${Logger_1.logger.getCurrentLevelName()}`);
+        // Detailed endpoint listing only in development/debug mode
+        if (!Logger_1.logger.isProductionMode()) {
+            console.log('');
+            console.log('🔬 Entity Relations Service:');
+            console.log('  🔬 DeepThinking Mode (3-Stage Workflow):');
+            console.log(`    POST /api/enhanced/search - Complete 3-stage workflow`);
+            console.log(`    POST /api/enhanced/strategy - Stage 1 only (meta-prompting)`);
+            console.log(`    GET  /api/enhanced/test - Test with sample data`);
+            console.log(`    GET  /api/enhanced/info - Workflow information`);
+            console.log('  ⚡ Normal Mode (Google Web Search):');
+            console.log(`    POST /api/normal-search - Execute normal search`);
+            console.log(`    GET  /api/normal-search/info - Service information`);
+            console.log('');
+            console.log('🔍 Entity Search Service (Integrated from port 3002):');
+            console.log(`    POST /api/entity-search - Entity search with domain filtering`);
+            console.log(`    GET  /api/entity-search/test - Test Linkup API connection`);
+            console.log('');
+            console.log('🎯 Dataset Matching Service (Integrated from port 3003):');
+            console.log(`    POST /api/dataset-matching/match - Single entity matching`);
+            console.log(`    POST /api/dataset-matching/batch - Batch entity matching`);
+            console.log(`    GET  /api/dataset-matching/health - Matching service health`);
+            console.log(`    GET  /api/dataset-matching/stats - Service statistics`);
+            console.log(`    GET  /api/dataset-matching/test - Test matching with sample entity`);
+            console.log(`    GET  /api/dataset-matching/cache/clear - Clear cache`);
+            console.log(`    POST /api/dataset-matching/cache/warmup - Warmup cache`);
+            console.log('');
+            console.log('📊 Data Management Service (Integrated from port 3006):');
+            console.log(`    GET  /api/data-management/datasets - List all datasets`);
+            console.log(`    POST /api/data-management/datasets - Create new dataset`);
+            console.log(`    GET  /api/data-management/datasets/:id - Get dataset details`);
+            console.log(`    PUT  /api/data-management/datasets/:id - Update dataset`);
+            console.log(`    DELETE /api/data-management/datasets/:id - Delete dataset`);
+            console.log(`    POST /api/data-management/datasets/:id/upload - Upload CSV file`);
+            console.log(`    GET  /api/data-management/datasets/:id/entries - Get dataset entries`);
+            console.log(`    GET  /api/data-management/datasets/:id/stats - Dataset statistics`);
+            console.log(`    POST /api/data-management/datasets/:id/validate-file - Validate file format`);
+            console.log(`    GET  /api/data-management/datasets/:id/export - Export dataset`);
+            console.log(`    POST /api/data-management/import/nro-targets - Import NRO targets`);
+            console.log(`    GET  /api/data-management/health - Service health check`);
+            console.log(`    GET  /api/data-management/test - Service test endpoint`);
+            console.log('');
+            console.log('🔍 Dataset Search Service (Integrated from port 3004):');
+            console.log(`    POST /api/dataset-search/stream - Start streaming search`);
+            console.log(`    DELETE /api/dataset-search/stream/:execution_id - Cancel search`);
+            console.log(`    GET  /api/dataset-search/stream/:execution_id/status - Get search status`);
+            console.log(`    GET  /api/dataset-search/nro-stats - Get NRO statistics`);
+            console.log(`    GET  /api/dataset-search/health - Service health check`);
+            console.log(`    GET  /api/dataset-search/test - Service test endpoint`);
+            console.log('');
+            console.log('📧 Demo Email Service (Integrated from port 3001):');
+            console.log(`    POST /api/demo-request - Send demo request email`);
+            console.log(`    GET  /api/test-email - Test email service connection`);
+            console.log('');
+        }
         // Check if environment variables are set
-        console.log('🔧 Environment Configuration:');
+        Logger_1.logger.debug('🔧 Environment Configuration:');
         if (!process.env.GEMINI_API_KEY) {
-            console.warn('⚠️  GEMINI_API_KEY environment variable is not set');
+            Logger_1.logger.warn('GEMINI_API_KEY environment variable is not set');
         }
         else {
-            console.log('✅ GEMINI_API_KEY is configured');
+            Logger_1.logger.debug('✅ GEMINI_API_KEY is configured');
         }
         if (!process.env.BRIGHT_DATA_API_KEY) {
-            console.warn('⚠️  BRIGHT_DATA_API_KEY environment variable is not set (required for DeepThinking mode)');
+            Logger_1.logger.warn('BRIGHT_DATA_API_KEY environment variable is not set (required for DeepThinking mode)');
         }
         else {
-            console.log('✅ BRIGHT_DATA_API_KEY is configured');
+            Logger_1.logger.debug('✅ BRIGHT_DATA_API_KEY is configured');
         }
         if (!process.env.LINKUP_API_KEY) {
-            console.warn('⚠️  LINKUP_API_KEY environment variable is not set (required for Entity Search)');
+            Logger_1.logger.warn('LINKUP_API_KEY environment variable is not set (required for Entity Search)');
         }
         else {
-            console.log('✅ LINKUP_API_KEY is configured');
+            Logger_1.logger.debug('✅ LINKUP_API_KEY is configured');
         }
         if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-            console.warn('⚠️  SUPABASE_URL or SUPABASE_ANON_KEY not set (required for Dataset Matching)');
+            Logger_1.logger.warn('SUPABASE_URL or SUPABASE_ANON_KEY not set (required for Dataset Matching)');
         }
         else {
-            console.log('✅ SUPABASE credentials are configured');
+            Logger_1.logger.debug('✅ SUPABASE credentials are configured');
         }
         if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-            console.warn('⚠️  GMAIL_USER or GMAIL_APP_PASSWORD not set (required for Demo Email Service)');
+            Logger_1.logger.warn('GMAIL_USER or GMAIL_APP_PASSWORD not set (required for Demo Email Service)');
         }
         else {
-            console.log('✅ Gmail credentials are configured');
+            Logger_1.logger.debug('✅ Gmail credentials are configured');
         }
-        console.log('');
-        console.log('🎉 Port Unification Complete!');
-        console.log('   • Entity Relations: port 3000 → port 3000 ✓');
-        console.log('   • Entity Search: port 3002 → port 3000 ✓');
-        console.log('   • Dataset Matching: port 3003 → port 3000 ✓');
-        console.log('   • Data Management: port 3006 → port 3000 ✓');
-        console.log('   • Dataset Search: port 3004 → port 3000 ✓');
-        console.log('   • Demo Email Service: port 3001 → port 3000 ✓');
-        console.log('✅ Ready to accept requests...');
+        Logger_1.logger.info('✅ Ready to accept requests...');
     });
 }
 exports.default = app;

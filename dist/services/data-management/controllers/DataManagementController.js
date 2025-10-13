@@ -243,7 +243,8 @@ class DataManagementController {
             let importResult;
             // Process based on file type
             if (fileExtension === '.csv') {
-                importResult = await this.csvImportService.importCsvFileSmart(file.path, dataset.name, dataset.description, dataset.is_system);
+                importResult = await this.csvImportService.importCsvFileSmartToDataset(file.path, id // Use the actual dataset ID from URL params
+                );
             }
             else {
                 // For XML/JSON files, use existing processing logic
@@ -279,20 +280,33 @@ class DataManagementController {
      */
     async importNroTargets(req, res) {
         try {
+            console.log('🚀 importNroTargets called!', {
+                method: req.method,
+                path: req.path,
+                body: req.body,
+                headers: req.headers
+            });
             const { file_path } = req.body;
             const filePath = file_path || '/Users/kanbei/Code/chainreactions_backend/targets.simple.csv';
-            console.log(`Importing NRO targets from: ${filePath}`);
-            const importResult = await this.csvImportService.importNroTargetsFile(filePath);
-            const response = {
-                success: importResult.success,
-                data: importResult,
-                message: importResult.success ?
-                    `Successfully imported ${importResult.importedRows}/${importResult.totalRows} NRO entries` :
-                    'NRO import failed'
-            };
-            res.json(response);
+            console.log(`📁 Importing NRO targets from: ${filePath}`);
+            // Send immediate response to avoid timeout
+            res.json({
+                success: true,
+                message: 'NRO import started successfully',
+                filePath: filePath,
+                status: 'processing'
+            });
+            // Process import in background
+            this.csvImportService.importNroTargetsFile(filePath)
+                .then((importResult) => {
+                console.log(`✅ Background import completed: ${importResult.importedRows}/${importResult.totalRows} rows imported`);
+            })
+                .catch((error) => {
+                console.error('❌ Background import failed:', error);
+            });
         }
         catch (error) {
+            console.error('❌ Error in importNroTargets:', error);
             this.handleError(res, error, 'NRO targets import failed');
         }
     }
@@ -422,10 +436,25 @@ class DataManagementController {
     handleError(res, error, message) {
         console.error(message, error);
         const statusCode = error instanceof Error && error.message.includes('not found') ? 404 : 500;
+        let errorDetails;
+        if (error instanceof Error) {
+            errorDetails = error.message;
+        }
+        else if (typeof error === 'object' && error !== null) {
+            try {
+                errorDetails = JSON.stringify(error, null, 2);
+            }
+            catch {
+                errorDetails = Object.prototype.toString.call(error);
+            }
+        }
+        else {
+            errorDetails = String(error);
+        }
         res.status(statusCode).json({
             success: false,
             error: message,
-            details: error instanceof Error ? error.message : String(error)
+            details: errorDetails
         });
     }
 }

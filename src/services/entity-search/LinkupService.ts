@@ -1,5 +1,6 @@
 import axios, { AxiosResponse } from 'axios';
 import { LinkupAPIResponse } from '../../types/entity-search/types';
+import { linkupAPIMonitor } from '../../utils/LinkupAPIMonitor';
 
 export class LinkupService {
   private apiKey: string;
@@ -87,6 +88,9 @@ export class LinkupService {
         sourcesCount: response.data?.sources?.length || 0
       });
 
+      // Record successful API call
+      linkupAPIMonitor.recordCall('entity-search', 'entity-search', true);
+
       return {
         success: true,
         data: response.data
@@ -101,6 +105,9 @@ export class LinkupService {
         company: companyName
       });
 
+      // Record failed API call
+      linkupAPIMonitor.recordCall('entity-search', 'entity-search', false);
+
       return {
         success: false,
         error: error.response?.data?.message || error.message || 'Unknown error occurred'
@@ -111,7 +118,9 @@ export class LinkupService {
   async testConnection(): Promise<LinkupAPIResponse> {
     try {
       console.log('🧪 Testing Linkup API connection...');
+      console.warn('⚠️ WARNING: This will consume Linkup API credits by calling /credits/balance');
 
+      // IMPORTANT: This endpoint may consume credits!
       // Use credits/balance endpoint for connection test
       const response: AxiosResponse = await axios.get(
         `${this.baseURL}/credits/balance`,
@@ -129,13 +138,17 @@ export class LinkupService {
         data: response.data
       });
 
+      // Record test API call
+      linkupAPIMonitor.recordCall('credits/balance', 'test-connection', true);
+
       return {
         success: true,
         data: {
           status: 'connected',
-          message: 'Linkup API connection successful',
+          message: 'Linkup API connection successful (may have consumed credits)',
           timestamp: new Date().toISOString(),
-          credits: response.data
+          credits: response.data,
+          warning: 'This test may consume Linkup API credits'
         }
       };
 
@@ -146,11 +159,26 @@ export class LinkupService {
         statusText: error.response?.statusText
       });
 
+      // Record failed test API call
+      linkupAPIMonitor.recordCall('credits/balance', 'test-connection', false);
+
       return {
         success: false,
         error: error.response?.data?.message || error.message || 'Connection test failed'
       };
     }
+  }
+
+  /**
+   * Lightweight configuration check - does NOT call any API
+   * Use this for health checks to avoid consuming credits
+   */
+  checkConfiguration(): { configured: boolean; baseURL: string; hasApiKey: boolean } {
+    return {
+      configured: this.isConfigured(),
+      baseURL: this.baseURL,
+      hasApiKey: !!this.apiKey && this.apiKey.length > 0
+    };
   }
 
   isConfigured(): boolean {

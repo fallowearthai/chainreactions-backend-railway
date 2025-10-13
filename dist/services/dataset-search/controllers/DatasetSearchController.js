@@ -162,10 +162,13 @@ class DatasetSearchController {
         /**
          * 健康检查
          * GET /api/health
+         * IMPORTANT: Does NOT call real Linkup API to prevent credit consumption
          */
         this.healthCheck = (0, ErrorHandler_1.asyncHandler)(async (req, res) => {
+            // Supabase connection test (lightweight query, no credits consumed)
             const supabaseHealthy = await this.nroService.testConnection();
-            const linkupHealthy = await this.linkupService.testConnection();
+            // Linkup configuration check (NO API call, no credits consumed)
+            const linkupConfig = this.linkupService.checkConfiguration();
             res.json({
                 status: 'healthy',
                 timestamp: new Date().toISOString(),
@@ -173,7 +176,11 @@ class DatasetSearchController {
                 version: '2.0.0',
                 dependencies: {
                     supabase: supabaseHealthy ? 'healthy' : 'unhealthy',
-                    linkup: linkupHealthy ? 'healthy' : 'unhealthy'
+                    linkup: linkupConfig.configured ? 'configured' : 'misconfigured',
+                    linkup_details: {
+                        ...linkupConfig,
+                        note: 'Health check does not call real API to prevent credit consumption'
+                    }
                 },
                 active_executions: this.activeExecutions.size,
                 sse_connections: SSEService_1.sseService.getActiveConnectionsCount()

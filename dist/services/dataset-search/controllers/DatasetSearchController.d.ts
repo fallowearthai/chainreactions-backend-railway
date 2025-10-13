@@ -36,6 +36,7 @@ export declare class DatasetSearchController {
     /**
      * 健康检查
      * GET /api/health
+     * IMPORTANT: Does NOT call real Linkup API to prevent credit consumption
      */
     healthCheck: (req: Request, res: Response, next: import("express").NextFunction) => void;
 }
