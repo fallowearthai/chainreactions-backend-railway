@@ -339,29 +339,16 @@ User Query: Investigate and report on the relationship between '${institutionA}'
     }
     /**
      * Test the Linkup API connection
-     * IMPORTANT: This will consume credits! Only call when explicitly requested
+     * 🚨 CRITICAL: DISABLED TO PREVENT AUTOMATIC TOKEN CONSUMPTION
+     * IMPORTANT: This method was consuming tokens automatically on startup!
      * For health checks, use checkConfiguration() instead
      */
     async testConnection() {
-        try {
-            Logger_1.logger.warn('WARNING: testConnection() will consume Linkup API credits!');
-            Logger_1.logger.warn('For health checks, use checkConfiguration() instead');
-            // Check if we're approaching API limits
-            const canCall = LinkupAPIMonitor_1.linkupAPIMonitor.canMakeCall();
-            if (!canCall.allowed) {
-                Logger_1.logger.error(`Cannot make test call: ${canCall.reason}`);
-                throw new Error(`API limit reached: ${canCall.reason}`);
-            }
-            const testResponse = await this.searchSingleRelationship('Test Institution', 'Test Entity', 'Test Country');
-            // Record test API call
-            LinkupAPIMonitor_1.linkupAPIMonitor.recordCall('test', 'test-connection', !!(testResponse && testResponse.answer));
-            return !!(testResponse && testResponse.answer);
-        }
-        catch (error) {
-            Logger_1.logger.error('Linkup API connection test failed', error);
-            LinkupAPIMonitor_1.linkupAPIMonitor.recordCall('test', 'test-connection', false);
-            return false;
-        }
+        Logger_1.logger.error('🚨 CRITICAL: testConnection() method has been DISABLED to prevent automatic token consumption');
+        Logger_1.logger.error('This method was causing automatic API calls and consuming Linkup credits on startup');
+        Logger_1.logger.error('For any testing needs, use manual API calls instead');
+        // Always return false to prevent any automatic retries
+        return false;
     }
     /**
      * Lightweight configuration check - does NOT call any API
