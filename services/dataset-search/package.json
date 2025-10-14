@@ -1,0 +1,42 @@
+{
+  "name": "chainreactions-dataset-search",
+  "version": "2.0.0",
+  "description": "ChainReactions Dataset Search Service - Phase 2 Standalone Service",
+  "main": "src/app.ts",
+  "scripts": {
+    "start": "ts-node src/app.ts",
+    "dev": "nodemon --exec ts-node src/app.ts",
+    "build": "tsc",
+    "test": "jest",
+    "lint": "eslint src/**/*.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "axios": "^1.12.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "ioredis": "^5.8.1",
+    "uuid": "^9.0.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.3",
+    "@types/ioredis": "^4.28.10",
+    "@types/node": "^24.4.0",
+    "@types/uuid": "^9.0.8",
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "keywords": [
+    "dataset-search",
+    "sse",
+    "microservice",
+    "chainreactions",
+    "osint"
+  ],
+  "author": "ChainReactions Team",
+  "license": "ISC"
+}
