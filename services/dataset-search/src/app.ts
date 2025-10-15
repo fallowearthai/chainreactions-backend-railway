@@ -27,7 +27,7 @@ async function registerWithServiceDiscovery(): Promise<void> {
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 4001;
+const PORT = process.env.PORT || 3006;
 
 
 
@@ -140,12 +140,12 @@ if (missingRequiredVars.length > 0) {
 
 
 app.listen(PORT, async () => {
-  console.log(`🚀 ChainReactions Dataset Search Service - Phase 2`);
+  console.log(`🚀 ChainReactions Dataset Search Service - Phase 3`);
   console.log(`📡 Service running on port ${PORT} (0.0.0.0)`);
   console.log(`🏥 Health: http://localhost:${PORT}/api/health`);
   console.log(`📋 Service Info: http://localhost:${PORT}/api`);
-  console.log(`🔄 Phase 2: Standalone Dataset Search Service`);
-  console.log(`🔗 API Gateway: http://localhost:3000 (when active)`);
+  console.log(`🔄 Phase 3: Final microservices architecture`);
+  console.log(`🔗 API Gateway: http://localhost:3000`);
 
   // Register with service discovery
   await registerWithServiceDiscovery();

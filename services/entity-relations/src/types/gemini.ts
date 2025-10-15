@@ -34,6 +34,7 @@ export interface GeminiSystemInstruction {
 export interface GeminiTool {
   codeExecution?: {};
   googleSearch?: {};
+  google_search?: {}; // New enhanced format
   urlContext?: {};
 }
 
@@ -136,7 +137,7 @@ export interface GeminiRequestBody {
     }>;
   }>;
   generationConfig: {
-    thinkingConfig: {
+    thinkingConfig?: {
       thinkingBudget: number;
     };
     temperature: number;
@@ -146,6 +147,7 @@ export interface GeminiRequestBody {
   };
   tools: Array<{
     googleSearch?: {};
+    google_search?: {}; // Enhanced format
     codeExecution?: {};
   }>;
 }
@@ -186,4 +188,58 @@ export interface FormattedSearchOutput {
     urls: string;
     sources_count: number;
   };
+}
+
+// Enhanced Grounding Types
+export interface EnhancedSource {
+  title: string;
+  url: string;
+  type: string;
+  chunk_index: number;
+}
+
+export interface EvidenceWithSources {
+  text: string;
+  source_indices: number[];
+}
+
+export interface QualityMetrics {
+  evidence_count: number;
+  source_count: number;
+  coverage_percentage: number;
+}
+
+export interface GroundingMetadata {
+  has_grounding: boolean;
+  grounding_chunks: Array<{
+    web: { uri: string; title: string };
+  }>;
+  grounding_supports: Array<{
+    segment: { text: string; startIndex: number; endIndex: number };
+    groundingChunkIndices: number[];
+    confidenceScore?: number;
+  }>;
+  web_search_queries: string[];
+}
+
+export interface EnhancedNormalSearchResult extends Omit<NormalSearchResult, 'sources'> {
+  key_evidence: EvidenceWithSources[];
+  sources: EnhancedSource[];
+  search_queries: string[];
+  quality_metrics: QualityMetrics;
+  grounding_metadata?: GroundingMetadata;
+}
+
+export interface EnhancedSearchResponse {
+  results: EnhancedNormalSearchResult[];
+  grounding_metadata?: GroundingMetadata;
+  grounding_metrics?: {
+    groundingChunksCount: number;
+    groundingSupportsCount: number;
+    evidenceCoveragePercentage: number;
+    sourceQualityScore: number;
+    averageConfidenceScore: number;
+    executionTimeMs: number;
+  };
+  enhanced_mode: boolean;
 }

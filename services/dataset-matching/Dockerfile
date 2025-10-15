@@ -24,16 +24,16 @@ RUN npm run build
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S entityrelations -u 1001
+    adduser -S datasetmatching -u 1001
 
 # Change ownership of the app directory
-RUN chown -R entityrelations:nodejs /app
-USER entityrelations
+RUN chown -R datasetmatching:nodejs /app
+USER datasetmatching
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "const http = require('http'); \
-    const options = { hostname: 'localhost', port: process.env.PORT || 3002, path: '/api/health', timeout: 2000 }; \
+    const options = { hostname: 'localhost', port: process.env.PORT || 3004, path: '/api/health', timeout: 2000 }; \
     const req = http.request(options, (res) => { \
       process.exit(res.statusCode === 200 ? 0 : 1); \
     }); \
@@ -42,7 +42,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     req.end();"
 
 # Expose port
-EXPOSE 3002
+EXPOSE 3004
 
 # Start the application
 CMD ["npm", "start"]

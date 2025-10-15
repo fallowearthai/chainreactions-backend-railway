@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { GeminiNormalSearchService } from '../services/GeminiNormalSearchService';
 import { NormalSearchRequest, NormalSearchResult, FormattedSearchOutput } from '../types/gemini';
+import { FeatureFlags } from '../utils/FeatureFlags';
 
 export class NormalSearchController {
   private geminiService: GeminiNormalSearchService;
@@ -68,8 +69,8 @@ export class NormalSearchController {
 
       console.log('📨 Normal Search Request:', searchRequest);
 
-      // Execute search
-      const { results } = await this.geminiService.executeNormalSearch(searchRequest);
+      // Execute search with feature flag support
+      const { results } = await this.geminiService.executeSearch(searchRequest);
 
       // Handle no results case
       if (!results || results.length === 0) {
@@ -92,7 +93,20 @@ export class NormalSearchController {
       // Format first result (matching N8N behavior which returns single result)
       const formattedResult = this.formatSearchResults(results[0]);
 
-      console.log('✅ Normal Search completed successfully');
+      // Add enhanced grounding information if available
+      const enhancedMode = FeatureFlags.shouldUseEnhancedGrounding();
+      if (enhancedMode && process.env.NODE_ENV === 'development') {
+        // Add enhanced data for development environment
+        (formattedResult as any).enhanced_data = {
+          grounding_enabled: true,
+          key_evidence: (results[0] as any).key_evidence,
+          enhanced_sources: (results[0] as any).enhanced_sources,
+          search_queries: (results[0] as any).search_queries,
+          quality_metrics: (results[0] as any).quality_metrics
+        };
+      }
+
+      console.log(`✅ Normal Search completed successfully ${enhancedMode ? '(enhanced mode)' : '(legacy mode)'}`);
       res.status(200).json(formattedResult);
 
     } catch (error) {

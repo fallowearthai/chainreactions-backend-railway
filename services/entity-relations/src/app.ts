@@ -4,12 +4,13 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { EnhancedSearchController } from './controllers/EnhancedSearchController';
 import { NormalSearchController } from './controllers/NormalSearchController';
+import { FeatureFlags } from './utils/FeatureFlags';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 4002;
+const PORT = process.env.PORT || 3002;
 
 // Initialize controllers
 const enhancedSearchController = new EnhancedSearchController();
@@ -39,20 +40,26 @@ app.use((req, res, next) => {
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
+  const featureFlags = FeatureFlags.getFeatureFlagStatus();
+
   res.status(200).json({
     status: 'healthy',
     service: 'entity-relations',
-    version: '1.0.0',
+    version: '2.0.0', // Updated to reflect enhanced grounding
     port: PORT,
     timestamp: new Date().toISOString(),
     features: [
       'DeepThinking 3-Stage OSINT workflow',
       'Normal Search mode',
+      'Enhanced Grounding mode',
       'Gemini AI integration',
       'Bright Data SERP integration',
       'Multi-engine search support',
-      'SSE streaming support'
+      'SSE streaming support',
+      'Grounding metadata extraction',
+      'Evidence-to-source mapping'
     ],
+    grounding: featureFlags.enhanced_grounding,
     endpoints: {
       enhanced_search: 'POST /api/enhanced/search',
       enhanced_search_stream: 'GET /api/enhanced/search-stream',
@@ -61,8 +68,75 @@ app.get('/api/health', (req, res) => {
       enhanced_info: 'GET /api/enhanced/info',
       normal_search: 'POST /api/normal-search',
       normal_health: 'GET /api/normal/health',
-      normal_info: 'GET /api/normal/info'
+      normal_info: 'GET /api/normal/info',
+      grounding_admin: 'POST /api/admin/grounding/config', // Admin endpoint
+      grounding_status: 'GET /api/admin/grounding/status' // Status endpoint
     }
+  });
+});
+
+// Admin endpoints for grounding configuration
+app.post('/api/admin/grounding/config', (req, res) => {
+  try {
+    const { enabled, rollout_percentage, confidence_threshold, log_level } = req.body;
+
+    const updates: any = {};
+    if (typeof enabled === 'boolean') updates.enabled = enabled;
+    if (typeof rollout_percentage === 'number') updates.rolloutPercentage = rollout_percentage;
+    if (typeof confidence_threshold === 'number') updates.confidenceThreshold = confidence_threshold;
+    if (typeof log_level === 'string') updates.logLevel = log_level;
+
+    FeatureFlags.updateGroundingConfig(updates);
+
+    FeatureFlags.log('Grounding configuration updated via admin API', 'info', {
+      updates,
+      adminIp: req.ip
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Grounding configuration updated successfully',
+      config: FeatureFlags.getFeatureFlagStatus().enhanced_grounding,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: 'Failed to update grounding configuration',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Get grounding status
+app.get('/api/admin/grounding/status', (req, res) => {
+  const config = FeatureFlags.getGroundingConfig();
+  const status = FeatureFlags.shouldUseEnhancedGrounding();
+
+  res.status(200).json({
+    status: 'success',
+    grounding: {
+      ...config,
+      current_session_active: status
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Emergency disable endpoint
+app.post('/api/admin/grounding/emergency-disable', (req, res) => {
+  FeatureFlags.emergencyDisable();
+
+  FeatureFlags.log('Emergency disable triggered via admin API', 'warn', {
+    adminIp: req.ip
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Enhanced grounding emergency disabled',
+    config: FeatureFlags.getFeatureFlagStatus().enhanced_grounding,
+    timestamp: new Date().toISOString()
   });
 });
 
