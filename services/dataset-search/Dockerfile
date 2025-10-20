@@ -1,29 +1,26 @@
 FROM node:18-alpine
 
-# Set working directory
 WORKDIR /app
+
+# Install curl for health check
+RUN apk add --no-cache curl
 
 # Copy package files
 COPY package*.json ./
-COPY ../../package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci --only=production && npm cache clean --force
 
 # Copy source code
 COPY src/ ./src/
-COPY ../../src/utils/ ./src/utils/
-COPY ../../src/gateway/ ./src/gateway/
 
-# Create a non-root user
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nodejs -u 1001
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S datasetsearch -u 1001
 
-# Change ownership of the app directory
-RUN chown -R nodejs:nodejs /app
-
-# Switch to non-root user
-USER nodejs
+# Change ownership
+RUN chown -R datasetsearch:nodejs /app
+USER datasetsearch
 
 # Expose port
 EXPOSE 3006
@@ -32,5 +29,5 @@ EXPOSE 3006
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:3006/api/health || exit 1
 
-# Start the service
+# Start service
 CMD ["npm", "start"]
