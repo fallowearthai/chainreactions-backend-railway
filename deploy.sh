@@ -53,12 +53,17 @@ if ! command -v docker &> /dev/null; then
 fi
 print_success "Docker is installed"
 
-# Check if Docker Compose is installed
-if ! command -v docker-compose &> /dev/null; then
-    print_error "Docker Compose is not installed. Please install Docker Compose first."
+# Detect Docker Compose command (v1 or v2)
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+    print_success "Docker Compose v1 detected (docker-compose)"
+elif docker compose version &> /dev/null 2>&1; then
+    DOCKER_COMPOSE="docker compose"
+    print_success "Docker Compose v2 detected (docker compose)"
+else
+    print_error "Docker Compose is not installed. Please install Docker Compose."
     exit 1
 fi
-print_success "Docker Compose is installed"
 
 # Check if .env file exists
 if [ ! -f ".env" ]; then
@@ -109,8 +114,8 @@ cp .env "$BACKUP_DIR/.env.backup"
 print_success ".env file backed up"
 
 # Backup current logs if services are running
-if docker-compose ps | grep -q "Up"; then
-    docker-compose logs --no-color > "$BACKUP_DIR/logs_before_upgrade.txt" 2>/dev/null || true
+if $DOCKER_COMPOSE ps | grep -q "Up"; then
+    $DOCKER_COMPOSE logs --no-color > "$BACKUP_DIR/logs_before_upgrade.txt" 2>/dev/null || true
     print_success "Container logs backed up"
 fi
 
@@ -135,8 +140,8 @@ echo -e "\n${GREEN}Backup completed: $BACKUP_DIR${NC}\n"
 # =================================================================
 print_step "STAGE 3: Stopping Current Services"
 
-if docker-compose ps | grep -q "Up"; then
-    docker-compose down
+if $DOCKER_COMPOSE ps | grep -q "Up"; then
+    $DOCKER_COMPOSE down
     print_success "Services stopped"
 else
     print_warning "No running services found"
@@ -161,7 +166,7 @@ fi
 print_step "STAGE 5: Building Docker Images"
 
 echo "This may take 5-10 minutes on first build..."
-docker-compose build --parallel
+$DOCKER_COMPOSE build --parallel
 
 print_success "All Docker images built successfully"
 
@@ -170,7 +175,7 @@ print_success "All Docker images built successfully"
 # =================================================================
 print_step "STAGE 6: Starting Microservices"
 
-docker-compose up -d
+$DOCKER_COMPOSE up -d
 
 print_success "All services started in detached mode"
 
@@ -184,7 +189,7 @@ sleep 60
 
 # Check container status
 print_step "Container Status"
-docker-compose ps
+$DOCKER_COMPOSE ps
 
 # Array of services with ports
 declare -A SERVICES=(
@@ -202,7 +207,7 @@ for service in "${!SERVICES[@]}"; do
     port="${SERVICES[$service]}"
 
     # Check if service is healthy
-    if docker-compose ps | grep "$service" | grep -q "Up (healthy)"; then
+    if $DOCKER_COMPOSE ps | grep "$service" | grep -q "Up (healthy)"; then
         # Test health endpoint
         if curl -s "http://localhost:$port/api/health" > /dev/null 2>&1; then
             print_success "$service (port $port) is healthy"
@@ -217,7 +222,7 @@ for service in "${!SERVICES[@]}"; do
 done
 
 # Check Redis
-if docker-compose exec -T redis redis-cli ping > /dev/null 2>&1; then
+if $DOCKER_COMPOSE exec -T redis redis-cli ping > /dev/null 2>&1; then
     print_success "Redis is healthy"
 else
     print_error "Redis health check failed"
@@ -250,7 +255,7 @@ if [ ${#FAILED_SERVICES[@]} -eq 0 ]; then
     echo "Next steps:"
     echo "  1. Update frontend to connect to ports 3002-3006"
     echo "  2. Configure Nginx/CloudFlare routing"
-    echo "  3. Monitor logs: docker-compose logs -f"
+    echo "  3. Monitor logs: $DOCKER_COMPOSE logs -f"
     echo ""
 else
     echo -e "${RED}╔═══════════════════════════════════════════════════════════╗${NC}"
@@ -262,10 +267,10 @@ else
     print_error "Failed services: ${FAILED_SERVICES[*]}"
     echo ""
     echo "Troubleshooting steps:"
-    echo "  1. Check logs: docker-compose logs ${FAILED_SERVICES[0]}"
-    echo "  2. Verify environment variables: docker-compose config"
+    echo "  1. Check logs: $DOCKER_COMPOSE logs ${FAILED_SERVICES[0]}"
+    echo "  2. Verify environment variables: $DOCKER_COMPOSE config"
     echo "  3. Check resources: docker stats"
-    echo "  4. Restart service: docker-compose restart ${FAILED_SERVICES[0]}"
+    echo "  4. Restart service: $DOCKER_COMPOSE restart ${FAILED_SERVICES[0]}"
     echo ""
     echo "Backup location: $BACKUP_DIR"
     echo ""

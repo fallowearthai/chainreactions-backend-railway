@@ -40,6 +40,16 @@ print_section() {
     echo ""
 }
 
+# Detect Docker Compose command (v1 or v2)
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+elif docker compose version &> /dev/null 2>&1; then
+    DOCKER_COMPOSE="docker compose"
+else
+    echo -e "${RED}[ERROR]${NC} Docker Compose is not installed. Please install Docker Compose."
+    exit 1
+fi
+
 # =================================================================
 # TEST SUITE 1: CONTAINER HEALTH
 # =================================================================
@@ -49,7 +59,7 @@ SERVICES=("entity-relations" "entity-search" "dataset-matching" "data-management
 
 for service in "${SERVICES[@]}"; do
     print_test "Checking if $service container is running..."
-    if docker-compose ps | grep "$service" | grep -q "Up"; then
+    if $DOCKER_COMPOSE ps | grep "$service" | grep -q "Up"; then
         print_pass "$service container is running"
     else
         print_fail "$service container is not running"
@@ -91,14 +101,14 @@ done
 print_section "TEST SUITE 3: Redis Connectivity"
 
 print_test "Testing Redis PING command..."
-if docker-compose exec -T redis redis-cli ping | grep -q "PONG"; then
+if $DOCKER_COMPOSE exec -T redis redis-cli ping | grep -q "PONG"; then
     print_pass "Redis PING successful"
 else
     print_fail "Redis PING failed"
 fi
 
 print_test "Checking Redis memory usage..."
-memory_info=$(docker-compose exec -T redis redis-cli info memory | grep "used_memory_human" | cut -d: -f2 | tr -d '\r')
+memory_info=$($DOCKER_COMPOSE exec -T redis redis-cli info memory | grep "used_memory_human" | cut -d: -f2 | tr -d '\r')
 if [ -n "$memory_info" ]; then
     print_pass "Redis memory usage: $memory_info"
 else
@@ -106,7 +116,7 @@ else
 fi
 
 print_test "Checking Redis connected clients..."
-clients=$(docker-compose exec -T redis redis-cli info clients | grep "connected_clients" | cut -d: -f2 | tr -d '\r')
+clients=$($DOCKER_COMPOSE exec -T redis redis-cli info clients | grep "connected_clients" | cut -d: -f2 | tr -d '\r')
 if [ -n "$clients" ]; then
     print_pass "Redis connected clients: $clients"
 else
@@ -137,14 +147,14 @@ done
 print_section "TEST SUITE 5: Inter-Service Network Connectivity"
 
 print_test "Testing entity-relations -> redis connectivity..."
-if docker-compose exec -T entity-relations ping -c 1 redis > /dev/null 2>&1; then
+if $DOCKER_COMPOSE exec -T entity-relations ping -c 1 redis > /dev/null 2>&1; then
     print_pass "entity-relations can reach redis"
 else
     print_fail "entity-relations cannot reach redis"
 fi
 
 print_test "Testing dataset-matching -> redis connectivity..."
-if docker-compose exec -T dataset-matching ping -c 1 redis > /dev/null 2>&1; then
+if $DOCKER_COMPOSE exec -T dataset-matching ping -c 1 redis > /dev/null 2>&1; then
     print_pass "dataset-matching can reach redis"
 else
     print_fail "dataset-matching cannot reach redis"
@@ -174,7 +184,7 @@ print_section "TEST SUITE 7: Log Analysis (Errors in Last 100 Lines)"
 
 for service in "${SERVICES[@]}"; do
     print_test "Checking $service logs for errors..."
-    error_count=$(docker-compose logs --tail=100 "$service" 2>&1 | grep -i -c "error" || true)
+    error_count=$($DOCKER_COMPOSE logs --tail=100 "$service" 2>&1 | grep -i -c "error" || true)
 
     if [ "$error_count" -eq 0 ]; then
         print_pass "$service has no errors in recent logs"
@@ -265,9 +275,9 @@ else
     echo ""
 
     echo "Common troubleshooting steps:"
-    echo "  1. Check service logs: docker-compose logs -f [service-name]"
-    echo "  2. Restart failed services: docker-compose restart [service-name]"
-    echo "  3. Verify environment variables: docker-compose config"
+    echo "  1. Check service logs: $DOCKER_COMPOSE logs -f [service-name]"
+    echo "  2. Restart failed services: $DOCKER_COMPOSE restart [service-name]"
+    echo "  3. Verify environment variables: $DOCKER_COMPOSE config"
     echo "  4. Check network connectivity: docker network inspect chainreactions-network"
     echo "  5. Review resource usage: docker stats"
     echo ""
