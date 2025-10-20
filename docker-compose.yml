@@ -5,8 +5,6 @@
 # Updated: October 2025 - Phase 4 Direct Connection Architecture
 # =================================================================
 
-version: '3.8'
-
 services:
   # =================================================================
   # MICROSERVICE 1: Entity Relations (Port 3002)

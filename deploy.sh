@@ -233,20 +233,16 @@ sleep 60
 print_step "Container Status"
 $DOCKER_COMPOSE ps
 
-# Array of services with ports
-declare -A SERVICES=(
-    ["entity-relations"]="3002"
-    ["entity-search"]="3003"
-    ["dataset-matching"]="3004"
-    ["data-management"]="3005"
-    ["dataset-search"]="3006"
-)
+# Service names and ports
+SERVICE_NAMES=("entity-relations" "entity-search" "dataset-matching" "data-management" "dataset-search")
+SERVICE_PORTS=("3002" "3003" "3004" "3005" "3006")
 
 FAILED_SERVICES=()
 
 echo ""
-for service in "${!SERVICES[@]}"; do
-    port="${SERVICES[$service]}"
+for i in "${!SERVICE_NAMES[@]}"; do
+    service="${SERVICE_NAMES[$i]}"
+    port="${SERVICE_PORTS[$i]}"
 
     # Check if service is healthy
     if $DOCKER_COMPOSE ps | grep "$service" | grep -q "Up (healthy)"; then
