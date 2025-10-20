@@ -129,7 +129,7 @@ app.use(errorHandler);
 app.use(notFoundHandler);
 
 // Environment variable validation
-const requiredEnvVars = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'LINKUP_API_KEY'];
+const requiredEnvVars = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'LINKUP_API_KEY_2'];
 const missingRequiredVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
 
 if (missingRequiredVars.length > 0) {
@@ -163,7 +163,7 @@ app.listen(PORT, async () => {
   console.log(``);
   console.log(`🔧 Configuration:`);
   console.log(`   🗄️  Supabase: ${process.env.SUPABASE_URL ? '✅' : '❌'}`);
-  console.log(`   🔍 Linkup API: ${process.env.LINKUP_API_KEY ? '✅' : '❌'}`);
+  console.log(`   🔍 Linkup API: ${process.env.LINKUP_API_KEY_2 ? '✅' : '❌'}`);
   console.log(`   🔄 Service Discovery: ${process.env.REDIS_HOST ? '✅' : '❌'}`);
   console.log(``);
   console.log(`🎯 Ready for SSE streaming dataset searches with Canadian NRO data!`);
