@@ -45,8 +45,8 @@ export class LinkupSearchService {
 
   constructor() {
     this.apiKeys = [
-      process.env.LINKUP_API_KEY || '',
-      process.env.LINKUP_API_KEY_2 || ''
+      process.env.LINKUP_API_KEY_2 || '',
+      process.env.LINKUP_API_KEY || ''
     ].filter(key => key.length > 0);
 
     this.apiUrl = process.env.LINKUP_API_URL || 'https://api.linkup.so/v1/search';

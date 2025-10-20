@@ -127,7 +127,7 @@ export class ConfigManager {
   private configDir: string;
 
   private constructor() {
-    this.configDir = path.join(__dirname, '../../config');
+    this.configDir = path.join(__dirname, '../config');
   }
 
   public static getInstance(): ConfigManager {
