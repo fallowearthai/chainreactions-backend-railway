@@ -1,7 +1,7 @@
 # Multi-stage build for Data Management Service
 
 # Stage 1: Build
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -9,8 +9,11 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Install dependencies
-RUN npm ci --only=production && \
+# Configure npm and install dependencies
+RUN npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-retry-mintimeout 10000 && \
+    npm config set fetch-timeout 300000 && \
+    npm ci --only=production && \
     npm ci --only=development
 
 # Copy source code
@@ -20,7 +23,7 @@ COPY src ./src
 RUN npm run build
 
 # Stage 2: Production
-FROM node:18-alpine
+FROM node:20-alpine
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
@@ -35,8 +38,11 @@ RUN mkdir -p /app/uploads && \
 # Copy package files
 COPY package*.json ./
 
-# Install production dependencies only
-RUN npm ci --only=production && \
+# Configure npm and install production dependencies only
+RUN npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-retry-mintimeout 10000 && \
+    npm config set fetch-timeout 300000 && \
+    npm ci --only=production && \
     npm cache clean --force
 
 # Copy built application from builder
