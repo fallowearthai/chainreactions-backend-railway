@@ -13,8 +13,7 @@ COPY tsconfig.json ./
 RUN npm config set fetch-retry-maxtimeout 120000 && \
     npm config set fetch-retry-mintimeout 10000 && \
     npm config set fetch-timeout 300000 && \
-    npm install --production --no-audit --no-fund && \
-    npm install --only=development --no-audit --no-fund
+    npm install --no-audit --no-fund
 
 # Copy source code
 COPY src ./src
