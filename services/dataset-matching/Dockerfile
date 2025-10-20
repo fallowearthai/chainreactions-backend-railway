@@ -35,9 +35,9 @@ RUN chown -R datasetmatching:nodejs /app
 USER datasetmatching
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "const http = require('http'); \
-    const options = { hostname: 'localhost', port: process.env.PORT || 3004, path: '/api/health', timeout: 2000 }; \
+    const options = { hostname: 'localhost', port: process.env.PORT || 3004, path: '/api/health', timeout: 5000 }; \
     const req = http.request(options, (res) => { \
       process.exit(res.statusCode === 200 ? 0 : 1); \
     }); \

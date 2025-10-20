@@ -2,8 +2,12 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install curl for health check
-RUN apk add --no-cache curl
+# Install build dependencies
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    && ln -sf python3 /usr/bin/python
 
 # Copy package files
 COPY package*.json ./
@@ -34,8 +38,15 @@ USER datasetsearch
 EXPOSE 3006
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3006/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD node -e "const http = require('http'); \
+    const options = { hostname: 'localhost', port: process.env.PORT || 3006, path: '/api/health', timeout: 5000 }; \
+    const req = http.request(options, (res) => { \
+      process.exit(res.statusCode === 200 ? 0 : 1); \
+    }); \
+    req.on('error', () => process.exit(1)); \
+    req.on('timeout', () => { req.destroy(); process.exit(1); }); \
+    req.end();"
 
 # Start service
 CMD ["npm", "start"]
