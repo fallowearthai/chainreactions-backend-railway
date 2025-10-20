@@ -18,6 +18,9 @@ RUN npm config set fetch-retry-maxtimeout 120000 && \
 # Copy source code
 COPY src/ ./src/
 
+# Build the application
+RUN npm run build
+
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S datasetsearch -u 1001
