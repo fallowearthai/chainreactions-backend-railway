@@ -161,28 +161,70 @@ else
 fi
 
 # =================================================================
-# STAGE 5: BUILD DOCKER IMAGES
+# STAGE 5: CLEANUP DOCKER RESOURCES
 # =================================================================
-print_step "STAGE 5: Building Docker Images"
+print_step "STAGE 5: Cleaning Docker Resources"
 
-echo "This may take 5-10 minutes on first build..."
-$DOCKER_COMPOSE build --parallel
+echo "Removing unused Docker images and build cache..."
+docker image prune -af > /dev/null 2>&1 || true
+docker builder prune -af > /dev/null 2>&1 || true
+print_success "Docker resources cleaned"
+
+# Check available disk space
+DISK_AVAILABLE=$(df -h / | awk 'NR==2 {print $4}')
+echo "Available disk space: $DISK_AVAILABLE"
+
+# Check available memory
+if command -v free &> /dev/null; then
+    MEMORY_AVAILABLE=$(free -h | awk 'NR==2 {print $7}')
+    echo "Available memory: $MEMORY_AVAILABLE"
+fi
+
+echo ""
+
+# =================================================================
+# STAGE 6: BUILD DOCKER IMAGES
+# =================================================================
+print_step "STAGE 6: Building Docker Images"
+
+echo "Building services sequentially for stability (15-20 minutes on first build)..."
+echo ""
+
+# Build services one by one to avoid memory issues
+SERVICES=("redis" "entity-relations" "entity-search" "dataset-matching" "data-management" "dataset-search")
+BUILD_FAILED=()
+
+for service in "${SERVICES[@]}"; do
+    echo -e "${BLUE}[BUILD]${NC} Building $service..."
+    if $DOCKER_COMPOSE build "$service"; then
+        print_success "$service built successfully"
+    else
+        print_error "$service build failed"
+        BUILD_FAILED+=("$service")
+    fi
+    echo ""
+done
+
+if [ ${#BUILD_FAILED[@]} -gt 0 ]; then
+    print_error "Failed to build: ${BUILD_FAILED[*]}"
+    exit 1
+fi
 
 print_success "All Docker images built successfully"
 
 # =================================================================
-# STAGE 6: START MICROSERVICES
+# STAGE 7: START MICROSERVICES
 # =================================================================
-print_step "STAGE 6: Starting Microservices"
+print_step "STAGE 7: Starting Microservices"
 
 $DOCKER_COMPOSE up -d
 
 print_success "All services started in detached mode"
 
 # =================================================================
-# STAGE 7: HEALTH CHECKS
+# STAGE 8: HEALTH CHECKS
 # =================================================================
-print_step "STAGE 7: Performing Health Checks"
+print_step "STAGE 8: Performing Health Checks"
 
 echo "Waiting for services to start (60 seconds)..."
 sleep 60
@@ -230,7 +272,7 @@ else
 fi
 
 # =================================================================
-# STAGE 8: DEPLOYMENT SUMMARY
+# STAGE 9: DEPLOYMENT SUMMARY
 # =================================================================
 print_step "DEPLOYMENT SUMMARY"
 
@@ -278,17 +320,18 @@ else
 fi
 
 # =================================================================
-# STAGE 9: RESOURCE MONITORING
+# STAGE 10: RESOURCE MONITORING
 # =================================================================
 print_step "Resource Usage"
 docker stats --no-stream
 
 # =================================================================
-# STAGE 10: CLEANUP
+# STAGE 11: FINAL CLEANUP
 # =================================================================
-print_step "Cleaning Up Old Images"
-docker image prune -a -f > /dev/null 2>&1
-print_success "Unused Docker images removed"
+print_step "Final Cleanup"
+echo "Removing dangling images..."
+docker image prune -f > /dev/null 2>&1 || true
+print_success "Cleanup completed"
 
 echo ""
 print_success "Deployment completed successfully!"
