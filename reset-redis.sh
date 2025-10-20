@@ -6,21 +6,6 @@
 
 set -e
 
-echo "🔄 Starting Redis reset process..."
-
-# Check if vm.overcommit_memory is set on host
-if ! grep -q "vm.overcommit_memory.*1" /proc/sys/vm/overcommit_memory 2>/dev/null; then
-    echo ""
-    print_warning "⚠️  IMPORTANT: vm.overcommit_memory is not set to 1 on the host"
-    echo ""
-    echo "To avoid Redis memory warnings, run these commands on the host:"
-    echo "  sudo sysctl vm.overcommit_memory=1"
-    echo "  echo 'vm.overcommit_memory=1' | sudo tee -a /etc/sysctl.conf"
-    echo ""
-    echo "Continuing with Redis restart anyway..."
-    sleep 3
-fi
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -43,6 +28,21 @@ print_warning() {
 print_error() {
     echo -e "${RED}❌ $1${NC}"
 }
+
+echo "🔄 Starting Redis reset process..."
+
+# Check if vm.overcommit_memory is set on host
+if ! grep -q "vm.overcommit_memory.*1" /proc/sys/vm/overcommit_memory 2>/dev/null; then
+    echo ""
+    print_warning "IMPORTANT: vm.overcommit_memory is not set to 1 on the host"
+    echo ""
+    echo "To avoid Redis memory warnings, run these commands on the host:"
+    echo "  sudo sysctl vm.overcommit_memory=1"
+    echo "  echo 'vm.overcommit_memory=1' | sudo tee -a /etc/sysctl.conf"
+    echo ""
+    echo "Continuing with Redis restart anyway..."
+    sleep 3
+fi
 
 # Step 1: Stop all services
 print_step "Stopping all services"
