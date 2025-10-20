@@ -7,6 +7,7 @@ RUN apk add --no-cache curl
 
 # Copy package files
 COPY package*.json ./
+COPY tsconfig.json ./
 
 # Configure npm for better reliability and install dependencies
 RUN npm config set fetch-retry-maxtimeout 120000 && \
