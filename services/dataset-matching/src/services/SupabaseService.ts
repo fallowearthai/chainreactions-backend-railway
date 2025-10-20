@@ -1,0 +1,1022 @@
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import {
+  DatasetEntry,
+  Dataset,
+  DatasetMatch,
+  DatabaseError,
+  ServiceResponse
+} from '../types/DatasetMatchTypes';
+import { createDatabaseError } from '../utils/ErrorHandler';
+
+export class SupabaseService {
+  private client: SupabaseClient;
+  private static instance: SupabaseService;
+
+  private constructor() {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase configuration missing. Please set SUPABASE_URL and SUPABASE_ANON_KEY environment variables.');
+    }
+
+    this.client = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 1
+        }
+      }
+    });
+  }
+
+  public static getInstance(): SupabaseService {
+    if (!SupabaseService.instance) {
+      SupabaseService.instance = new SupabaseService();
+    }
+    return SupabaseService.instance;
+  }
+
+  // Test database connection
+  async testConnection(): Promise<ServiceResponse<{ status: string; tables: string[] }>> {
+    try {
+      const startTime = process.hrtime();
+
+      // Test basic connection with a simple query
+      const { data: datasets, error: datasetsError } = await this.client
+        .from('datasets')
+        .select('id, name, is_active')
+        .limit(1);
+
+      if (datasetsError) {
+        throw datasetsError;
+      }
+
+      // Test the enhanced function
+      const { data: functionTest, error: functionError } = await this.client
+        .rpc('get_datasets_version');
+
+      if (functionError) {
+        console.warn('Enhanced function test failed:', functionError);
+      }
+
+      const processingTime = this.getProcessingTime(startTime);
+
+      return {
+        success: true,
+        data: {
+          status: 'connected',
+          tables: ['datasets', 'dataset_entries', 'Functions available']
+        },
+        metadata: {
+          processing_time_ms: processingTime,
+          cache_used: false,
+          algorithm_version: '1.0.0'
+        }
+      };
+    } catch (error: any) {
+      const dbError = createDatabaseError(
+        `Database connection test failed: ${error.message}`,
+        'SELECT datasets',
+        {}
+      );
+
+      return {
+        success: false,
+        error: dbError
+      };
+    }
+  }
+
+  // Get datasets version for cache invalidation
+  async getDatasetsVersion(): Promise<ServiceResponse<string>> {
+    try {
+      const startTime = process.hrtime();
+
+      const { data, error } = await this.client.rpc('get_datasets_version');
+
+      if (error) {
+        throw error;
+      }
+
+      const processingTime = this.getProcessingTime(startTime);
+      const version = data || Date.now().toString();
+
+      return {
+        success: true,
+        data: version,
+        metadata: {
+          processing_time_ms: processingTime,
+          cache_used: false,
+          algorithm_version: '1.0.0'
+        }
+      };
+    } catch (error: any) {
+      // Fallback to timestamp if function doesn't exist
+      const fallbackVersion = Date.now().toString();
+      console.warn('Failed to get datasets version, using fallback:', error.message);
+
+      return {
+        success: true,
+        data: fallbackVersion,
+        metadata: {
+          processing_time_ms: 0,
+          cache_used: false,
+          algorithm_version: '1.0.0'
+        }
+      };
+    }
+  }
+
+  // Enhanced dataset matching using the database function with optional geographic filtering
+  async findDatasetMatches(
+    searchText: string,
+    searchLocation?: string,
+    options?: {
+      prioritizeLocal?: boolean;
+      maxResults?: number;
+    }
+  ): Promise<ServiceResponse<DatasetMatch[]>> {
+    try {
+      const startTime = process.hrtime();
+
+      // If location is provided, use geographic-aware search
+      if (searchLocation) {
+        return this.findDatasetMatchesWithLocation(searchText, searchLocation, options);
+      }
+
+      // Use optimized matching with bracket extraction support
+      return this.findDatasetMatchesOptimized(searchText, undefined, options);
+
+    } catch (error: any) {
+      const dbError = createDatabaseError(
+        `Dataset matching query failed: ${error.message}`,
+        'find_dataset_matches_optimized',
+        { search_text: searchText }
+      );
+
+      return {
+        success: false,
+        error: dbError
+      };
+    }
+  }
+
+  // Geographic-aware dataset matching
+  private async findDatasetMatchesWithLocation(
+    searchText: string,
+    searchLocation: string,
+    options?: { prioritizeLocal?: boolean; maxResults?: number }
+  ): Promise<ServiceResponse<DatasetMatch[]>> {
+    try {
+      const startTime = process.hrtime();
+      const { CountryNormalizer } = await import('../utils/CountryNormalizer');
+      const countryNormalizer = CountryNormalizer.getInstance();
+
+      // Normalize the search location
+      const normalizedLocation = countryNormalizer.normalizeCountry(searchLocation);
+      if (!normalizedLocation) {
+        console.warn(`Could not normalize location: ${searchLocation}, falling back to text-only search`);
+        return this.findDatasetMatchesOptimized(searchText, undefined, options);
+      }
+
+      const searchLower = searchText.toLowerCase().trim();
+      const allMatches: DatasetMatch[] = [];
+      const maxResults = options?.maxResults || 20;
+
+      // Step 1: Search with geographic filtering (same country)
+      const { data: sameCountryMatches, error: sameCountryError } = await this.client
+        .from('dataset_entries')
+        .select(`
+          organization_name,
+          category,
+          aliases,
+          countries,
+          datasets!inner(name, updated_at, is_active)
+        `)
+        .eq('datasets.is_active', true)
+        .contains('countries', [normalizedLocation.canonical])
+        .or(`organization_name.ilike.%${searchText}%`)
+        .limit(maxResults);
+
+      if (sameCountryError) throw sameCountryError;
+
+      // Process same country matches with higher priority
+      if (sameCountryMatches && sameCountryMatches.length > 0) {
+        sameCountryMatches.forEach((entry: any) => {
+          const match = this.processMatchEntry(entry, searchText, searchLower, 1.2); // Geographic boost
+          if (match) allMatches.push(match);
+        });
+      }
+
+      // Step 2: If we need more results, search regional countries
+      if (allMatches.length < maxResults) {
+        const regionalCountries = countryNormalizer.getRegionalCountries(normalizedLocation.canonical);
+        const otherRegionalCountries = regionalCountries.filter(c => c !== normalizedLocation.canonical);
+
+        if (otherRegionalCountries.length > 0) {
+          const { data: regionalMatches, error: regionalError } = await this.client
+            .from('dataset_entries')
+            .select(`
+              organization_name,
+              category,
+              aliases,
+              countries,
+              datasets!inner(name, updated_at, is_active)
+            `)
+            .eq('datasets.is_active', true)
+            .overlaps('countries', otherRegionalCountries)
+            .or(`organization_name.ilike.%${searchText}%`)
+            .limit(maxResults - allMatches.length);
+
+          if (!regionalError && regionalMatches) {
+            regionalMatches.forEach((entry: any) => {
+              // Avoid duplicates
+              const isDuplicate = allMatches.some(existing =>
+                existing.organization_name === entry.organization_name &&
+                existing.dataset_name === entry.datasets.name
+              );
+
+              if (!isDuplicate) {
+                const match = this.processMatchEntry(entry, searchText, searchLower, 1.1); // Regional boost
+                if (match) allMatches.push(match);
+              }
+            });
+          }
+        }
+      }
+
+      // Step 3: If still need more results and not prioritizing local, get global results
+      if (allMatches.length < maxResults && !options?.prioritizeLocal) {
+        const { data: globalMatches, error: globalError } = await this.client
+          .from('dataset_entries')
+          .select(`
+            organization_name,
+            category,
+            aliases,
+            countries,
+            datasets!inner(name, updated_at, is_active)
+          `)
+          .eq('datasets.is_active', true)
+          .or(`organization_name.ilike.%${searchText}%`)
+          .limit(maxResults - allMatches.length);
+
+        if (!globalError && globalMatches) {
+          globalMatches.forEach((entry: any) => {
+            // Avoid duplicates
+            const isDuplicate = allMatches.some(existing =>
+              existing.organization_name === entry.organization_name &&
+              existing.dataset_name === entry.datasets.name
+            );
+
+            if (!isDuplicate) {
+              const match = this.processMatchEntry(entry, searchText, searchLower, 0.9); // Global penalty
+              if (match) allMatches.push(match);
+            }
+          });
+        }
+      }
+
+      const processingTime = this.getProcessingTime(startTime);
+
+      // Sort by confidence score
+      const sortedMatches = allMatches.sort((a, b) => (b.confidence_score || 0) - (a.confidence_score || 0));
+
+      return {
+        success: true,
+        data: sortedMatches.slice(0, maxResults),
+        metadata: {
+          processing_time_ms: processingTime,
+          cache_used: false,
+          algorithm_version: '1.0.0-geographic'
+        }
+      };
+
+    } catch (error: any) {
+      const dbError = createDatabaseError(
+        `Geographic dataset matching failed: ${error.message}`,
+        'SELECT dataset_entries (geographic)',
+        { search_text: searchText, location: searchLocation }
+      );
+
+      return {
+        success: false,
+        error: dbError
+      };
+    }
+  }
+
+  // Helper method to process match entries with geographic boost
+  private processMatchEntry(entry: any, searchText: string, searchLower: string, geographicBoost: number): DatasetMatch | null {
+    const orgNameLower = entry.organization_name.toLowerCase();
+    let matchType: DatasetMatch['match_type'] = 'partial';
+    let confidence = 0.6;
+
+    // Exact match
+    if (orgNameLower === searchLower) {
+      matchType = 'exact';
+      confidence = 1.0;
+    }
+    // Fuzzy match (remove spaces)
+    else if (orgNameLower.replace(/\s+/g, '') === searchLower.replace(/\s+/g, '')) {
+      matchType = 'fuzzy';
+      confidence = 0.9;
+    }
+    // Core match (remove parentheses and spaces)
+    else if (orgNameLower.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, '') === searchLower.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, '')) {
+      matchType = 'core_match';
+      confidence = 0.8;
+    }
+    // Partial match
+    else if (orgNameLower.includes(searchLower) || searchLower.includes(orgNameLower)) {
+      matchType = 'partial';
+      confidence = 0.6;
+    }
+    else {
+      return null; // No match
+    }
+
+    // Apply geographic boost
+    confidence *= geographicBoost;
+
+    return {
+      dataset_name: entry.datasets.name,
+      organization_name: entry.organization_name,
+      match_type: matchType,
+      category: entry.category,
+      confidence_score: Math.min(1.0, confidence),
+      last_updated: entry.datasets.updated_at
+    };
+  }
+
+  // Optimized dataset matching using efficient direct queries
+  private async findDatasetMatchesOptimized(
+    searchText: string,
+    searchLocation?: string,
+    options?: { maxResults?: number }
+  ): Promise<ServiceResponse<DatasetMatch[]>> {
+    try {
+      const startTime = process.hrtime();
+      const searchLower = searchText.toLowerCase().trim();
+      const allMatches: DatasetMatch[] = [];
+
+      // Extract the base name if there are parentheses with acronyms
+      let searchQueries = [searchText];
+      const acronymPattern = /(.+?)\s*\(([A-Z]{2,})\)/;
+      const acronymMatch = searchText.match(acronymPattern);
+      if (acronymMatch && acronymMatch[1] && acronymMatch[2]) {
+        const baseName = acronymMatch[1].trim();
+        const acronym = acronymMatch[2].trim();
+        searchQueries = [baseName, acronym]; // Use baseName and acronym only
+      }
+
+      // Create lowercase versions for comparison
+      const searchQueriesLower = searchQueries.map(q => q.toLowerCase().trim());
+
+      // Strategy 1: Exact and partial name matches (fastest - uses index)
+      let query = this.client
+        .from('dataset_entries')
+        .select(`
+          organization_name,
+          category,
+          aliases,
+          datasets!inner(name, updated_at, is_active)
+        `)
+        .eq('datasets.is_active', true);
+
+      // Apply search conditions for all query variations
+      // CRITICAL FIX: URL-encode parentheses to prevent Supabase from treating () as SQL grouping operators
+      if (searchQueries.length === 1) {
+        const encoded = searchQueries[0].replace(/\(/g, '%28').replace(/\)/g, '%29');
+        query = query.ilike('organization_name', `%${encoded}%`);
+      } else {
+        const orConditions = searchQueries
+          .map(q => {
+            // URL encode parentheses in each query
+            const encoded = q.replace(/\(/g, '%28').replace(/\)/g, '%29');
+            return `organization_name.ilike.%${encoded}%`;
+          })
+          .join(',');
+        query = query.or(orConditions);
+      }
+
+      const { data: exactMatches, error: exactError } = await query.limit(20);
+
+      if (exactError) throw exactError;
+
+      // Process matches with better logic - check against all search query variations
+      if (exactMatches && exactMatches.length > 0) {
+        exactMatches.forEach((entry: any) => {
+          const orgNameLower = entry.organization_name.toLowerCase();
+          let matchType: DatasetMatch['match_type'] = 'partial';
+          let confidence = 0.6;
+
+          // Check exact match against any search query variation
+          if (searchQueriesLower.some(queryLower => orgNameLower === queryLower)) {
+            matchType = 'exact';
+            confidence = 1.0;
+          }
+          // Fuzzy match (remove spaces) - check all variations
+          else if (searchQueriesLower.some(queryLower =>
+            orgNameLower.replace(/\s+/g, '') === queryLower.replace(/\s+/g, ''))) {
+            matchType = 'fuzzy';
+            confidence = 0.9;
+          }
+          // Core match (remove parentheses and spaces) - check all variations
+          else if (searchQueriesLower.some(queryLower =>
+            orgNameLower.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, '') === queryLower.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ''))) {
+            matchType = 'core_match';
+            confidence = 0.8;
+          }
+          // Partial match - check all variations
+          else if (searchQueriesLower.some(queryLower =>
+            orgNameLower.includes(queryLower) || queryLower.includes(orgNameLower))) {
+            matchType = 'partial';
+            confidence = 0.6;
+          }
+
+          allMatches.push({
+            dataset_name: entry.datasets.name,
+            organization_name: entry.organization_name,
+            match_type: matchType,
+            category: entry.category,
+            confidence_score: confidence,
+            last_updated: entry.datasets.updated_at
+          });
+        });
+      }
+
+      // Strategy 2: Partial name matches (if no exact matches)
+      if (allMatches.length === 0) {
+        let partialQuery = this.client
+          .from('dataset_entries')
+          .select(`
+            organization_name,
+            category,
+            aliases,
+            datasets!inner(name, updated_at, is_active)
+          `)
+          .eq('datasets.is_active', true);
+
+        // Apply same search logic as Strategy 1 (with URL encoding for parentheses)
+        if (searchQueries.length === 1) {
+          const encoded = searchQueries[0].replace(/\(/g, '%28').replace(/\)/g, '%29');
+          partialQuery = partialQuery.ilike('organization_name', `%${encoded}%`);
+        } else {
+          const orConditions = searchQueries
+            .map(q => {
+              const encoded = q.replace(/\(/g, '%28').replace(/\)/g, '%29');
+              return `organization_name.ilike.%${encoded}%`;
+            })
+            .join(',');
+          partialQuery = partialQuery.or(orConditions);
+        }
+
+        const { data: partialMatches, error: partialError } = await partialQuery.limit(20);
+
+        if (partialError) throw partialError;
+
+        // Process partial matches - check against all search query variations
+        if (partialMatches && partialMatches.length > 0) {
+          partialMatches.forEach((entry: any) => {
+            const orgNameLower = entry.organization_name.toLowerCase();
+            let matchType: DatasetMatch['match_type'] = 'partial';
+            let confidence = 0.6;
+
+            // Check for fuzzy match (remove spaces) against all variations
+            if (searchQueriesLower.some(queryLower =>
+              orgNameLower.replace(/\s+/g, '') === queryLower.replace(/\s+/g, ''))) {
+              matchType = 'fuzzy';
+              confidence = 0.9;
+            }
+            // Check partial match against all variations
+            else if (searchQueriesLower.some(queryLower =>
+              orgNameLower.includes(queryLower) || queryLower.includes(orgNameLower))) {
+              matchType = 'partial';
+              confidence = 0.6;
+            }
+
+            allMatches.push({
+              dataset_name: entry.datasets.name,
+              organization_name: entry.organization_name,
+              match_type: matchType,
+              category: entry.category,
+              confidence_score: confidence,
+              last_updated: entry.datasets.updated_at
+            });
+          });
+        }
+      }
+
+      // Strategy 3: Database-level alias matching (scalable - uses PostgreSQL array operators)
+      if (allMatches.length < 5) {
+        // Query database directly for each search query variation using PostgreSQL array containment
+        for (const query of searchQueries) {
+          const queryLower = query.toLowerCase();
+
+          // Use PostgreSQL array contains operator for efficient database-level matching
+          const { data: aliasMatches, error: aliasError } = await this.client
+            .from('dataset_entries')
+            .select(`
+              organization_name,
+              category,
+              aliases,
+              datasets!inner(name, updated_at, is_active)
+            `)
+            .eq('datasets.is_active', true)
+            .filter('aliases', 'cs', `{${query}}`)  // PostgreSQL array contains - case sensitive
+            .limit(5);
+
+          if (aliasError) throw aliasError;
+
+          // Process alias matches from database query
+          if (aliasMatches && aliasMatches.length > 0) {
+            aliasMatches.forEach((entry: any) => {
+              // Verify case-insensitive match (since PostgreSQL cs operator is case-sensitive)
+              if (entry.aliases && Array.isArray(entry.aliases)) {
+                const hasMatch = entry.aliases.some((alias: string) =>
+                  alias && alias.toLowerCase() === queryLower
+                );
+
+                if (hasMatch) {
+                  // Check if already added to avoid duplicates
+                  const isDuplicate = allMatches.some(existing =>
+                    existing.organization_name === entry.organization_name &&
+                    existing.dataset_name === entry.datasets.name
+                  );
+
+                  if (!isDuplicate) {
+                    allMatches.push({
+                      dataset_name: entry.datasets.name,
+                      organization_name: entry.organization_name,
+                      match_type: 'alias',
+                      category: entry.category,
+                      confidence_score: 0.95,
+                      last_updated: entry.datasets.updated_at
+                    });
+                  }
+                }
+              }
+            });
+          }
+        }
+      }
+
+      const processingTime = this.getProcessingTime(startTime);
+
+      // Remove duplicates and sort by confidence
+      const uniqueMatches = this.removeDuplicateMatches(allMatches);
+      const sortedMatches = uniqueMatches.sort((a, b) => (b.confidence_score || 0) - (a.confidence_score || 0));
+
+      return {
+        success: true,
+        data: sortedMatches.slice(0, 10), // Limit to top 10 results
+        metadata: {
+          processing_time_ms: processingTime,
+          cache_used: false,
+          algorithm_version: '1.0.0-optimized'
+        }
+      };
+    } catch (error: any) {
+      const dbError = createDatabaseError(
+        `Optimized dataset matching failed: ${error.message}`,
+        'SELECT dataset_entries (optimized)',
+        { search_text: searchText }
+      );
+
+      return {
+        success: false,
+        error: dbError
+      };
+    }
+  }
+
+  // Remove duplicate matches helper
+  private removeDuplicateMatches(matches: DatasetMatch[]): DatasetMatch[] {
+    const seen = new Set<string>();
+    const uniqueMatches: DatasetMatch[] = [];
+
+    for (const match of matches) {
+      const key = `${match.dataset_name}:${match.organization_name}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueMatches.push(match);
+      }
+    }
+
+    return uniqueMatches;
+  }
+
+  // Fallback method using direct table queries
+  private async findDatasetMatchesFallback(searchText: string): Promise<ServiceResponse<DatasetMatch[]>> {
+    try {
+      const startTime = process.hrtime();
+
+      // Query dataset entries with active datasets
+      const { data: entries, error } = await this.client
+        .from('dataset_entries')
+        .select(`
+          organization_name,
+          category,
+          aliases,
+          datasets!inner(name, updated_at, is_active)
+        `)
+        .eq('datasets.is_active', true)
+        .or(`organization_name.ilike.%${searchText}%,aliases.cs.{${searchText}}`);
+
+      if (error) {
+        throw error;
+      }
+
+      const processingTime = this.getProcessingTime(startTime);
+
+      // Simple mapping for fallback
+      const matches: DatasetMatch[] = (entries || []).map((entry: any) => ({
+        dataset_name: entry.datasets.name,
+        organization_name: entry.organization_name,
+        match_type: this.determineMatchType(searchText, entry.organization_name, entry.aliases),
+        category: entry.category,
+        confidence_score: 0.5, // Default confidence for fallback
+        last_updated: entry.datasets.updated_at
+      }));
+
+      return {
+        success: true,
+        data: matches,
+        metadata: {
+          processing_time_ms: processingTime,
+          cache_used: false,
+          algorithm_version: '1.0.0-fallback'
+        }
+      };
+    } catch (error: any) {
+      const dbError = createDatabaseError(
+        `Fallback dataset matching failed: ${error.message}`,
+        'SELECT dataset_entries',
+        { search_text: searchText }
+      );
+
+      return {
+        success: false,
+        error: dbError
+      };
+    }
+  }
+
+  // Simple match type determination for fallback
+  private determineMatchType(searchText: string, orgName: string, aliases: string[]): DatasetMatch['match_type'] {
+    const normalizedSearch = searchText.toLowerCase().trim();
+    const normalizedOrg = orgName.toLowerCase().trim();
+
+    if (normalizedSearch === normalizedOrg) {
+      return 'exact';
+    }
+
+    if (aliases && aliases.some(alias => alias.toLowerCase() === normalizedSearch)) {
+      return 'alias';
+    }
+
+    if (normalizedOrg.includes(normalizedSearch) || normalizedSearch.includes(normalizedOrg)) {
+      return 'partial';
+    }
+
+    return 'fuzzy';
+  }
+
+  // Get all active datasets
+  async getActiveDatasets(): Promise<ServiceResponse<Dataset[]>> {
+    try {
+      const startTime = process.hrtime();
+
+      const { data, error } = await this.client
+        .from('datasets')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) {
+        throw error;
+      }
+
+      const processingTime = this.getProcessingTime(startTime);
+
+      return {
+        success: true,
+        data: data || [],
+        metadata: {
+          processing_time_ms: processingTime,
+          cache_used: false,
+          algorithm_version: '1.0.0'
+        }
+      };
+    } catch (error: any) {
+      const dbError = createDatabaseError(
+        `Failed to get active datasets: ${error.message}`,
+        'SELECT datasets',
+        { is_active: true }
+      );
+
+      return {
+        success: false,
+        error: dbError
+      };
+    }
+  }
+
+  // Get dataset entries by dataset
+  async getDatasetEntries(datasetId: string, limit: number = 100): Promise<ServiceResponse<DatasetEntry[]>> {
+    try {
+      const startTime = process.hrtime();
+
+      const { data, error } = await this.client
+        .from('dataset_entries')
+        .select('*')
+        .eq('dataset_id', datasetId)
+        .limit(limit)
+        .order('organization_name');
+
+      if (error) {
+        throw error;
+      }
+
+      const processingTime = this.getProcessingTime(startTime);
+
+      return {
+        success: true,
+        data: data || [],
+        metadata: {
+          processing_time_ms: processingTime,
+          cache_used: false,
+          algorithm_version: '1.0.0'
+        }
+      };
+    } catch (error: any) {
+      const dbError = createDatabaseError(
+        `Failed to get dataset entries: ${error.message}`,
+        'SELECT dataset_entries',
+        { dataset_id: datasetId, limit }
+      );
+
+      return {
+        success: false,
+        error: dbError
+      };
+    }
+  }
+
+  // Batch search for multiple entities (Optimized Version)
+  async findDatasetMatchesBatch(searchTexts: string[]): Promise<ServiceResponse<Record<string, DatasetMatch[]>>> {
+    try {
+      const startTime = process.hrtime();
+      const results: Record<string, DatasetMatch[]> = {};
+
+      // Use unified batch query for better performance
+      return this.findDatasetMatchesBatchOptimized(searchTexts);
+
+    } catch (error: any) {
+      const dbError = createDatabaseError(
+        `Batch dataset matching failed: ${error.message}`,
+        'batch_find_dataset_matches',
+        { search_texts: searchTexts.length + ' entities' }
+      );
+
+      return {
+        success: false,
+        error: dbError
+      };
+    }
+  }
+
+  // Optimized batch query using single database call with OR conditions
+  async findDatasetMatchesBatchOptimized(searchTexts: string[]): Promise<ServiceResponse<Record<string, DatasetMatch[]>>> {
+    try {
+      const startTime = process.hrtime();
+      const results: Record<string, DatasetMatch[]> = {};
+      const maxResults = 10; // Per entity limit
+
+      // Create search variations for all texts (acronym extraction, etc.)
+      const allSearchVariations = new Map<string, string[]>();
+
+      for (const searchText of searchTexts) {
+        const variations = [searchText];
+        const acronymPattern = /(.+?)\s*\(([A-Z]{2,})\)/;
+        const acronymMatch = searchText.match(acronymPattern);
+
+        if (acronymMatch && acronymMatch[1] && acronymMatch[2]) {
+          const baseName = acronymMatch[1].trim();
+          const acronym = acronymMatch[2].trim();
+          variations.push(baseName, acronym);
+        }
+
+        allSearchVariations.set(searchText, variations);
+      }
+
+      // Build comprehensive OR condition for all search variations
+      const allVariations: string[] = [];
+      const searchToVariations = new Map<string, string[]>();
+
+      for (const [original, variations] of allSearchVariations) {
+        for (const variation of variations) {
+          allVariations.push(variation);
+          if (!searchToVariations.has(variation)) {
+            searchToVariations.set(variation, []);
+          }
+          searchToVariations.get(variation)!.push(original);
+        }
+      }
+
+      // Remove duplicates while preserving order
+      const uniqueVariations = [...new Set(allVariations)];
+
+      // Build OR conditions with URL encoding for parentheses
+      const orConditions = uniqueVariations
+        .map(variation => {
+          const encoded = variation.replace(/\(/g, '%28').replace(/\)/g, '%29');
+          return `organization_name.ilike.%${encoded}%`;
+        })
+        .join(',');
+
+      // Single database query for all variations
+      const { data: allMatches, error } = await this.client
+        .from('dataset_entries')
+        .select(`
+          organization_name,
+          category,
+          aliases,
+          datasets!inner(name, updated_at, is_active)
+        `)
+        .eq('datasets.is_active', true)
+        .or(orConditions)
+        .limit(500); // Increased limit for batch processing
+
+      if (error) throw error;
+
+      // Process and categorize matches by original search texts
+      if (allMatches && allMatches.length > 0) {
+        // Initialize results for all search texts
+        for (const searchText of searchTexts) {
+          results[searchText] = [];
+        }
+
+        // Process each match once and assign to relevant search texts
+        for (const entry of allMatches) {
+          const orgNameLower = entry.organization_name.toLowerCase();
+
+          // Check which search variations match this entry
+          for (const [originalSearch, variations] of allSearchVariations) {
+            if (results[originalSearch].length >= maxResults) continue; // Skip if already have enough results
+
+            let hasMatch = false;
+            let matchType: DatasetMatch['match_type'] = 'partial';
+            let confidence = 0.6;
+
+            // Check all variations for this original search
+            for (const variation of variations) {
+              const variationLower = variation.toLowerCase();
+
+              // Exact match
+              if (orgNameLower === variationLower) {
+                matchType = 'exact';
+                confidence = 1.0;
+                hasMatch = true;
+                break;
+              }
+              // Fuzzy match (remove spaces)
+              else if (orgNameLower.replace(/\s+/g, '') === variationLower.replace(/\s+/g, '')) {
+                matchType = 'fuzzy';
+                confidence = 0.9;
+                hasMatch = true;
+              }
+              // Core match (remove parentheses and spaces)
+              else if (orgNameLower.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, '') ===
+                       variationLower.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, '')) {
+                matchType = 'core_match';
+                confidence = 0.8;
+                hasMatch = true;
+              }
+              // Partial match
+              else if (orgNameLower.includes(variationLower) || variationLower.includes(orgNameLower)) {
+                matchType = 'partial';
+                confidence = 0.6;
+                hasMatch = true;
+              }
+            }
+
+            if (hasMatch) {
+              // Check for duplicates within this search text's results
+              const isDuplicate = results[originalSearch].some(existing =>
+                existing.organization_name === entry.organization_name &&
+                existing.dataset_name === (entry.datasets as any).name
+              );
+
+              if (!isDuplicate) {
+                results[originalSearch].push({
+                  dataset_name: (entry.datasets as any).name,
+                  organization_name: entry.organization_name,
+                  match_type: matchType,
+                  category: entry.category,
+                  confidence_score: confidence,
+                  last_updated: (entry.datasets as any).updated_at
+                });
+              }
+            }
+          }
+        }
+
+        // Sort results for each search text by confidence score
+        for (const searchText of searchTexts) {
+          results[searchText].sort((a, b) => (b.confidence_score || 0) - (a.confidence_score || 0));
+          results[searchText] = results[searchText].slice(0, maxResults);
+        }
+      }
+
+      const processingTime = this.getProcessingTime(startTime);
+
+      return {
+        success: true,
+        data: results,
+        metadata: {
+          processing_time_ms: processingTime,
+          cache_used: false,
+          algorithm_version: '2.0.0-batch-optimized',
+          total_search_texts: searchTexts.length,
+          total_variations: uniqueVariations.length,
+          total_matches_found: Object.values(results).reduce((sum, matches) => sum + matches.length, 0)
+        }
+      };
+    } catch (error: any) {
+      const dbError = createDatabaseError(
+        `Optimized batch dataset matching failed: ${error.message}`,
+        'SELECT dataset_entries (batch optimized)',
+        { search_texts: searchTexts.length + ' entities' }
+      );
+
+      return {
+        success: false,
+        error: dbError
+      };
+    }
+  }
+
+  // Helper method to calculate processing time
+  private getProcessingTime(startTime: [number, number]): number {
+    const [seconds, nanoseconds] = process.hrtime(startTime);
+    return Math.round((seconds * 1000) + (nanoseconds / 1e6));
+  }
+
+  // Get database statistics
+  async getDatabaseStats(): Promise<ServiceResponse<any>> {
+    try {
+      const startTime = process.hrtime();
+
+      // Get dataset count
+      const { count: datasetCount, error: datasetError } = await this.client
+        .from('datasets')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
+
+      if (datasetError) {
+        throw datasetError;
+      }
+
+      // Get dataset entries count
+      const { count: entriesCount, error: entriesError } = await this.client
+        .from('dataset_entries')
+        .select('*', { count: 'exact', head: true });
+
+      if (entriesError) {
+        throw entriesError;
+      }
+
+      const processingTime = this.getProcessingTime(startTime);
+
+      return {
+        success: true,
+        data: {
+          active_datasets: datasetCount || 0,
+          total_entries: entriesCount || 0,
+          last_updated: new Date().toISOString()
+        },
+        metadata: {
+          processing_time_ms: processingTime,
+          cache_used: false,
+          algorithm_version: '1.0.0'
+        }
+      };
+    } catch (error: any) {
+      const dbError = createDatabaseError(
+        `Failed to get database statistics: ${error.message}`,
+        'SELECT COUNT(*)',
+        {}
+      );
+
+      return {
+        success: false,
+        error: dbError
+      };
+    }
+  }
+}

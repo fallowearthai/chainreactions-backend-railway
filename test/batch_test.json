@@ -1,0 +1,92 @@
+{
+  "entity": "International Research University",
+  "location": "Global",
+  "affiliated_companies": [
+    {
+      "company_name": "Hunan University",
+      "risk_keyword": "military",
+      "relationship_type": "Direct"
+    },
+    {
+      "company_name": "Nanjing Institute of Information Technology",
+      "risk_keyword": "defense",
+      "relationship_type": "Indirect"
+    },
+    {
+      "company_name": "Hefei National Laboratory for Physical Sciences at Microscale",
+      "risk_keyword": "weapons",
+      "relationship_type": "Direct"
+    },
+    {
+      "company_name": "Information Engineering University",
+      "risk_keyword": "police technology",
+      "relationship_type": "Direct"
+    },
+    {
+      "company_name": "Key Laboratory of Information Systems Engineering",
+      "risk_keyword": "civil-military fusion",
+      "relationship_type": "Direct"
+    },
+    {
+      "company_name": "Logistics University of the People's Armed Police Force",
+      "risk_keyword": "military",
+      "relationship_type": "Direct"
+    },
+    {
+      "company_name": "Ministry of Public Security's Institute of Forensic Science of China",
+      "risk_keyword": "police technology",
+      "relationship_type": "Indirect"
+    },
+    {
+      "company_name": "Nanjing Army Command College",
+      "risk_keyword": "weapons",
+      "relationship_type": "Direct"
+    },
+    {
+      "company_name": "Jiangnan Social University",
+      "risk_keyword": "human rights violations",
+      "relationship_type": "Unknown"
+    },
+    {
+      "company_name": "Shahid Beheshti University",
+      "risk_keyword": "military",
+      "relationship_type": "Direct"
+    },
+    {
+      "company_name": "Imam Hossein University",
+      "risk_keyword": "defense",
+      "relationship_type": "Indirect"
+    },
+    {
+      "company_name": "Institute of Applied Physics",
+      "risk_keyword": "civil-military fusion",
+      "relationship_type": "Direct"
+    },
+    {
+      "company_name": "Iranian Research Organization for Science and Technology",
+      "risk_keyword": "weapons",
+      "relationship_type": "Unknown"
+    },
+    {
+      "company_name": "33rd Scientific Research and Testing Institute",
+      "risk_keyword": "military",
+      "relationship_type": "Direct"
+    },
+    {
+      "company_name": "48th Central Scientific Research Institute",
+      "risk_keyword": "defense",
+      "relationship_type": "Direct"
+    },
+    {
+      "company_name": "46th TSNII Central Scientific Research Institute",
+      "risk_keyword": "police technology",
+      "relationship_type": "Unknown"
+    }
+  ],
+  "options": {
+    "affiliated_boost": 1.0,
+    "min_confidence": 0.1,
+    "max_results": 50,
+    "force_refresh": true
+  }
+}

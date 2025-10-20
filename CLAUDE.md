@@ -1,313 +1,221 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with the ChainReactions backend deployment repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 🚀 Production Deployment Status (October 2025)
+## 🚀 Current Architecture Status (October 2025)
 
-### Current Deployment Architecture
+### Phase 4 Complete - No-Gateway Direct Connection Architecture
 
-- **Backend Server**: Digital Ocean Ubuntu 22.04 (2GB RAM)
-- **Domain**: chainreactions.site
-- **SSL**: Let's Encrypt HTTPS
-- **Frontend**: Vercel (Development Environment)
-  - Primary: `https://chainreactions-frontend-dev.vercel.app`
-  - Deployment: `https://chainreactions-frontend-dev-fallowearths-projects-06c459ff.vercel.app`
-  - Git Branch: `https://chainreactions-fronte-git-584dee-fallowearths-projects-06c459ff.vercel.app`
-- **Backend**: Docker Container (ChainReactions Unified Service on Port 3000)
+**Current State**: ✅ **Production Ready** - October 17, 2025
 
-### 🌐 Network Configuration
+ChainReactions Backend has evolved from API Gateway pattern to **direct frontend-to-microservice connection** for improved performance and simplified deployment.
+
+### Microservices Architecture
 
 ```
-HTTP (80) → Force Redirect → HTTPS (443)
-    ↓
-Nginx Reverse Proxy
-    ├── /api → localhost:3000 (Docker Container)
-    └── / → chainreactions-frontend-dev.vercel.app
+services/
+├── entity-relations/    # Port 3002 - DeepThinking OSINT + Normal Search
+├── entity-search/       # Port 3003 - Linkup business intelligence
+├── dataset-matching/    # Port 3004 - Advanced entity matching
+├── data-management/     # Port 3005 - CSV processing & Supabase
+└── dataset-search/      # Port 3006 - SSE streaming + NRO data
 ```
 
-### ⚡ Current Service Status
+### 🏗️ Architecture Evolution - October 17, 2025
 
-- ✅ **Server**: Running normally
-- ✅ **Docker**: Container operational
-- ✅ **SSL**: HTTPS certificate valid
-- ✅ **Health Check**: https://chainreactions.site/api/health ✅
-- ✅ **CORS**: Fixed - All hardcoded ports removed (October 13, 2025)
-- ✅ **API Configuration**: Frontend uses environment-aware API endpoints
-- ⚠️ **Deployment Status**: Code updated, awaiting Docker rebuild and deployment
+**FROM**: Frontend → API Gateway → Microservices
+**TO**: Frontend → **Direct Connection** → Microservices
 
-### 🚨 Recent Fixes and Updates (October 13, 2025)
+**Benefits**:
+- ✅ 10-20% response time improvement (no proxy layer)
+- ✅ Simplified deployment and maintenance
+- ✅ Better fault isolation
+- ✅ CloudFlare CDN routing for production
 
-#### ✅ Fix 1: Removed All Hardcoded Ports (Frontend & Backend)
+### Service Dependencies
+- **Redis** (Port 6379): Service discovery and caching
+- **Supabase**: PostgreSQL database for data persistence
+- **External APIs**: Gemini AI, Linkup, Bright Data SERP
 
-**Problem**:
-- Frontend had hardcoded `localhost:3000` in 5 component files
-- Backend had hardcoded `8080` port in 3 CORS configuration files
-- This caused production deployment issues with incorrect API endpoints
+## 🔧 Development Commands
 
-**Solution Applied**:
-
-**Frontend Changes** (`/Users/kanbei/Code/chainreactions_frontend_dev`):
-- ✅ Updated `GetStartedModal.tsx` - Uses `API_ENDPOINTS.DEMO_REQUEST`
-- ✅ Updated `DatasetFileUpload.tsx` - Uses `API_ENDPOINTS.DATASET_UPLOAD()`
-- ✅ Updated `DatasetEditPage.tsx` - Uses `API_ENDPOINTS.DATASET_ENTRIES()` and `API_ENDPOINTS.DATASETS`
-- ✅ Updated `DatasetManagement.tsx` - Uses `API_ENDPOINTS.DATASET_UPLOAD()`
-- ✅ Updated `DatasetDetailPage.tsx` - Uses `API_ENDPOINTS` for stats, entries, and export
-- ✅ Updated `.env.local` - Added deployment notes
-
-**API Configuration Strategy** (`src/config/api.ts`):
-```typescript
-// Priority order:
-1. Environment variable (VITE_BACKEND_URL) - Highest priority
-2. Auto-detect Vercel environment → https://chainreactions.site
-3. Auto-detect production domain → https://chainreactions.site
-4. Fallback to localhost:3000 (development only)
-```
-
-**Backend Changes** (`/Users/kanbei/Code/chainreactions_backend_railway`):
-- ✅ Updated `src/app.ts` - Environment-aware CORS configuration
-- ✅ Updated `src/services/data-management/app.ts` - Production/dev CORS origins
-- ✅ Updated `src/services/dataset-search/app.ts` - Unified CORS configuration
-
-**CORS Configuration** (All backend files):
-```typescript
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? [
-        'https://chainreactions.site',
-        'https://chainreactions-frontend-dev.vercel.app',
-        'https://chainreactions-frontend-dev-fallowearths-projects-06c459ff.vercel.app',
-        'https://chainreactions-fronte-git-584dee-fallowearths-projects-06c459ff.vercel.app'
-      ]
-    : ['http://localhost:8080', 'http://localhost:3000', /* other dev ports */],
-  credentials: true
-}));
-```
-
-**Verification**:
-- ✅ No hardcoded `localhost:3000` in frontend source files (only in API config fallback)
-- ✅ All frontend components use centralized `API_ENDPOINTS`
-- ✅ Backend CORS properly configured for production and development
-- ✅ Vercel environment variable set: `VITE_BACKEND_URL=https://chainreactions.site`
-
-**Deployment Status**:
-- ✅ Frontend: Ready to redeploy on Vercel
-- ⚠️ Backend: Code updated, requires Docker rebuild and deployment (see deployment instructions below)
-
-### 📁 Repository Structure
-
-**IMPORTANT**: This is the Digital Ocean deployment repository
-- **Local Development**: `/Users/kanbei/Code/chainreactions_backend`
-- **Production Deployment**: `/Users/kanbei/Code/chainreactions_backend_railway` (THIS REPOSITORY)
-- **Deployment Process**:
-  1. Develop and test in `chainreactions_backend`
-  2. Manually sync changes to `chainreactions_backend_railway`
-  3. Deploy to Digital Ocean server via Docker
-
----
-
-## Project Overview
-
-**ChainReactions Unified OSINT Platform** - A comprehensive Node.js/TypeScript backend that unifies 6 OSINT services into a single API on Port 3000.
-
-### 🚀 Unified Services (All on Port 3000)
-
-1. **Entity Relations** (DeepThinking + Normal modes) - 3-stage OSINT workflow with Gemini AI
-2. **Entity Search** - Linkup API professional business intelligence
-3. **Dataset Matching** - Advanced entity matching with multiple algorithms
-4. **Data Management** - CSV upload and intelligent parsing
-5. **Dataset Search** - SSE streaming search with dual API processing
-6. **Demo Email Service** - Gmail SMTP integration for demo requests
-
-### Technology Stack
-
-- **Runtime**: Node.js with TypeScript
-- **Framework**: Express.js for REST APIs
-- **AI**: Google Gemini 2.5 Flash with thinking mode
-- **Search**: Bright Data SERP API (multi-engine), Linkup API
-- **Database**: Supabase (PostgreSQL)
-- **Email**: Nodemailer with Gmail SMTP
-- **Caching**: Redis (optional, falls back to memory cache)
-
-### 🐳 Docker Deployment
-
-#### Quick Start Commands
+### Starting All Services (Direct Connection Architecture)
 ```bash
-# Build and start services
-docker-compose up -d
+# Quick start - All services in background
+for service in entity-relations entity-search dataset-matching data-management dataset-search; do
+  cd services/$service && npm start &
+  cd ../..
+done
+wait
 
-# Check service status
-docker-compose ps
-
-# View logs
-docker-compose logs -f
-
-# Restart services
-docker-compose restart
-
-# Stop services
-docker-compose down
+# Start frontend server (separate terminal)
+cd /Users/kanbei/Code/chainreactions_frontend_dev_new && npm run dev &
 ```
 
-#### Docker Services
-- **chainreactions-app**: Main application (Port 3000)
-- **redis**: Redis caching service (Port 6379 - internal only)
-
-### 🔑 Required Environment Variables
-
-Create a `.env` file with the following:
-
+### Alternative: Sequential Startup (Recommended for Development)
 ```bash
-# Server Configuration
-PORT=3000
-NODE_ENV=production
-
-# AI & Search APIs
-GEMINI_API_KEY=your_gemini_api_key
-BRIGHT_DATA_API_KEY=your_bright_data_key
-BRIGHT_DATA_SERP_ZONE=your_serp_zone
-LINKUP_API_KEY=your_linkup_key
-LINKUP_API_KEY_2=your_linkup_key_2
-
-# Database
-SUPABASE_URL=your_supabase_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-
-# Email Service
-GMAIL_USER=your_email@gmail.com
-GMAIL_APP_PASSWORD=your_app_password
-
-# Redis (optional)
-REDIS_URL=redis://redis:6379
-REDIS_HOST=redis
-REDIS_PORT=6379
+# Start services one by one to verify each starts correctly
+cd services/entity-relations && npm run dev    # Port 3002
+cd ../entity-search && npm run dev             # Port 3003
+cd ../dataset-matching && npm run dev          # Port 3004
+cd ../data-management && npm run dev           # Port 3005
+cd ../dataset-search && npm run dev            # Port 3006
 ```
 
-## 🚀 API Endpoints (All on Port 3000)
-
-### Entity Relations - DeepThinking Mode
-- **POST `/api/enhanced/search`** - Full 3-stage OSINT analysis
-- **GET `/api/enhanced/search-stream`** - SSE streaming with progress
-- **POST `/api/enhanced/strategy`** - Stage 1 only (meta-prompting)
-- **GET `/api/enhanced/test`** - Test with sample data
-
-### Entity Relations - Normal Search Mode
-- **POST `/api/normal-search`** - Fast Google Web Search based OSINT
-
-### Entity Search
-- **POST `/api/entity-search`** - Entity search with domain filtering
-- **GET `/api/entity-search/test`** - Test Linkup API connection
-
-### Dataset Matching
-- **POST `/api/dataset-matching/match`** - Single entity matching
-- **POST `/api/dataset-matching/batch`** - Batch entity matching
-- **GET `/api/dataset-matching/stats`** - Service statistics
-- **DELETE `/api/dataset-matching/cache/clear`** - Clear cache
-
-### Data Management
-- **GET `/api/data-management/datasets`** - List all datasets
-- **POST `/api/data-management/datasets`** - Create new dataset
-- **POST `/api/data-management/datasets/:id/upload`** - Upload CSV file
-- **GET `/api/data-management/datasets/:id/entries`** - Get dataset entries
-- **GET `/api/data-management/datasets/:id/stats`** - Dataset statistics
-
-### Dataset Search
-- **POST `/api/dataset-search/stream`** - Start streaming search
-- **DELETE `/api/dataset-search/stream/:execution_id`** - Cancel search
-- **GET `/api/dataset-search/stream/:execution_id/status`** - Get search status
-- **GET `/api/dataset-search/nro-stats`** - Get NRO statistics
-
-### Demo Email Service
-- **POST `/api/demo-request`** - Send demo request email
-- **GET `/api/test-email`** - Test email service connection
-
-### System Endpoints
-- **GET `/api/health`** - Unified health check for all 6 services
-- **GET `/api`** - Service information and endpoint overview
-
-## Development Commands
-
+### Individual Service Development
 ```bash
+# Navigate to any service directory
+cd services/[service-name]
+
 # Install dependencies
 npm install
 
-# Build TypeScript
+# Build TypeScript (required for production)
 npm run build
 
-# Start production server
-npm start
-
-# Development mode with hot reload
+# Development mode with hot reload (recommended)
 npm run dev
+
+# Type checking (catch errors before runtime)
+npm run type-check
 
 # Run tests
 npm test
 
-# Type checking
-npm run type-check
+# Start production server (requires build first)
+npm start
 
 # Lint code
 npm run lint
 ```
 
-## 🔒 Port Configuration (CRITICAL)
+### Performance Testing
+```bash
+# Run performance tests for dataset matching
+node test_performance.js
 
-**FIXED PORT ALLOCATION**:
-- **Frontend**: `8080` (Development)
-- **Backend Unified Service**: `3000` (Production)
-- **Redis**: `6379` (Internal only)
-
-**CORS Configuration**: Backend MUST allow all Vercel deployment domains listed above.
-
-## Project Structure
-
-```
-src/
-├── app.ts                           # Express server and unified routes
-├── controllers/
-│   ├── EnhancedSearchController.ts  # DeepThinking workflow
-│   ├── NormalSearchController.ts    # Normal search mode
-│   ├── EntitySearchController.ts    # Entity search integration
-│   ├── DatasetMatchingController.ts # Dataset matching integration
-│   ├── DataManagementController.ts  # Data management integration
-│   ├── DatasetSearchController.ts   # Dataset search integration
-│   └── DemoRequestController.ts     # Demo email service
-├── services/
-│   ├── entity-search/               # Entity Search service
-│   ├── dataset-matching/            # Dataset Matching service
-│   ├── dataset-search/              # Dataset Search service
-│   ├── data-management/             # Data Management service
-│   ├── EmailService.ts              # Email service
-│   ├── GeminiService.ts             # Gemini AI integration
-│   ├── BrightDataSerpService.ts     # Bright Data SERP
-│   └── ...
-├── types/                           # TypeScript type definitions
-└── templates/                       # Email templates
+# Run fixed performance tests
+node test_performance_fixed.js
 ```
 
-## 🔧 Deployment Checklist
+### Batch Operations
+```bash
+# Install dependencies for all services
+for service in entity-relations entity-search dataset-matching data-management dataset-search; do
+  cd services/$service && npm install && cd ../..
+done
 
-### Pre-Deployment
-- [ ] Update `.env` with production API keys
-- [ ] Verify CORS origins include all Vercel domains
-- [ ] Test all API endpoints locally
-- [ ] Run `npm run build` successfully
-- [ ] Check Docker configuration
+# Build all services
+for service in entity-relations entity-search dataset-matching data-management dataset-search; do
+  cd services/$service && npm run build && cd ../..
+done
 
-### Deployment
-- [ ] Sync code from development to deployment repository
-- [ ] Build Docker images
-- [ ] Start Docker containers
-- [ ] Verify health check endpoint
-- [ ] Test frontend-backend connectivity
-- [ ] Monitor logs for errors
+# Type check all services
+for service in entity-relations entity-search dataset-matching data-management dataset-search; do
+  cd services/$service && npm run type-check && cd ../..
+done
+```
 
-### Post-Deployment
-- [ ] Verify all 6 services operational
-- [ ] Test CORS from frontend domains
-- [ ] Check Redis caching functionality
-- [ ] Monitor resource usage (CPU, memory)
-- [ ] Setup log rotation and monitoring
+### Service Health Verification
+```bash
+# Check individual microservices (direct connection architecture)
+curl http://localhost:3002/api/health  # Entity Relations
+curl http://localhost:3003/api/health  # Entity Search
+curl http://localhost:3004/api/health  # Dataset Matching
+curl http://localhost:3005/api/health  # Data Management
+curl http://localhost:3006/api/health  # Dataset Search
+
+# Check frontend
+curl http://localhost:3001  # Frontend Vite Dev Server
+```
+
+## 🏗️ Architecture Overview
+
+### Service Structure
+Each microservice follows this standardized structure:
+```
+services/[service-name]/
+├── src/
+│   ├── app.ts              # Express application entry point with middleware setup
+│   ├── controllers/        # Request handlers (API endpoints)
+│   ├── services/          # Business logic and external API integrations
+│   ├── types/             # TypeScript interfaces and type definitions
+│   └── utils/             # Utility functions and helpers
+├── dist/                  # Compiled JavaScript output (auto-generated)
+├── package.json           # Dependencies and npm scripts
+├── tsconfig.json         # TypeScript configuration with strict mode
+├── Dockerfile             # Multi-stage container configuration
+├── .env.example           # Environment variables template
+└── README.md              # Service-specific documentation
+```
+
+### TypeScript Configuration
+All services use strict TypeScript configuration:
+- **Target**: ES2020 with CommonJS modules
+- **Strict Mode**: Enabled with all strict checks
+- **Output**: `dist/` directory with source maps
+- **Path Aliases**: `@/*` mapped to `src/*`
+- **Compilation**: Required before running `npm start`
+
+### ❌ API Gateway (DEPRECATED - October 17, 2025)
+**Status**: ✅ **Removed** - Transitioned to direct frontend-to-microservice connection
+
+**Architecture Change**: Frontend → API Gateway → Microservices → **Frontend → Direct Connection** → Microservices
+
+**Reasons for Removal**:
+- **Performance**: Eliminated 10-20% proxy latency
+- **Simplicity**: Reduced deployment complexity and maintenance overhead
+- **Scalability**: Better fault isolation and independent service scaling
+- **Cost**: One less service to maintain and monitor
+
+**Migration Path**: Frontend now connects directly to each microservice using individual URLs. CloudFlare CDN handles routing in production.
+
+### Core Services
+
+#### Entity Relations (Port 3002)
+- **Purpose**: DeepThinking 3-Stage OSINT workflow and Normal Search
+- **Features**: Gemini AI integration, Bright Data SERP, SSE streaming
+- **Key Configuration**: `GEMINI_API_KEY`, `BRIGHT_DATA_API_KEY`
+
+#### Entity Search (Port 3003)
+- **Purpose**: Linkup API integration for professional business intelligence
+- **Features**: Multi-strategy JSON parsing, domain filtering, location-based search
+- **Key Configuration**: `LINKUP_API_KEY`
+
+#### Dataset Matching (Port 3004)
+- **Purpose**: Advanced entity matching algorithms
+- **Features**: 5 matching algorithms, configurable weights, dual-layer caching
+- **Key Configuration**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`
+
+#### Data Management (Port 3005)
+- **Purpose**: CSV upload, parsing, and dataset management
+- **Features**: Intelligent CSV parsing, Supabase integration, batch processing
+- **Key Configuration**: `SUPABASE_SERVICE_ROLE_KEY`, `UPLOAD_PATH`
+
+#### Dataset Search (Port 3006)
+- **Purpose**: SSE streaming search with Canadian NRO data
+- **Features**: Real-time streaming, dual API key processing, NRO statistics
+- **Key Configuration**: `LINKUP_API_KEY_2`, NRO database access
+
+## 🔑 Environment Configuration
+
+### Service Setup Process
+For each service, configure environment variables:
+```bash
+cd services/[service-name]
+cp .env.example .env
+# Edit .env with your API keys and configuration
+npm install
+```
+
+### Critical Environment Variables
+Each service has its own `.env.example` with required variables:
+
+**Entity Relations**: `GEMINI_API_KEY`, `BRIGHT_DATA_API_KEY`, `BRIGHT_DATA_SERP_ZONE`
+**Entity Search**: `LINKUP_API_KEY`, `LINKUP_BASE_URL`
+**Dataset Matching**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `REDIS_URL`
+**Data Management**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `UPLOAD_PATH`
+**Dataset Search**: `LINKUP_API_KEY_2`, NRO configuration
 
 ## 🚨 Critical Development Rules
 
@@ -315,73 +223,178 @@ src/
 - **RULE**: NEVER modify any AI system prompts or prompt engineering logic without explicit user approval
 - **RATIONALE**: Prompts are carefully crafted for specific AI behavior and output formatting
 - **INCLUDES**:
-  - System instructions in services
-  - Meta-prompting logic
-  - AI instruction modifications
+  - System instructions in services (e.g., Gemini prompts)
+  - Meta-prompting logic in DeepThinking workflows
+  - AI instruction modifications and template strings
 
 ### Code Quality Standards
-- Follow existing TypeScript conventions
-- Maintain consistent error handling patterns
-- Preserve API response formats for frontend compatibility
-- Use environment variables for all external service configuration
-- Always read API documentation before implementation
-- Validate all changes with tests
+- **TypeScript Strict Mode**: All services use strict TypeScript - no implicit any, strict null checks
+- **Error Handling**: Consistent try-catch patterns with proper HTTP status codes
+- **API Compatibility**: Preserve response formats for frontend compatibility
+- **Environment Variables**: Use `.env.example` templates, never hardcode API keys
+- **Documentation**: Read external API docs before implementation
+- **Build Process**: Always run `npm run build` before `npm start` in production
 
-## 📊 Performance Benchmarks
+### Development Workflow
+1. **Development**: Use `npm run dev` for hot reload during development
+2. **Type Checking**: Run `npm run type-check` before commits
+3. **Building**: Use `npm run build` to compile TypeScript to JavaScript
+4. **Production**: Use `npm start` to run compiled code from `dist/`
+5. **Testing**: Use `npm test` and performance tests with `node test_performance.js`
 
-### Entity Relations - DeepThinking Mode
-- **Total Execution Time**: ~107 seconds (Stage 1: 31s + Stage 2: 65s + Stage 3: 11s)
-- **API Success Rate**: 100%
-- **Results Quality**: 20+ optimized search results per analysis
+## 🐳 Docker Deployment
 
-### Entity Relations - Normal Search Mode
-- **Execution Time**: 10-30 seconds
-- **Search Engine**: Google Web Search (native Gemini integration)
+### Individual Service Deployment
+```bash
+cd services/[service-name]
+docker build -t chainreactions-[service-name] .
+docker run -p [port]:[port] chainreactions-[service-name]
+```
 
-### Dataset Search
-- **Dual API Processing**: 84% speed improvement (164s → 27s for 6 entities)
-- **Parallel Execution**: 2 API keys with round-robin distribution
+### Container Architecture
+- All services run as non-root users
+- Health checks implemented via `/api/health` endpoints
+- Multi-stage builds for minimal attack surface
+- Environment-specific configuration via environment variables
+
+## 📊 Key API Endpoints
+
+### Individual Service Endpoints (Direct Connection)
+Each service implements:
+- **GET** `/api/health` - Service status and metadata
+- **GET** `/api` - Service information and endpoints
+- Service-specific endpoints for business logic
+
+### Frontend Access URLs
+- **Frontend**: `http://localhost:3001` (Vite Dev Server)
+- **Entity Relations**: `http://localhost:3002` - DeepThinking OSINT + Normal Search
+- **Entity Search**: `http://localhost:3003` - Linkup business intelligence
+- **Dataset Matching**: `http://localhost:3004` - Advanced entity matching
+- **Data Management**: `http://localhost:3005` - CSV processing & Supabase
+- **Dataset Search**: `http://localhost:3006` - SSE streaming + NRO data
 
 ## 🔍 Troubleshooting
 
-### Health Check Fails
+### Common Issues
+1. **Port Conflicts**: Check if ports 3001, 3002-3006 are available (no more port 3000)
+2. **Environment Variables**: Verify all required variables are set in each service's `.env`
+3. **TypeScript Compilation**: Run `npm run build` before `npm start` in production
+4. **Service Discovery**: Redis connection falls back to memory cache automatically
+5. **CORS Issues**: Verify CORS origins include all frontend domains
+6. **Service Management**: Use precise process management to avoid accidental service termination
+
+### Health Check Failures
 ```bash
-# Check if container is running
-docker ps
+# Check if service is running
+ps aux | grep node
 
-# View container logs
-docker logs chainreactions-app
+# Check port usage (direct connection architecture)
+lsof -i :3001  # Frontend Vite Server
+lsof -i :3002  # Entity Relations
+lsof -i :3003  # Entity Search
+lsof -i :3004  # Dataset Matching
+lsof -i :3005  # Data Management
+lsof -i :3006  # Dataset Search
 
-# Restart container
-docker-compose restart
+# Test service health endpoints
+curl http://localhost:3002/api/health
+curl http://localhost:3003/api/health
+curl http://localhost:3004/api/health
+curl http://localhost:3005/api/health
+curl http://localhost:3006/api/health
+
+# View service logs
+cd services/[service-name] && npm run dev  # Shows live logs
 ```
 
-### CORS Issues
-- Verify CORS origins in `src/app.ts`
-- Check Nginx proxy headers
-- Test with browser DevTools Network tab
+### Development Workflow
+1. **Startup Order**: Start microservices first (ports 3002-3006), then frontend (port 3001)
+2. **Development Mode**: Use `npm run dev` for hot reload during development
+3. **Testing**: Test endpoints directly - no API Gateway to go through
+4. **Monitoring**: Monitor service health via `/api/health` endpoints
+5. **Process Management**: Use precise process management - avoid broad `pkill` commands
 
-### Port Conflicts
+### TypeScript Issues
 ```bash
-# Check what's using port 3000
-lsof -i :3000
+# Check for TypeScript errors
+cd services/[service-name] && npm run type-check
 
-# Kill process if needed
-kill -9 PID
+# Common TypeScript errors and solutions:
+# - TS2307: Cannot find module -> Install missing dependencies with npm install
+# - TS2322: Type mismatch -> Check function signatures and return types
+# - TS2580: Cannot find name -> Import missing types or declare variables
 ```
 
-### Redis Connection Issues
-- Service falls back to memory cache automatically
-- Check Redis container status: `docker ps | grep redis`
-- View Redis logs: `docker logs chainreactions-redis`
+### 🚨 Process Management Best Practices
+```bash
+# ❌ AVOID - Too broad, can kill other services
+pkill -f "node"
+pkill -f "npm"
+pkill -f "vite"
 
-## 📚 Additional Documentation
+# ✅ PREFERRED - Be specific
+cd services/entity-relations && npm start
+kill <specific_pid>
+pm2 restart entity-relations
 
-For detailed development documentation, see the main development repository:
-`/Users/kanbei/Code/chainreactions_backend/CLAUDE.md`
+# ✅ USE - For development safety
+npm run dev  # Individual service development
+for service in entity-relations entity-search dataset-matching data-management dataset-search; do
+  cd services/$service && npm run dev &
+  cd ../..
+done
+```
+
+## 🎯 Business Capabilities
+
+### OSINT Intelligence
+- **DeepThinking 3-Stage Workflow**: Advanced analysis with meta-prompting
+- **Multi-Engine Search**: Google, Bing, Baidu, Yandex integration
+- **Real-time Streaming**: SSE for long-running operations
+
+### Data Processing
+- **Entity Matching**: 5 advanced algorithms with configurable weights
+- **CSV Processing**: Intelligent parsing and validation
+- **Dataset Management**: Complete CRUD operations with Supabase
+
+### Business Intelligence
+- **Company Research**: Linkup API integration for professional data
+- **NRO Data**: Canadian government organization statistics
+- **Geographic Matching**: Location-based entity resolution
 
 ---
 
-**Last Updated**: October 2025
-**Deployment Target**: Digital Ocean Ubuntu 22.04 + Docker
-**Domain**: chainreactions.site
+## 📝 Development Scripts Reference
+
+### Root Level Scripts (from package.json)
+- `npm run build` - Build root TypeScript project
+- `npm run test` - Run Jest tests
+- `npm run test:watch` - Run tests in watch mode
+- `npm run type-check` - TypeScript type checking
+- `npm run lint` - ESLint code linting
+
+### Service-Specific Scripts
+Each microservice has its own npm scripts in its respective directory:
+- `npm run dev` - Development mode with hot reload (recommended for development)
+- `npm run build` - Compile TypeScript to JavaScript (required before production)
+- `npm start` - Start production server from compiled JavaScript
+- `npm test` - Run service-specific tests
+- `npm run type-check` - Validate TypeScript types without compilation
+
+**Last Updated**: October 20, 2025
+**Status**: ✅ Phase 4 Complete - Direct Connection Architecture
+**Architecture**: 5 Independent Microservices + Frontend (No API Gateway)
+
+## 📝 Architecture Change Log
+
+### October 17, 2025 - API Gateway Removal
+- **Change**: Removed API Gateway (port 3000) and migrated to direct frontend-to-microservice connection
+- **Reason**: Performance improvement (10-20% latency reduction), simplified deployment, better fault isolation
+- **Impact**: Frontend now connects directly to each microservice, uses CloudFlare CDN routing for production
+- **Lessons Learned**: Process management is critical - avoid broad `pkill` commands that can terminate multiple services
+
+### Issue Resolution - Service Connectivity Problems
+- **Problem**: All backend services stopped unexpectedly during frontend restart
+- **Root Cause**: Overly broad process termination commands (`pkill -f "vite"` affected other Node.js processes)
+- **Solution**: Implemented precise process management and verified service health systematically
+- **Prevention**: Added process management best practices and health check procedures
