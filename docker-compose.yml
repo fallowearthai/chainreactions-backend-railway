@@ -286,6 +286,7 @@ services:
       start_period: 10s
     sysctls:
       - net.core.somaxconn=65535
+      - vm.overcommit_memory=1
 
 # =================================================================
 # NAMED VOLUMES FOR DATA PERSISTENCE
