@@ -211,6 +211,7 @@ export interface QualityMetrics {
   evidence_count: number;
   source_count: number;
   coverage_percentage: number;
+  source_quality_score?: number;
 }
 
 export interface GroundingMetadata {
@@ -246,4 +247,54 @@ export interface EnhancedSearchResponse {
     executionTimeMs: number;
   };
   enhanced_mode: boolean;
+}
+
+// New optimized response structure to eliminate data redundancy
+export interface SourceInfo {
+  id: number;        // 1-based numbering
+  url: string;       // Complete URL
+  title?: string;     // Optional title from enhanced sources
+}
+
+export interface QualityMetrics {
+  evidence_count: number;
+  source_count: number;
+  coverage_percentage: number;
+  source_quality_score?: number;
+}
+
+// v2.1.0: Optimized response structure with formatted_display removed
+// Eliminates ~4KB data redundancy by removing duplicate formatted text
+export interface OptimizedSearchResponse {
+  version: string;           // Response structure version (v2.1.0)
+  success: boolean;          // Operation status
+  data: {
+    // Core business data (flattened, no redundancy)
+    risk_item: string;
+    institution_A: string;
+    relationship_type: string;
+    finding_summary: string;
+    potential_intermediary_B: string;
+
+    // Source data information (structured array)
+    sources: SourceInfo[];
+    sources_count: number;
+
+    // Key evidence with source mapping
+    key_evidence: Array<{
+      text: string;
+      source_indices: number[];
+    }>;
+
+    // Quality metrics (required for standardized responses)
+    quality_metrics: QualityMetrics;
+  };
+
+  // Metadata
+  metadata: {
+    timestamp: string;
+    processing_time_ms?: number;
+    enhanced_mode: boolean;
+    api_version: string;
+  };
 }

@@ -1,0 +1,59 @@
+{
+  "result": "Risk Item: Military\\nInstitution A: School of Nuclear Science and Energy Power, Shandong University\\nRelationship Type: Direct\\nFinding Summary: Shandong University, the parent institution of the School of Nuclear Science and Energy Power, has documented direct connections to China's military and defense sector. The university is reported to have 'a number of defence laboratories linked to China's nuclear weapons programme' and collaborates with the Chinese Academy of Engineering Physics (CAEP), which is described as China's national development facility for nuclear warheads. Furthermore, Shandong University is overseen by the State Administration for Science, Technology and Industry for National Defense (SASTIND), a key government agency responsible for China's defense industry. The Australian Strategic Policy Institute (ASPI) also lists Shandong University in its 'China Defence Universities Tracker,' indicating 'Major defence laboratories' and 'Designated Defence Research Areas' within the university. Shandong University also hosts a 'Science and Technology Innovation Military-Civil Fusion Research Institute' (科技创新军民融合研究院), with a Vice Dean from the School of Nuclear Science and Energy Power's administrative structure being involved in its oversight. This institute's existence explicitly points to the university's engagement in military-civil fusion, a national strategy in China that integrates defense and civilian sectors. The School of Nuclear Science and Energy Power, established or reorganized in late 2024, aims to advance research in nuclear energy science and engineering, nuclear technology applications, and nuclear medicine, serving China's nuclear energy and nuclear technology strategic development, which aligns with national strategic interests that often have dual-use implications.\\nIntermediary B: Chinese Academy of Engineering Physics (CAEP), State Administration for Science, Technology and Industry for National Defense (SASTIND), Science and Technology Innovation Military-Civil Fusion Research Institute (山东大学科技创新军民融合研究院)",
+  "urls": "1. https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHXHDlKhM5o7j6qtVwBkTubra7BH2MjUMh-y7LoQCoJImXIe5RKBWMAGhNOJf917ItqqBgPVDMH1l9TUi-DBb-feXNV9uodj8fLkp6P5e9OxBlrqLMoMsjG02FYva7Z2Qq5XgTBsLyOpCxJlOM2ii8hBgYnNIESOweQT2qtfD06ptaDrLKnJhPyLbrX1kiEB_sPfFY6A_3V9GpLg1jfwzE=\\n2. https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFGFtScHpKoPL50WsG2yEd1S1WPC-VxL6mQx2bztK-9JxN8QSJDdc_2DFEeNFZKhuDUzUDgOkjk-fy2W9WWUO1E8Mn3-yaRx3kUvaPItUypsuDOjHOqz73y01tSExzknuqEb_HqwVuNnwkeKYUiiqpjQ0_52v5icDa-upUst4L860a5YJNKY0OLXgUXZAw-XYUk3CoBESaEo53KduWkZNh5GIyGFvQTpaJBu1UZnR73bfLwh8GGycqqlTp4jtcurgYcQ4JYRaV50KLDGJ8Uv11kruCMSmR9FhDzlil3pw==\\n3. https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGGzHsGKshkWG3DBsBX0gHrUXhHIml2Vyi4QUkVNM9CN46rFpa0fJonic5rCkNgJgp6K_hnLPnRlbn7Fyi3THtFcaKZH_9u70diOwLAbxisbV43sHVl3zv8zei5o3dkDttjIKwWyVHT_SFUg9Oy6CMaCuow055FsJTSKA==\\n4. https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHWZzN3a9mcK_auDPVlbjqEnaKt9ey2HkiMJ3j-GOyfFE9FcxvWZDcTtmMuttMUP0jOMBL0DzJvjCih-W47qiCp41wBdVivAfIwN3i1ZAuBHV4RW14mjsI=\\n5. https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFsCbpL5b29aYI5tE-vdDubKc9MJpMvvdVGbtSl5WWCgAL_IQZAbBac5jU0OI2nKiADO52Ol65HkAAD1cT_BaLqYlM6DCOTiUYr_6vbMfmrFwN71NlpTQNmQTa2SZhzh-wIhjs=\\n6. https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEKgfXf_eK3PIpIyP0PNlNwiMKyjvo0IlsQ5gg7BzXdU20Cs78sy4I9Wo9ar8tjvwt0qhFLzXlMb1J9mK0GTzH1NQh6yLmCfn4a-XK7AKBz6EPNO10fSWRw_g2efikCWHT3E7U63ZldHO04tu0HKjH8JBJPRUKBoN4RKFUW4FyVj_fU2g==\\n7. https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEHxMAGqtHLteJhddgg_vo5zXl2jmKXP0vAsOBhfgkWpzvbdx2WhDyeqmZNFdOgb2onWGNNIKehxilScDEDz7ekJtTJ9NVE_lHet2ZK-atV2tBZwPxkdgtBAXXVJt-4wFlfzJ9uCZbRJw==",
+  "raw_data": {
+    "risk_item": "Military",
+    "institution_A": "School of Nuclear Science and Energy Power, Shandong University",
+    "relationship_type": "Direct",
+    "finding_summary": "Shandong University, the parent institution of the School of Nuclear Science and Energy Power, has documented direct connections to China's military and defense sector. The university is reported to have 'a number of defence laboratories linked to China's nuclear weapons programme' and collaborates with the Chinese Academy of Engineering Physics (CAEP), which is described as China's national development facility for nuclear warheads. Furthermore, Shandong University is overseen by the State Administration for Science, Technology and Industry for National Defense (SASTIND), a key government agency responsible for China's defense industry. The Australian Strategic Policy Institute (ASPI) also lists Shandong University in its 'China Defence Universities Tracker,' indicating 'Major defence laboratories' and 'Designated Defence Research Areas' within the university. Shandong University also hosts a 'Science and Technology Innovation Military-Civil Fusion Research Institute' (科技创新军民融合研究院), with a Vice Dean from the School of Nuclear Science and Energy Power's administrative structure being involved in its oversight. This institute's existence explicitly points to the university's engagement in military-civil fusion, a national strategy in China that integrates defense and civilian sectors. The School of Nuclear Science and Energy Power, established or reorganized in late 2024, aims to advance research in nuclear energy science and engineering, nuclear technology applications, and nuclear medicine, serving China's nuclear energy and nuclear technology strategic development, which aligns with national strategic interests that often have dual-use implications.",
+    "potential_intermediary_B": "Chinese Academy of Engineering Physics (CAEP), State Administration for Science, Technology and Industry for National Defense (SASTIND), Science and Technology Innovation Military-Civil Fusion Research Institute (山东大学科技创新军民融合研究院)",
+    "urls": "1. https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHXHDlKhM5o7j6qtVwBkTubra7BH2MjUMh-y7LoQCoJImXIe5RKBWMAGhNOJf917ItqqBgPVDMH1l9TUi-DBb-feXNV9uodj8fLkp6P5e9OxBlrqLMoMsjG02FYva7Z2Qq5XgTBsLyOpCxJlOM2ii8hBgYnNIESOweQT2qtfD06ptaDrLKnJhPyLbrX1kiEB_sPfFY6A_3V9GpLg1jfwzE=\\n2. https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFGFtScHpKoPL50WsG2yEd1S1WPC-VxL6mQx2bztK-9JxN8QSJDdc_2DFEeNFZKhuDUzUDgOkjk-fy2W9WWUO1E8Mn3-yaRx3kUvaPItUypsuDOjHOqz73y01tSExzknuqEb_HqwVuNnwkeKYUiiqpjQ0_52v5icDa-upUst4L860a5YJNKY0OLXgUXZAw-XYUk3CoBESaEo53KduWkZNh5GIyGFvQTpaJBu1UZnR73bfLwh8GGycqqlTp4jtcurgYcQ4JYRaV50KLDGJ8Uv11kruCMSmR9FhDzlil3pw==\\n3. https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGGzHsGKshkWG3DBsBX0gHrUXhHIml2Vyi4QUkVNM9CN46rFpa0fJonic5rCkNgJgp6K_hnLPnRlbn7Fyi3THtFcaKZH_9u70diOwLAbxisbV43sHVl3zv8zei5o3dkDttjIKwWyVHT_SFUg9Oy6CMaCuow055FsJTSKA==\\n4. https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHWZzN3a9mcK_auDPVlbjqEnaKt9ey2HkiMJ3j-GOyfFE9FcxvWZDcTtmMuttMUP0jOMBL0DzJvjCih-W47qiCp41wBdVivAfIwN3i1ZAuBHV4RW14mjsI=\\n5. https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFsCbpL5b29aYI5tE-vdDubKc9MJpMvvdVGbtSl5WWCgAL_IQZAbBac5jU0OI2nKiADO52Ol65HkAAD1cT_BaLqYlM6DCOTiUYr_6vbMfmrFwN71NlpTQNmQTa2SZhzh-wIhjs=\\n6. https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEKgfXf_eK3PIpIyP0PNlNwiMKyjvo0IlsQ5gg7BzXdU20Cs78sy4I9Wo9ar8tjvwt0qhFLzXlMb1J9mK0GTzH1NQh6yLmCfn4a-XK7AKBz6EPNO10fSWRw_g2efikCWHT3E7U63ZldHO04tu0HKjH8JBJPRUKBoN4RKFUW4FyVj_fU2g==\\n7. https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEHxMAGqtHLteJhddgg_vo5zXl2jmKXP0vAsOBhfgkWpzvbdx2WhDyeqmZNFdOgb2onWGNNIKehxilScDEDz7ekJtTJ9NVE_lHet2ZK-atV2tBZwPxkdgtBAXXVJt-4wFlfzJ9uCZbRJw==",
+    "sources_count": 7,
+    "key_evidence": [
+      {
+        "text": "The university is reported to have 'a number of defence laboratories linked to China's nuclear weapons programme' and collaborates with the Chinese Academy of Engineering Physics (CAEP), which is described as China's national development facility for nuclear warheads.",
+        "source_indices": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "Furthermore, Shandong University is overseen by the State Administration for Science, Technology and Industry for National Defense (SASTIND), a key government agency responsible for China's defense industry.",
+        "source_indices": [
+          2
+        ]
+      },
+      {
+        "text": "The Australian Strategic Policy Institute (ASPI) also lists Shandong University in its 'China Defence Universities Tracker,' indicating 'Major defence laboratories' and 'Designated Defence Research Areas' within the university.",
+        "source_indices": [
+          3
+        ]
+      },
+      {
+        "text": "Shandong University also hosts a 'Science and Technology Innovation Military-Civil Fusion Research Institute' (科技创新军民融合研究院), with a Vice Dean from the School of Nuclear Science and Energy Power's administrative structure being involved in its oversight.",
+        "source_indices": [
+          4,
+          5
+        ]
+      },
+      {
+        "text": "The School of Nuclear Science and Energy Power, established or reorganized in late 2024, aims to advance research in nuclear energy science and engineering, nuclear technology applications, and nuclear medicine, serving China's nuclear energy and nuclear technology strategic development, which aligns with national strategic interests that often have dual-use implications.",
+        "source_indices": [
+          6,
+          7
+        ]
+      }
+    ],
+    "original_sources_count": 7,
+    "valid_sources_count": 7,
+    "original_evidence_count": 5,
+    "processed_evidence_count": 5,
+    "enhanced_sources_available": true,
+    "quality_metrics": {
+      "evidence_count": 5,
+      "source_count": 7,
+      "coverage_percentage": 100,
+      "source_quality_score": 0.5
+    }
+  }
+}
