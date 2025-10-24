@@ -9,9 +9,11 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Install dependencies
-RUN npm ci --only=production && \
-    npm ci --only=development
+# Configure npm and install dependencies
+RUN npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-retry-mintimeout 10000 && \
+    npm config set fetch-timeout 300000 && \
+    npm install --no-audit --no-fund
 
 # Copy source code
 COPY src ./src
@@ -35,8 +37,11 @@ RUN mkdir -p /app/uploads && \
 # Copy package files
 COPY package*.json ./
 
-# Install production dependencies only
-RUN npm ci --only=production && \
+# Configure npm and install production dependencies only
+RUN npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-retry-mintimeout 10000 && \
+    npm config set fetch-timeout 300000 && \
+    npm install --production --no-audit --no-fund && \
     npm cache clean --force
 
 # Copy built application from builder

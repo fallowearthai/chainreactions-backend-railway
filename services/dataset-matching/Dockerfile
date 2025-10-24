@@ -13,8 +13,12 @@ RUN apk add --no-cache \
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Install dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Configure npm for better reliability and install dependencies
+RUN npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-retry-mintimeout 10000 && \
+    npm config set fetch-timeout 300000 && \
+    npm install --no-audit --no-fund && \
+    npm cache clean --force
 
 # Copy source code
 COPY src/ ./src/
