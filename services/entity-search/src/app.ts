@@ -56,6 +56,10 @@ app.post('/api/entity-search', (req, res, next) =>
   entitySearchController.handleEntitySearch(req, res, next)
 );
 
+app.post('/api/entity-search-enhanced', (req, res, next) =>
+  entitySearchController.handleEnhancedEntitySearchWithDatasetMatching(req, res, next)
+);
+
 app.get('/api/health', (req, res) =>
   entitySearchController.healthCheck(req, res)
 );
@@ -64,15 +68,24 @@ app.get('/api/info', (req, res) =>
   entitySearchController.getInfo(req, res)
 );
 
+app.get('/api/enhanced-info', (req, res) =>
+  entitySearchController.getEnhancedInfo(req, res)
+);
+
 // Root endpoint
 app.get('/api', (req, res) => {
   res.json({
-    service: 'Entity Search Service',
-    version: '1.0.0',
+    service: 'Enhanced Entity Search Service',
+    version: '2.0.0',
     status: 'operational',
-    description: 'Linkup API integration for professional business intelligence',
+    description: 'Google Search via Gemini API for comprehensive entity intelligence with automatic risk analysis',
+    features: {
+      basic_search: 'Company information, headquarters, sectors, description',
+      risk_analysis: '8 automatic risk keyword checks',
+      multi_language: 'Automatic language detection based on location'
+    },
     endpoints: {
-      search: 'POST /api/entity-search - Search for entity information',
+      search: 'POST /api/entity-search - Enhanced entity search with risk analysis',
       health: 'GET /api/health - Health check',
       info: 'GET /api/info - Service information'
     },
@@ -104,15 +117,21 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 // Start server
 if (require.main === module) {
   app.listen(PORT, '0.0.0.0', () => {
-    console.log('🚀 Entity Search Service Started');
+    console.log('🚀 Enhanced Entity Search Service Started');
     console.log(`📡 Server running on port ${PORT} (0.0.0.0)`);
     console.log(`🏥 Health: http://localhost:${PORT}/api/health`);
     console.log(`📊 Info: http://localhost:${PORT}/api/info`);
     console.log(`🔍 Search: POST http://localhost:${PORT}/api/entity-search`);
     console.log('');
     console.log('📋 Configuration:');
-    console.log(`   LINKUP_API_KEY: ${process.env.LINKUP_API_KEY ? '✅ Configured' : '❌ Not set'}`);
+    console.log(`   GEMINI_API_KEY: ${process.env.GEMINI_API_KEY ? '✅ Configured' : '❌ Not set'}`);
     console.log(`   NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
+    console.log('');
+    console.log('✨ Features:');
+    console.log('   • Basic company information search');
+    console.log('   • 8 automatic risk keyword analysis');
+    console.log('   • Multi-language search support');
+    console.log('   • Severity assessment (high/medium/low/none)');
     console.log('');
     console.log('✅ Ready to accept requests...');
   });

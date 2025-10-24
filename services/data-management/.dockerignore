@@ -14,3 +14,12 @@ coverage
 .idea
 uploads/*
 !uploads/.gitkeep
+*.md
+!Dockerfile
+test
+tests
+__tests__
+.eslintrc.*
+.prettierrc.*
+tsconfig.json
+jest.config.js

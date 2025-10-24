@@ -23,7 +23,7 @@ app.use(cors({
         'https://chainreactions-frontend-dev-fallowearths-projects-06c459ff.vercel.app',
         'https://chainreactions-fronte-git-584dee-fallowearths-projects-06c459ff.vercel.app'
       ]
-    : ['http://localhost:8080', 'http://localhost:3000', 'http://localhost:4000'],
+    : ['http://localhost:8080', 'http://localhost:3000', 'http://localhost:3001', 'http://localhost:4000'],
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -51,11 +51,15 @@ app.get('/api/health', async (req, res) => {
         'In-memory caching system',
         'Batch processing capabilities',
         'Geographic matching',
-        'Configurable similarity weights'
+        'Configurable similarity weights',
+        'Affiliated companies integration',
+        'Enhanced matching with Entity Search'
       ],
       endpoints: {
         single_match: 'POST /api/dataset-matching/match',
         batch_match: 'POST /api/dataset-matching/batch',
+        affiliated_match: 'POST /api/dataset-matching/affiliated-match',
+        batch_affiliated: 'POST /api/dataset-matching/batch-affiliated',
         clear_cache: 'DELETE /api/dataset-matching/cache/clear',
         get_stats: 'GET /api/dataset-matching/stats',
         health_check: 'GET /api/dataset-matching/health',
@@ -78,6 +82,8 @@ app.get('/api/health', async (req, res) => {
 // Dataset Matching endpoints
 app.post('/api/dataset-matching/match', datasetMatchingController.handleSingleMatch);
 app.post('/api/dataset-matching/batch', datasetMatchingController.handleBatchMatch);
+app.post('/api/dataset-matching/affiliated-match', datasetMatchingController.handleAffiliatedMatch);
+app.post('/api/dataset-matching/batch-affiliated', datasetMatchingController.handleBatchAffiliatedMatch);
 app.delete('/api/dataset-matching/cache/clear', datasetMatchingController.handleClearCache);
 app.get('/api/dataset-matching/stats', datasetMatchingController.handleGetStats);
 app.get('/api/dataset-matching/health', datasetMatchingController.handleHealthCheck);

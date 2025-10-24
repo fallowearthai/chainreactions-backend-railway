@@ -50,7 +50,8 @@ export class SupabaseNROService {
           metadata,
           dataset_source
         `)
-        .eq('dataset_source', 'Canadian NRO')
+        // 通过dataset_id关联查询Canadian Named Research Organizations数据集
+        .eq('dataset_id', '93283166-d816-43c3-b060-264290a561ab')
         .order('organization_name', { ascending: true });
 
       if (testMode) {
@@ -109,7 +110,7 @@ export class SupabaseNROService {
           metadata,
           dataset_source
         `)
-        .eq('dataset_source', 'Canadian NRO')
+        .eq('dataset_id', '93283166-d816-43c3-b060-264290a561ab')
         .ilike('organization_name', `%${searchTerm}%`)
         .order('organization_name', { ascending: true });
 
@@ -195,7 +196,7 @@ export class SupabaseNROService {
       const { data, error } = await this.supabase
         .from('dataset_entries')
         .select('id')
-        .eq('dataset_source', 'Canadian NRO')
+        .eq('dataset_id', '93283166-d816-43c3-b060-264290a561ab')
         .limit(1);
 
       if (error) {

@@ -60,6 +60,10 @@ export class GeminiService {
       let lastError: any = null;
       const maxRetries = 3;
 
+      const startTime = Date.now();
+      let success = false;
+      let errorType: string | undefined;
+
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           const response = await this.apiClient.post<GeminiResponse>(
@@ -67,6 +71,10 @@ export class GeminiService {
             request
           );
 
+          success = true;
+          const responseTime = Date.now() - startTime;
+
+  
           return response.data;
         } catch (error) {
           lastError = error;
@@ -74,6 +82,17 @@ export class GeminiService {
           if (axios.isAxiosError(error)) {
             const status = error.response?.status;
             const message = error.response?.data?.error?.message || error.message;
+
+            // 记录错误类型
+            if (status === 429) {
+              errorType = 'RATE_LIMIT';
+            } else if (status === 502) {
+              errorType = 'BAD_GATEWAY';
+            } else if (status === 503) {
+              errorType = 'SERVICE_UNAVAILABLE';
+            } else {
+              errorType = `HTTP_${status}`;
+            }
 
             // For 502 errors, retry with exponential backoff
             if (status === 502 && attempt < maxRetries) {
@@ -89,6 +108,7 @@ export class GeminiService {
         }
       }
 
+  
       throw lastError;
     } catch (error) {
       throw error;

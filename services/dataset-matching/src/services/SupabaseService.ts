@@ -370,7 +370,16 @@ export class SupabaseService {
       if (acronymMatch && acronymMatch[1] && acronymMatch[2]) {
         const baseName = acronymMatch[1].trim();
         const acronym = acronymMatch[2].trim();
-        searchQueries = [baseName, acronym]; // Use baseName and acronym only
+        // CRITICAL FIX: Include original text, base name, AND acronym for comprehensive matching
+        searchQueries = [searchText, baseName, acronym, `${baseName} (${acronym})`];
+        console.log(`🎯 Extracted acronym variations for "${searchText}":`, searchQueries);
+      } else {
+        // Also check for acronym-only searches (e.g., "NUDT")
+        if (/^[A-Z]{2,8}$/.test(searchText.trim())) {
+          console.log(`🔍 Searching for acronym-only: "${searchText}"`);
+          // For acronym searches, we'll also search for common patterns
+          searchQueries = [searchText, `${searchText} (%)`, `% (${searchText})`];
+        }
       }
 
       // Create lowercase versions for comparison
@@ -767,31 +776,178 @@ export class SupabaseService {
     }
   }
 
-  // Batch search for multiple entities
+  // Batch search for multiple entities (Optimized Version)
   async findDatasetMatchesBatch(searchTexts: string[]): Promise<ServiceResponse<Record<string, DatasetMatch[]>>> {
     try {
       const startTime = process.hrtime();
       const results: Record<string, DatasetMatch[]> = {};
 
-      // Process in smaller batches to avoid overwhelming the database
-      const batchSize = 10;
-      const batches = [];
+      // Use unified batch query for better performance
+      return this.findDatasetMatchesBatchOptimized(searchTexts);
 
-      for (let i = 0; i < searchTexts.length; i += batchSize) {
-        batches.push(searchTexts.slice(i, i + batchSize));
+    } catch (error: any) {
+      const dbError = createDatabaseError(
+        `Batch dataset matching failed: ${error.message}`,
+        'batch_find_dataset_matches',
+        { search_texts: searchTexts.length + ' entities' }
+      );
+
+      return {
+        success: false,
+        error: dbError
+      };
+    }
+  }
+
+  // Optimized batch query using single database call with OR conditions
+  async findDatasetMatchesBatchOptimized(searchTexts: string[]): Promise<ServiceResponse<Record<string, DatasetMatch[]>>> {
+    try {
+      const startTime = process.hrtime();
+      const results: Record<string, DatasetMatch[]> = {};
+      const maxResults = 10; // Per entity limit
+
+      // Create search variations for all texts (acronym extraction, etc.)
+      const allSearchVariations = new Map<string, string[]>();
+
+      for (const searchText of searchTexts) {
+        const variations = [searchText];
+        const acronymPattern = /(.+?)\s*\(([A-Z]{2,})\)/;
+        const acronymMatch = searchText.match(acronymPattern);
+
+        if (acronymMatch && acronymMatch[1] && acronymMatch[2]) {
+          const baseName = acronymMatch[1].trim();
+          const acronym = acronymMatch[2].trim();
+          // CRITICAL FIX: Include comprehensive variations for batch processing
+          variations.push(baseName, acronym, `${baseName} (${acronym})`);
+          console.log(`🎯 Batch processing - extracted acronym variations for "${searchText}":`, variations);
+        } else {
+          // Also check for acronym-only searches in batch processing
+          if (/^[A-Z]{2,8}$/.test(searchText.trim())) {
+            console.log(`🔍 Batch processing - searching for acronym-only: "${searchText}"`);
+            variations.push(`${searchText} (%)`, `% (${searchText})`);
+          }
+        }
+
+        allSearchVariations.set(searchText, variations);
       }
 
-      for (const batch of batches) {
-        const batchPromises = batch.map(async (text) => {
-          const result = await this.findDatasetMatches(text);
-          return { text, matches: result.success ? result.data! : [] };
-        });
+      // Build comprehensive OR condition for all search variations
+      const allVariations: string[] = [];
+      const searchToVariations = new Map<string, string[]>();
 
-        const batchResults = await Promise.all(batchPromises);
+      for (const [original, variations] of allSearchVariations) {
+        for (const variation of variations) {
+          allVariations.push(variation);
+          if (!searchToVariations.has(variation)) {
+            searchToVariations.set(variation, []);
+          }
+          searchToVariations.get(variation)!.push(original);
+        }
+      }
 
-        batchResults.forEach(({ text, matches }) => {
-          results[text] = matches;
-        });
+      // Remove duplicates while preserving order
+      const uniqueVariations = [...new Set(allVariations)];
+
+      // Build OR conditions with URL encoding for parentheses
+      const orConditions = uniqueVariations
+        .map(variation => {
+          const encoded = variation.replace(/\(/g, '%28').replace(/\)/g, '%29');
+          return `organization_name.ilike.%${encoded}%`;
+        })
+        .join(',');
+
+      // Single database query for all variations
+      const { data: allMatches, error } = await this.client
+        .from('dataset_entries')
+        .select(`
+          organization_name,
+          category,
+          aliases,
+          datasets!inner(name, updated_at, is_active)
+        `)
+        .eq('datasets.is_active', true)
+        .or(orConditions)
+        .limit(500); // Increased limit for batch processing
+
+      if (error) throw error;
+
+      // Process and categorize matches by original search texts
+      if (allMatches && allMatches.length > 0) {
+        // Initialize results for all search texts
+        for (const searchText of searchTexts) {
+          results[searchText] = [];
+        }
+
+        // Process each match once and assign to relevant search texts
+        for (const entry of allMatches) {
+          const orgNameLower = entry.organization_name.toLowerCase();
+
+          // Check which search variations match this entry
+          for (const [originalSearch, variations] of allSearchVariations) {
+            if (results[originalSearch].length >= maxResults) continue; // Skip if already have enough results
+
+            let hasMatch = false;
+            let matchType: DatasetMatch['match_type'] = 'partial';
+            let confidence = 0.6;
+
+            // Check all variations for this original search
+            for (const variation of variations) {
+              const variationLower = variation.toLowerCase();
+
+              // Exact match
+              if (orgNameLower === variationLower) {
+                matchType = 'exact';
+                confidence = 1.0;
+                hasMatch = true;
+                break;
+              }
+              // Fuzzy match (remove spaces)
+              else if (orgNameLower.replace(/\s+/g, '') === variationLower.replace(/\s+/g, '')) {
+                matchType = 'fuzzy';
+                confidence = 0.9;
+                hasMatch = true;
+              }
+              // Core match (remove parentheses and spaces)
+              else if (orgNameLower.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, '') ===
+                       variationLower.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, '')) {
+                matchType = 'core_match';
+                confidence = 0.8;
+                hasMatch = true;
+              }
+              // Partial match
+              else if (orgNameLower.includes(variationLower) || variationLower.includes(orgNameLower)) {
+                matchType = 'partial';
+                confidence = 0.6;
+                hasMatch = true;
+              }
+            }
+
+            if (hasMatch) {
+              // Check for duplicates within this search text's results
+              const isDuplicate = results[originalSearch].some(existing =>
+                existing.organization_name === entry.organization_name &&
+                existing.dataset_name === (entry.datasets as any).name
+              );
+
+              if (!isDuplicate) {
+                results[originalSearch].push({
+                  dataset_name: (entry.datasets as any).name,
+                  organization_name: entry.organization_name,
+                  match_type: matchType,
+                  category: entry.category,
+                  confidence_score: confidence,
+                  last_updated: (entry.datasets as any).updated_at
+                });
+              }
+            }
+          }
+        }
+
+        // Sort results for each search text by confidence score
+        for (const searchText of searchTexts) {
+          results[searchText].sort((a, b) => (b.confidence_score || 0) - (a.confidence_score || 0));
+          results[searchText] = results[searchText].slice(0, maxResults);
+        }
       }
 
       const processingTime = this.getProcessingTime(startTime);
@@ -802,13 +958,16 @@ export class SupabaseService {
         metadata: {
           processing_time_ms: processingTime,
           cache_used: false,
-          algorithm_version: '1.0.0'
+          algorithm_version: '2.0.0-batch-optimized',
+          total_search_texts: searchTexts.length,
+          total_variations: uniqueVariations.length,
+          total_matches_found: Object.values(results).reduce((sum, matches) => sum + matches.length, 0)
         }
       };
     } catch (error: any) {
       const dbError = createDatabaseError(
-        `Batch dataset matching failed: ${error.message}`,
-        'batch_find_dataset_matches',
+        `Optimized batch dataset matching failed: ${error.message}`,
+        'SELECT dataset_entries (batch optimized)',
         { search_texts: searchTexts.length + ' entities' }
       );
 

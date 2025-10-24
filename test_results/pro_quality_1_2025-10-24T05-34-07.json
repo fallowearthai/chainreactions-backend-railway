@@ -1,0 +1,16 @@
+{
+  "error": "Endpoint not found",
+  "message": "Cannot POST /api/entity-relations/normal-search",
+  "available_endpoints": [
+    "GET /api/health",
+    "GET /api",
+    "POST /api/enhanced/search",
+    "GET /api/enhanced/search-stream",
+    "POST /api/enhanced/strategy",
+    "POST /api/enhanced/test",
+    "GET /api/enhanced/info",
+    "POST /api/normal-search",
+    "GET /api/normal/health",
+    "GET /api/normal/info"
+  ]
+}

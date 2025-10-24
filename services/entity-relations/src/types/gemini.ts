@@ -198,7 +198,6 @@ export interface FormattedSearchOutput {
 export interface EnhancedSource {
   title: string;
   url: string;
-  type: string;
   chunk_index: number;
 }
 

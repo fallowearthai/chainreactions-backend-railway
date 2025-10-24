@@ -26,7 +26,7 @@ app.use(cors({
         'https://chainreactions-frontend-dev-fallowearths-projects-06c459ff.vercel.app',
         'https://chainreactions-fronte-git-584dee-fallowearths-projects-06c459ff.vercel.app'
       ]
-    : ['http://localhost:8080', 'http://localhost:3000', 'http://localhost:4000'],
+    : ['http://localhost:8080', 'http://localhost:3000', 'http://localhost:3001', 'http://localhost:4000'],
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));

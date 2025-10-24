@@ -7,7 +7,7 @@ export class LinkupService {
 
   constructor() {
     this.apiKey = process.env.LINKUP_API_KEY || '';
-    this.baseURL = process.env.LINKUP_BASE_URL || 'https://api.linkup.so/v1';
+    this.baseURL = process.env.LINKUP_BASE_URL || 'https://api.linkup.so/v1/search';
 
     if (!this.apiKey) {
       console.warn('⚠️ LINKUP_API_KEY not configured. Service may not function properly.');
@@ -58,7 +58,7 @@ export class LinkupService {
       };
 
       console.log('📤 Sending Linkup API request:', {
-        endpoint: `${this.baseURL}/search`,
+        endpoint: `${this.baseURL}`,
         queryLength: searchQuery.length,
         company: companyName,
         location: location || 'not specified',
@@ -67,7 +67,7 @@ export class LinkupService {
       });
 
       const response: AxiosResponse = await axios.post(
-        `${this.baseURL}/search`,
+        this.baseURL,
         requestBody,
         {
           headers: {
@@ -75,7 +75,6 @@ export class LinkupService {
             'Content-Type': 'application/json',
           },
           timeout: 60000, // 60 second timeout for comprehensive search
-          proxy: false, // Disable proxy to avoid connection issues
         }
       );
 

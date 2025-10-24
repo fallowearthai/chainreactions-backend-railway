@@ -69,6 +69,89 @@ export interface BatchMatchResponse {
   };
 }
 
+// ==================== Enhanced Integration Types ====================
+
+export interface EnhancedDatasetMatch extends DatasetMatch {
+  relationship_source?: 'direct' | 'affiliated_company';
+  relationship_strength?: number; // 0.0 - 1.0
+  source_risk_keyword?: string;
+  boost_applied?: number; // The boost factor that was applied
+}
+
+export interface AffiliatedMatchRequest {
+  entity: string;
+  affiliated_companies: {
+    company_name: string;
+    risk_keyword: string;
+    relationship_type: string;
+    confidence_score?: number;
+  }[];
+  location?: string;
+  context?: string;
+  options?: {
+    matchTypes?: string[];
+    minConfidence?: number;
+    forceRefresh?: boolean;
+    searchRadius?: 'local' | 'regional' | 'global';
+    prioritizeLocal?: boolean;
+    maxResults?: number;
+    affiliatedBoost?: number; // Default: 1.15
+  };
+}
+
+export interface AffiliatedMatchResponse {
+  success: boolean;
+  data?: {
+    direct_matches: EnhancedDatasetMatch[];
+    affiliated_matches: Record<string, EnhancedDatasetMatch[]>; // Keyed by affiliated company name
+    affiliated_breakdown?: Array<{
+      company_name: string;
+      risk_keyword: string;
+      relationship_type: string;
+      match_count: number;
+      matches: EnhancedDatasetMatch[];
+      has_matches: boolean;
+      top_confidence: number;
+    }>;
+    match_summary: {
+      total_affiliated_entities: number;
+      matched_affiliated_entities: number;
+      total_direct_matches: number;
+      total_affiliated_matches: number;
+      high_confidence_matches: number;
+      average_confidence: number;
+    };
+  };
+  error?: string;
+  metadata?: {
+    processing_time_ms: number;
+    cache_hits: number;
+    affiliated_boost_applied: number;
+    algorithm_version: string;
+  };
+}
+
+export interface BatchAffiliatedRequest {
+  entities_with_affiliated: Array<{
+    entity: string;
+    affiliated_companies: Array<{
+      company_name: string;
+      risk_keyword: string;
+      relationship_type: string;
+      confidence_score?: number;
+    }>;
+  }>;
+  global_options?: {
+    matchTypes?: string[];
+    minConfidence?: number;
+    forceRefresh?: boolean;
+    searchRadius?: 'local' | 'regional' | 'global';
+    prioritizeLocal?: boolean;
+    maxResults?: number;
+    affiliatedBoost?: number;
+  };
+}
+
 // Database Types (from Supabase)
 export interface DatasetEntry {
   id: string;

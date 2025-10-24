@@ -42,6 +42,7 @@ app.use(cors({
       ]
     : [
         'http://localhost:3000', // API Gateway
+        'http://localhost:3001', // Frontend dev server (Vite)
         'http://localhost:8080', // Frontend dev server
         'http://localhost:4000', // Main app
         'http://localhost:4002', // Entity relations

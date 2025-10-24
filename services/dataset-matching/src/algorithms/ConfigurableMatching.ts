@@ -2,7 +2,7 @@ import { TextMatching } from './TextMatching';
 import { EntityNormalization } from './EntityNormalization';
 import { ConfigManager } from '../utils/ConfigManager';
 import { CountryNormalizer } from '../utils/CountryNormalizer';
-import { DatasetMatch } from '../types/DatasetMatchTypes';
+import { DatasetMatch, EnhancedDatasetMatch } from '../types/DatasetMatchTypes';
 
 interface AdvancedSimilarityResult {
   score: number;
@@ -16,6 +16,7 @@ interface AdvancedSimilarityResult {
     acronym_boost?: number;
     geographic_boost?: number;
     context_boost?: number;
+    quick_similarity?: number;
   };
 }
 
@@ -43,7 +44,7 @@ export class ConfigurableMatching {
   }
 
   /**
-   * Advanced similarity calculation with configurable weights
+   * Advanced similarity calculation with configurable weights and early termination
    */
   public calculateAdvancedSimilarity(
     searchText: string,
@@ -65,7 +66,7 @@ export class ConfigurableMatching {
       components: {}
     };
 
-    // 1. Check for exact match
+    // Early termination: Check for exact match (fast path)
     if (processedSearch === processedTarget) {
       result.score = 1.0;
       result.matchType = 'exact';
@@ -73,7 +74,23 @@ export class ConfigurableMatching {
       return result;
     }
 
-    // 2. Check for acronym matches
+    // Early termination: Check for very high similarity with length comparison
+    const lengthRatio = Math.min(processedSearch.length, processedTarget.length) /
+                      Math.max(processedSearch.length, processedTarget.length);
+
+    if (lengthRatio > 0.9) {
+      // Quick similarity check for very similar strings
+      const quickSimilarity = this.quickSimilarityCheck(processedSearch, processedTarget);
+      if (quickSimilarity > 0.95) {
+        result.score = quickSimilarity;
+        result.matchType = 'fuzzy';
+        result.explanation = 'High similarity (early termination)';
+        result.components.quick_similarity = quickSimilarity;
+        return result;
+      }
+    }
+
+    // Check for acronym matches
     const acronymMatch = this.checkAcronymMatch(searchText, targetText);
     if (acronymMatch.isMatch) {
       result.score = acronymMatch.confidence;
@@ -83,11 +100,28 @@ export class ConfigurableMatching {
       return result;
     }
 
-    // 3. Calculate component similarities
+    // Early termination: Check minimum similarity threshold
+    const earlyTerminationConfig = config.performance_tuning?.early_termination;
+    if (earlyTerminationConfig?.enable) {
+      const minSimilarityThreshold = earlyTerminationConfig.confidence_threshold || 0.9;
+
+      // Quick check using most efficient algorithm first
+      const quickJaroWinkler = TextMatching.jaroWinklerSimilarity(processedSearch, processedTarget);
+      if (quickJaroWinkler < minSimilarityThreshold * 0.5) {
+        // Early termination - similarity too low
+        result.score = quickJaroWinkler;
+        result.matchType = 'partial';
+        result.explanation = 'Low similarity (early termination)';
+        result.components.jaro_winkler = quickJaroWinkler;
+        return result;
+      }
+    }
+
+    // Calculate component similarities (only if passed early termination)
     const components = this.calculateComponentSimilarities(processedSearch, processedTarget);
     result.components = { ...result.components, ...components };
 
-    // 4. Calculate weighted score
+    // Calculate weighted score
     let weightedScore = 0;
     const algorithms = config.algorithms;
 
@@ -104,7 +138,7 @@ export class ConfigurableMatching {
       weightedScore += components.character_ngram * (algorithms.character_ngram?.weight || 0.1);
     }
 
-    // 5. Apply context boosts
+    // Apply context boosts
     const contextBoosts = this.calculateContextBoosts(searchText, targetText, context);
     result.components = { ...result.components, ...contextBoosts };
 
@@ -118,12 +152,22 @@ export class ConfigurableMatching {
 
     result.score = Math.min(1.0, weightedScore);
 
-    // 6. Determine match type and explanation
+    // Determine match type and explanation
     const matchTypeResult = this.determineMatchType(result.score, thresholds, components);
     result.matchType = matchTypeResult.type;
     result.explanation = matchTypeResult.explanation;
 
     return result;
+  }
+
+  /**
+   * Quick similarity check for early termination
+   */
+  private quickSimilarityCheck(str1: string, str2: string): number {
+    // Simple character-based similarity for quick comparison
+    const matches = Array.from(str1).filter((char, index) => index < str2.length && char === str2[index]).length;
+    const maxLength = Math.max(str1.length, str2.length);
+    return matches / maxLength;
   }
 
   /**
@@ -404,5 +448,146 @@ export class ConfigurableMatching {
       early_termination_enabled: config.performance_tuning?.early_termination?.enable || false,
       supported_countries: this.countryNormalizer.getAllSupportedCountries().length
     };
+  }
+
+  /**
+   * Enhanced similarity calculation for affiliated companies with boost factor
+   */
+  public calculateAffiliatedSimilarity(
+    searchText: string,
+    targetText: string,
+    affiliatedContext: {
+      risk_keyword: string;
+      relationship_type: string;
+      relationship_strength?: number;
+      boost_factor?: number;
+    },
+    context?: MatchContext
+  ): AdvancedSimilarityResult & { affiliated_boost?: number } {
+    // Get base similarity result
+    const baseResult = this.calculateAdvancedSimilarity(searchText, targetText, context);
+
+    // Calculate relationship strength based on relationship type
+    const relationshipStrength = this.calculateRelationshipStrength(
+      affiliatedContext.relationship_type,
+      affiliatedContext.relationship_strength
+    );
+
+    // Apply affiliated company boost
+    const boostFactor = affiliatedContext.boost_factor || 1.15;
+    const affiliatedBoost = 1.0 + (boostFactor - 1.0) * relationshipStrength;
+
+    const finalScore = Math.min(1.0, baseResult.score * affiliatedBoost);
+
+    return {
+      ...baseResult,
+      score: finalScore,
+      affiliated_boost: affiliatedBoost,
+      explanation: `${baseResult.explanation} (Affiliated Company Boost: ${affiliatedBoost.toFixed(2)}x)`
+    };
+  }
+
+  /**
+   * Convert DatasetMatch to EnhancedDatasetMatch with affiliated context
+   */
+  public enhanceMatchWithAffiliatedContext(
+    match: DatasetMatch,
+    affiliatedContext: {
+      company_name: string;
+      risk_keyword: string;
+      relationship_type: string;
+      relationship_strength?: number;
+      boost_applied?: number;
+    }
+  ): EnhancedDatasetMatch {
+    const relationshipStrength = this.calculateRelationshipStrength(
+      affiliatedContext.relationship_type,
+      affiliatedContext.relationship_strength
+    );
+
+    return {
+      ...match,
+      relationship_source: 'affiliated_company',
+      relationship_strength: relationshipStrength,
+      source_risk_keyword: affiliatedContext.risk_keyword,
+      boost_applied: affiliatedContext.boost_applied || 1.15,
+      // Apply boost to confidence score
+      confidence_score: match.confidence_score
+        ? Math.min(1.0, match.confidence_score * (affiliatedContext.boost_applied || 1.15))
+        : undefined
+    };
+  }
+
+  /**
+   * Calculate relationship strength based on relationship type and base strength
+   */
+  private calculateRelationshipStrength(
+    relationshipType: string,
+    baseStrength?: number
+  ): number {
+    // If base strength is provided, use it
+    if (baseStrength !== undefined && baseStrength >= 0.0 && baseStrength <= 1.0) {
+      return baseStrength;
+    }
+
+    // Calculate strength based on relationship type
+    switch (relationshipType.toLowerCase()) {
+      case 'direct':
+        return 1.0;
+      case 'indirect':
+        return 0.8;
+      case 'significant mention':
+        return 0.6;
+      case 'unknown':
+        return 0.4;
+      default:
+        return 0.5;
+    }
+  }
+
+  /**
+   * Batch process affiliated companies for optimal performance
+   */
+  public processBatchAffiliatedMatches(
+    baseEntity: string,
+    affiliatedCompanies: Array<{
+      company_name: string;
+      risk_keyword: string;
+      relationship_type: string;
+      confidence_score?: number;
+    }>,
+    context?: MatchContext,
+    options?: {
+      maxResults?: number;
+      affiliatedBoost?: number;
+      minConfidence?: number;
+    }
+  ): Array<{
+    company_name: string;
+    risk_keyword: string;
+    relationship_type: string;
+    similarity_result: AdvancedSimilarityResult & { affiliated_boost?: number };
+  }> {
+    const opts = { maxResults: 20, affiliatedBoost: 1.15, minConfidence: 0.3, ...options };
+
+    return affiliatedCompanies
+      .map(affiliated => ({
+        company_name: affiliated.company_name,
+        risk_keyword: affiliated.risk_keyword,
+        relationship_type: affiliated.relationship_type,
+        similarity_result: this.calculateAffiliatedSimilarity(
+          baseEntity,
+          affiliated.company_name,
+          {
+            risk_keyword: affiliated.risk_keyword,
+            relationship_type: affiliated.relationship_type,
+            boost_factor: opts.affiliatedBoost
+          },
+          context
+        )
+      }))
+      .filter(result => result.similarity_result.score >= opts.minConfidence!)
+      .sort((a, b) => b.similarity_result.score - a.similarity_result.score)
+      .slice(0, opts.maxResults);
   }
 }

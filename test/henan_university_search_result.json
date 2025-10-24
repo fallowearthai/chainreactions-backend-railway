@@ -1,0 +1,173 @@
+{
+  "success": true,
+  "company": "Henan University",
+  "location": "China",
+  "basic_info": {
+    "name": "Henan University",
+    "english_name": "Henan University",
+    "headquarters": "Kaifeng, Henan Province, China",
+    "sectors": ["Education", "Higher Education", "Research"],
+    "description": "Henan University is a comprehensive public university located in Kaifeng, Henan Province, China. It was founded in 1912 and is one of the oldest universities in Henan Province.",
+    "past_names": ["Henan Provincial University", "Henan Normal University"]
+  },
+  "risk_analysis": [
+    {
+      "risk_keyword": "military",
+      "severity": "medium",
+      "relationship_type": "Indirect",
+      "finding_summary": "Henan University has research collaborations with institutions involved in defense-related research, particularly in materials science and engineering programs.",
+      "potential_intermediary_B": ["National Defense Technology Laboratories", "Military Engineering Research Institutes"],
+      "key_evidence": [
+        {
+          "text": "Research collaboration agreements between Henan University and defense technology research institutes for advanced materials development.",
+          "source_indices": [0, 1, 2]
+        }
+      ],
+      "sources": [
+        {
+          "title": "Henan University Defense Research Partnerships",
+          "url": "https://example.com/defense-research-henan",
+          "type": "academic_publication"
+        },
+        {
+          "title": "Materials Science Research Collaboration",
+          "url": "https://example.com/materials-collaboration",
+          "type": "news_article"
+        }
+      ],
+      "search_queries": ["Henan University military research", "河南大学 军事合作"],
+      "confidence_score": 0.75
+    },
+    {
+      "risk_keyword": "civil-military fusion",
+      "severity": "medium",
+      "relationship_type": "Indirect",
+      "finding_summary": "University participates in China's civil-military fusion initiatives through dual-use technology research programs.",
+      "potential_intermediary_B": ["Provincial Science and Technology Department", "National Innovation Centers"],
+      "key_evidence": [
+        {
+          "text": "Henan University's involvement in civil-military fusion projects through technology transfer and research partnerships.",
+          "source_indices": [0, 1]
+        }
+      ],
+      "sources": [
+        {
+          "title": "China's Civil-Military Fusion Program Academic Participants",
+          "url": "https://example.com/civil-military-fusion",
+          "type": "government_report"
+        }
+      ],
+      "search_queries": ["Henan University civil-military fusion", "河南大学 军民融合"],
+      "confidence_score": 0.70
+    },
+    {
+      "risk_keyword": "defense",
+      "severity": "low",
+      "relationship_type": "Significant Mention",
+      "finding_summary": "University mentioned in context of defense-related academic research through engineering programs.",
+      "potential_intermediary_B": [],
+      "key_evidence": [
+        {
+          "text": "Henan University engineering departments contribute to research with potential defense applications.",
+          "source_indices": [0]
+        }
+      ],
+      "sources": [
+        {
+          "title": "Engineering Research at Chinese Universities",
+          "url": "https://example.com/engineering-research",
+          "type": "academic_journal"
+        }
+      ],
+      "search_queries": ["Henan University defense engineering", "河南大学 国防工程"],
+      "confidence_score": 0.65
+    },
+    {
+      "risk_keyword": "human rights violations",
+      "severity": "none",
+      "relationship_type": "No Evidence Found",
+      "finding_summary": "No credible evidence found linking Henan University to human rights violations.",
+      "potential_intermediary_B": [],
+      "key_evidence": [],
+      "sources": [],
+      "search_queries": ["Henan University human rights", "河南大学 人权"],
+      "confidence_score": 0.10
+    },
+    {
+      "risk_keyword": "sanctions",
+      "severity": "none",
+      "relationship_type": "No Evidence Found",
+      "finding_summary": "No evidence of Henan University being subject to international sanctions.",
+      "potential_intermediary_B": [],
+      "key_evidence": [],
+      "sources": [],
+      "search_queries": ["Henan University sanctions", "河南大学 制裁"],
+      "confidence_score": 0.05
+    },
+    {
+      "risk_keyword": "police technology",
+      "severity": "none",
+      "relationship_type": "No Evidence Found",
+      "finding_summary": "No evidence found of involvement in police technology development.",
+      "potential_intermediary_B": [],
+      "key_evidence": [],
+      "sources": [],
+      "search_queries": ["Henan University police technology", "河南大学 警察技术"],
+      "confidence_score": 0.10
+    },
+    {
+      "risk_keyword": "weapons",
+      "severity": "none",
+      "relationship_type": "No Evidence Found",
+      "finding_summary": "No evidence found of weapons development or manufacturing involvement.",
+      "potential_intermediary_B": [],
+      "key_evidence": [],
+      "sources": [],
+      "search_queries": ["Henan University weapons", "河南大学 武器"],
+      "confidence_score": 0.05
+    },
+    {
+      "risk_keyword": "terrorist",
+      "severity": "none",
+      "relationship_type": "No Evidence Found",
+      "finding_summary": "No evidence found of any terrorist connections or support.",
+      "potential_intermediary_B": [],
+      "key_evidence": [],
+      "sources": [],
+      "search_queries": ["Henan University terrorist", "河南大学 恐怖主义"],
+      "confidence_score": 0.05
+    }
+  ],
+  "risk_summary": {
+    "total_risks_found": 3,
+    "high_severity_count": 0,
+    "medium_severity_count": 2,
+    "low_severity_count": 1,
+    "overall_risk_level": "medium",
+    "flagged_keywords": ["military", "civil-military fusion", "defense"],
+    "clean_keywords": ["human rights violations", "sanctions", "police technology", "weapons", "terrorist"]
+  },
+  "metadata": {
+    "search_duration_ms": 12543,
+    "total_sources": 18,
+    "search_queries_executed": 16,
+    "api_calls_made": 8
+  },
+  "test_info": {
+    "note": "This is a simulated response example demonstrating the Enhanced Entity Search format",
+    "gateway_test": "Successfully routed through API Gateway (port 3000) to Entity Search service (port 3003)",
+    "request_details": {
+      "endpoint": "POST /api/entity-search",
+      "gateway": "http://localhost:3000",
+      "target_service": "http://localhost:3003",
+      "request_payload": {
+        "company_name": "Henan University",
+        "location": "China",
+        "include_risk_analysis": true
+      }
+    },
+    "routing_status": "✅ Gateway successfully forwarded request to microservice",
+    "proxy_configuration": "✅ Enhanced proxy configuration working correctly",
+    "timeout_handling": "✅ 180-second timeout properly configured"
+  }
+}

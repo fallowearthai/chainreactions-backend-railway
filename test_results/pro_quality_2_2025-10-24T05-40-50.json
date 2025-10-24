@@ -1,0 +1,4 @@
+{
+  "error": "Internal server error during normal search",
+  "message": "Gemini API request failed: Request failed with status code 502"
+}

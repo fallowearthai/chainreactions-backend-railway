@@ -1,0 +1,247 @@
+{
+  "test_case_1_single_real_institution": {
+    "description": "Test single real institution from database",
+    "request": {
+      "entity": "Hunan University",
+      "location": "China",
+      "affiliated_companies": [
+        {
+          "company_name": "Hunan University",
+          "risk_keyword": "military",
+          "relationship_type": "Direct"
+        }
+      ],
+      "options": {
+        "affiliated_boost": 1.0,
+        "min_confidence": 0.1,
+        "max_results": 20,
+        "force_refresh": true
+      }
+    }
+  },
+  "test_case_2_multiple_real_institutions": {
+    "description": "Test multiple real institutions from different countries",
+    "request": {
+      "entity": "Test University",
+      "location": "China",
+      "affiliated_companies": [
+        {
+          "company_name": "Hunan University",
+          "risk_keyword": "military",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Shahid Beheshti University",
+          "risk_keyword": "defense",
+          "relationship_type": "Indirect"
+        },
+        {
+          "company_name": "33rd Scientific Research and Testing Institute",
+          "risk_keyword": "weapons",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Nanjing Institute of Information Technology",
+          "risk_keyword": "police technology",
+          "relationship_type": "Direct"
+        }
+      ],
+      "options": {
+        "affiliated_boost": 1.0,
+        "min_confidence": 0.1,
+        "max_results": 20,
+        "force_refresh": true
+      }
+    }
+  },
+  "test_case_3_variant_formats": {
+    "description": "Test institutions with different naming formats",
+    "request": {
+      "entity": "Test University International",
+      "location": "China",
+      "affiliated_companies": [
+        {
+          "company_name": "Hunan University (China)",
+          "risk_keyword": "military",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Nanjing Institute of Info Technology",
+          "risk_keyword": "defense",
+          "relationship_type": "Indirect"
+        },
+        {
+          "company_name": "Information Engineering University",
+          "risk_keyword": "civil-military fusion",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Institute of Applied Physics",
+          "risk_keyword": "sanctions",
+          "relationship_type": "Unknown"
+        }
+      ],
+      "options": {
+        "affiliated_boost": 1.0,
+        "min_confidence": 0.1,
+        "max_results": 20,
+        "force_refresh": true
+      }
+    }
+  },
+  "test_case_4_all_chinese_institutions": {
+    "description": "Test all known Chinese institutions from database",
+    "request": {
+      "entity": "China Research University",
+      "location": "China",
+      "affiliated_companies": [
+        {
+          "company_name": "Hunan University",
+          "risk_keyword": "military",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Nanjing Institute of Information Technology",
+          "risk_keyword": "defense",
+          "relationship_type": "Indirect"
+        },
+        {
+          "company_name": "Hefei National Laboratory for Physical Sciences at Microscale",
+          "risk_keyword": "weapons",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Information Engineering University",
+          "risk_keyword": "police technology",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Key Laboratory of Information Systems Engineering",
+          "risk_keyword": "civil-military fusion",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Logistics University of the People's Armed Police Force",
+          "risk_keyword": "military",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Ministry of Public Security's Institute of Forensic Science of China",
+          "risk_keyword": "police technology",
+          "relationship_type": "Indirect"
+        },
+        {
+          "company_name": "Nanjing Army Command College",
+          "risk_keyword": "weapons",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Jiangnan Social University",
+          "risk_keyword": "human rights violations",
+          "relationship_type": "Unknown"
+        }
+      ],
+      "options": {
+        "affiliated_boost": 1.0,
+        "min_confidence": 0.1,
+        "max_results": 30,
+        "force_refresh": true
+      }
+    }
+  },
+  "test_case_5_all_institutions_batch": {
+    "description": "Test all institutions from different countries",
+    "request": {
+      "entity": "International Research University",
+      "location": "Global",
+      "affiliated_companies": [
+        {
+          "company_name": "Hunan University",
+          "risk_keyword": "military",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Nanjing Institute of Information Technology",
+          "risk_keyword": "defense",
+          "relationship_type": "Indirect"
+        },
+        {
+          "company_name": "Hefei National Laboratory for Physical Sciences at Microscale",
+          "risk_keyword": "weapons",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Information Engineering University",
+          "risk_keyword": "police technology",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Key Laboratory of Information Systems Engineering",
+          "risk_keyword": "civil-military fusion",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Logistics University of the People's Armed Police Force",
+          "risk_keyword": "military",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Ministry of Public Security's Institute of Forensic Science of China",
+          "risk_keyword": "police technology",
+          "relationship_type": "Indirect"
+        },
+        {
+          "company_name": "Nanjing Army Command College",
+          "risk_keyword": "weapons",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Jiangnan Social University",
+          "risk_keyword": "human rights violations",
+          "relationship_type": "Unknown"
+        },
+        {
+          "company_name": "Shahid Beheshti University",
+          "risk_keyword": "military",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Imam Hossein University",
+          "risk_keyword": "defense",
+          "relationship_type": "Indirect"
+        },
+        {
+          "company_name": "Institute of Applied Physics",
+          "risk_keyword": "civil-military fusion",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "Iranian Research Organization for Science and Technology",
+          "risk_keyword": "weapons",
+          "relationship_type": "Unknown"
+        },
+        {
+          "company_name": "33rd Scientific Research and Testing Institute",
+          "risk_keyword": "military",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "48th Central Scientific Research Institute",
+          "risk_keyword": "defense",
+          "relationship_type": "Direct"
+        },
+        {
+          "company_name": "46th TSNII Central Scientific Research Institute",
+          "risk_keyword": "police technology",
+          "relationship_type": "Unknown"
+        }
+      ],
+      "options": {
+        "affiliated_boost": 1.0,
+        "min_confidence": 0.1,
+        "max_results": 50,
+        "force_refresh": true
+      }
+    }
+  }
+}

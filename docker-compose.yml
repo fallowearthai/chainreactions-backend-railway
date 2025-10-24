@@ -1,0 +1,312 @@
+# =================================================================
+# ChainReactions Backend - Microservices Docker Compose Configuration
+# =================================================================
+# Architecture: 5 Independent Microservices + Redis Cache
+# Updated: October 2025 - Phase 4 Direct Connection Architecture
+# =================================================================
+
+version: '3.8'
+
+services:
+  # =================================================================
+  # MICROSERVICE 1: Entity Relations (Port 3002)
+  # =================================================================
+  entity-relations:
+    build:
+      context: ./services/entity-relations
+      dockerfile: Dockerfile
+    container_name: chainreactions-entity-relations
+    ports:
+      - "3002:3002"
+    environment:
+      # Service Configuration
+      - NODE_ENV=production
+      - PORT=3002
+
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+      # API Keys (from .env file)
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - BRIGHT_DATA_API_KEY=${BRIGHT_DATA_API_KEY}
+      - BRIGHT_DATA_SERP_ZONE=${BRIGHT_DATA_SERP_ZONE}
+
+      # Gemini Settings
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - API_TIMEOUT=${API_TIMEOUT:-300000}
+      - MAX_RETRIES=${MAX_RETRIES:-3}
+
+      # Search Engine Settings
+      - DEFAULT_MAX_RESULTS_PER_ENGINE=${DEFAULT_MAX_RESULTS_PER_ENGINE:-20}
+      - DEDUPLICATION_THRESHOLD=${DEDUPLICATION_THRESHOLD:-0.8}
+      - MIN_ENGINES_FOR_HIGH_CONFIDENCE=${MIN_ENGINES_FOR_HIGH_CONFIDENCE:-2}
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    restart: unless-stopped
+    networks:
+      - chainreactions-network
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3002/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # =================================================================
+  # MICROSERVICE 2: Entity Search (Port 3003)
+  # =================================================================
+  entity-search:
+    build:
+      context: ./services/entity-search
+      dockerfile: Dockerfile
+    container_name: chainreactions-entity-search
+    ports:
+      - "3003:3003"
+    environment:
+      # Service Configuration
+      - NODE_ENV=production
+      - PORT=3003
+
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+      # API Keys
+      - LINKUP_API_KEY=${LINKUP_API_KEY}
+      - LINKUP_BASE_URL=${LINKUP_BASE_URL:-https://api.linkup.so/v1}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+
+      # Linkup Monitoring
+      - LINKUP_API_HOURLY_LIMIT=${LINKUP_API_HOURLY_LIMIT:-100}
+      - LINKUP_API_DAILY_LIMIT=${LINKUP_API_DAILY_LIMIT:-1000}
+      - ENABLE_HEALTH_CHECK_API_CALLS=${ENABLE_HEALTH_CHECK_API_CALLS:-false}
+
+      # Rate Limiting
+      - REQUESTS_PER_MINUTE=${REQUESTS_PER_MINUTE:-60}
+      - REQUESTS_PER_HOUR=${REQUESTS_PER_HOUR:-1000}
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    restart: unless-stopped
+    networks:
+      - chainreactions-network
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3003/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # =================================================================
+  # MICROSERVICE 3: Dataset Matching (Port 3004)
+  # =================================================================
+  dataset-matching:
+    build:
+      context: ./services/dataset-matching
+      dockerfile: Dockerfile
+    container_name: chainreactions-dataset-matching
+    ports:
+      - "3004:3004"
+    environment:
+      # Service Configuration
+      - NODE_ENV=production
+      - PORT=3004
+
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+      # Supabase Configuration
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+
+      # Matching Configuration
+      - DEFAULT_MIN_CONFIDENCE=${DEFAULT_MIN_CONFIDENCE:-0.6}
+      - CACHE_EXPIRATION_MINUTES=${CACHE_EXPIRATION_MINUTES:-5}
+      - ENABLE_DISTRIBUTED_CACHE=${ENABLE_DISTRIBUTED_CACHE:-false}
+      - BATCH_SIZE_LIMIT=${BATCH_SIZE_LIMIT:-100}
+      - ENABLE_REQUEST_LOGGING=${ENABLE_REQUEST_LOGGING:-true}
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    restart: unless-stopped
+    networks:
+      - chainreactions-network
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3004/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # =================================================================
+  # MICROSERVICE 4: Data Management (Port 3005)
+  # =================================================================
+  data-management:
+    build:
+      context: ./services/data-management
+      dockerfile: Dockerfile
+    container_name: chainreactions-data-management
+    ports:
+      - "3005:3005"
+    environment:
+      # Service Configuration
+      - NODE_ENV=production
+      - PORT=3005
+
+      # Supabase Configuration
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+
+      # File Upload Configuration
+      - UPLOAD_PATH=${UPLOAD_PATH:-./uploads}
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-50MB}
+      - ALLOWED_FILE_TYPES=${ALLOWED_FILE_TYPES:-csv,xml,json,js}
+
+      # CSV Processing
+      - CSV_IMPORT_BATCH_SIZE=${CSV_IMPORT_BATCH_SIZE:-1000}
+      - CSV_IMPORT_MAX_EMPTY_ROWS=${CSV_IMPORT_MAX_EMPTY_ROWS:-10}
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+    volumes:
+      - uploads-data:/app/uploads
+
+    restart: unless-stopped
+    networks:
+      - chainreactions-network
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3005/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # =================================================================
+  # MICROSERVICE 5: Dataset Search (Port 3006)
+  # =================================================================
+  dataset-search:
+    build:
+      context: ./services/dataset-search
+      dockerfile: Dockerfile
+    container_name: chainreactions-dataset-search
+    ports:
+      - "3006:3006"
+    environment:
+      # Service Configuration
+      - NODE_ENV=production
+      - PORT=3006
+
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+      # Supabase Configuration
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+
+      # Linkup API (Secondary Key)
+      - LINKUP_API_KEY_2=${LINKUP_API_KEY_2}
+      - LINKUP_BASE_URL=${LINKUP_BASE_URL:-https://api.linkup.so/v1}
+
+      # Dataset Search Configuration
+      - DATASET_SEARCH_MAX_CONCURRENT=${DATASET_SEARCH_MAX_CONCURRENT:-2}
+      - DATASET_SEARCH_TIMEOUT_MS=${DATASET_SEARCH_TIMEOUT_MS:-600000}
+
+      # Linkup Monitoring
+      - LINKUP_API_HOURLY_LIMIT=${LINKUP_API_HOURLY_LIMIT:-100}
+      - LINKUP_API_DAILY_LIMIT=${LINKUP_API_DAILY_LIMIT:-1000}
+      - ENABLE_HEALTH_CHECK_API_CALLS=${ENABLE_HEALTH_CHECK_API_CALLS:-false}
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    restart: unless-stopped
+    networks:
+      - chainreactions-network
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3006/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # =================================================================
+  # REDIS CACHE SERVICE (Port 6379 - Internal Only)
+  # =================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: chainreactions-redis
+    ports:
+      - "6379:6379"  # Exposed for development; remove in production
+    volumes:
+      - redis-data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf --appendonly yes
+    restart: unless-stopped
+    networks:
+      - chainreactions-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    sysctls:
+      - net.core.somaxconn=65535
+
+# =================================================================
+# NAMED VOLUMES FOR DATA PERSISTENCE
+# =================================================================
+volumes:
+  redis-data:
+    driver: local
+    name: chainreactions-redis-data
+  uploads-data:
+    driver: local
+    name: chainreactions-uploads
+
+# =================================================================
+# NETWORKS
+# =================================================================
+networks:
+  chainreactions-network:
+    driver: bridge
+    name: chainreactions-network
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
