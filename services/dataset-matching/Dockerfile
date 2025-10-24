@@ -28,25 +28,38 @@ RUN npm run build
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S datasetmatching -u 1001
+    adduser -S entityrelations -u 1001
 
 # Change ownership of the app directory
-RUN chown -R datasetmatching:nodejs /app
-USER datasetmatching
+RUN chown -R entityrelations:nodejs /app
+USER entityrelations
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+# Health check with improved configuration for DigitalOcean
+HEALTHCHECK --interval=300s --timeout=15s --start-period=60s --retries=3 \
   CMD node -e "const http = require('http'); \
-    const options = { hostname: 'localhost', port: process.env.PORT || 3004, path: '/api/health', timeout: 2000 }; \
+    const options = { \
+      hostname: 'localhost', \
+      port: process.env.PORT || 3002, \
+      path: '/api/health', \
+      timeout: 5000, \
+      headers: { 'User-Agent': 'Docker-Health-Check/1.0' } \
+    }; \
     const req = http.request(options, (res) => { \
       process.exit(res.statusCode === 200 ? 0 : 1); \
     }); \
-    req.on('error', () => process.exit(1)); \
-    req.on('timeout', () => { req.destroy(); process.exit(1); }); \
+    req.on('error', () => { \
+      console.error('Health check failed: Connection error'); \
+      process.exit(1); \
+    }); \
+    req.on('timeout', () => { \
+      console.error('Health check failed: Timeout'); \
+      req.destroy(); \
+      process.exit(1); \
+    }); \
     req.end();"
 
 # Expose port
-EXPOSE 3004
+EXPOSE 3002
 
 # Start the application
 CMD ["npm", "start"]
