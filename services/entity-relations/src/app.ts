@@ -9,12 +9,111 @@ import { FeatureFlags } from './utils/FeatureFlags';
 // Load environment variables
 dotenv.config();
 
+// Global error handlers for stability
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🚨 Unhandled Promise Rejection:', {
+    reason: reason?.toString() || reason,
+    promise: promise?.toString() || 'unknown',
+    timestamp: new Date().toISOString(),
+    stack: reason instanceof Error ? reason.stack : undefined
+  });
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('🚨 Uncaught Exception:', {
+    message: error.message,
+    stack: error.stack,
+    timestamp: new Date().toISOString()
+  });
+  gracefulShutdown('UNCAUGHT_EXCEPTION');
+});
+
+// Graceful shutdown handlers
+let isShuttingDown = false;
+
+function gracefulShutdown(signal: string) {
+  if (isShuttingDown) {
+    console.log(`⚠️ ${signal} received but shutdown already in progress`);
+    return;
+  }
+
+  isShuttingDown = true;
+  console.log(`🛑 ${signal} received, starting graceful shutdown...`);
+
+  // Force exit after 10 seconds if graceful shutdown fails
+  setTimeout(() => {
+    console.log('⏰ Forced shutdown timeout reached');
+    process.exit(1);
+  }, 10000);
+
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Environment variable validation
+function validateEnvironment() {
+  const required = [
+    'GEMINI_API_KEY',
+    'BRIGHT_DATA_API_KEY',
+    'BRIGHT_DATA_SERP_ZONE'
+  ];
+
+  const missing = required.filter(key => !process.env[key]);
+
+  if (missing.length > 0) {
+    throw new Error(`❌ Missing required environment variables: ${missing.join(', ')}`);
+  }
+
+  if (!process.env.NODE_ENV) {
+    console.warn('⚠️ NODE_ENV not set, defaulting to development');
+    process.env.NODE_ENV = 'development';
+  }
+}
+
+// Validate environment on startup
+try {
+  validateEnvironment();
+  console.log('✅ Environment variables validated');
+} catch (error) {
+  console.error(error instanceof Error ? error.message : 'Environment validation failed');
+  process.exit(1);
+}
+
 const app = express();
 const PORT = process.env.PORT || 3002;
 
 // Initialize controllers
 const enhancedSearchController = new EnhancedSearchController();
 const normalSearchController = new NormalSearchController();
+
+// Memory monitoring
+let memoryCheckInterval: NodeJS.Timeout | null;
+
+function startMemoryMonitoring() {
+  const memoryLimit = 512 * 1024 * 1024; // 512MB limit
+
+  memoryCheckInterval = setInterval(() => {
+    const usage = process.memoryUsage();
+    const usedMB = Math.round(usage.heapUsed / 1024 / 1024);
+
+    if (usedMB > 400) { // Warning at 400MB
+      console.warn(`⚠️ High memory usage: ${usedMB}MB`);
+    }
+
+    if (usage.heapUsed > memoryLimit) {
+      console.error(`🚨 Memory limit exceeded: ${usedMB}MB > 512MB`);
+      // Trigger garbage collection and consider graceful degradation
+      if (global.gc) {
+        global.gc();
+      }
+    }
+  }, 30000); // Check every 30 seconds
+}
+
+// Start memory monitoring
+startMemoryMonitoring();
 
 // Middleware
 app.use(helmet());
@@ -32,9 +131,35 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Request logging middleware
+// Request timeout middleware
 app.use((req, res, next) => {
-  console.log(`📨 ${req.method} ${req.path} - ${new Date().toISOString()}`);
+  const timeout = setTimeout(() => {
+    if (!res.headersSent) {
+      console.warn(`⏰ Request timeout: ${req.method} ${req.path}`);
+      res.status(504).json({
+        error: 'Request timeout',
+        message: 'Request took too long to process',
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, 120000); // 2 minute timeout
+
+  res.on('finish', () => clearTimeout(timeout));
+  res.on('close', () => clearTimeout(timeout));
+  next();
+});
+
+// Request logging middleware with structured logging
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.log(JSON.stringify({
+    level: 'info',
+    method: req.method,
+    path: req.path,
+    ip: req.ip,
+    userAgent: req.get('User-Agent'),
+    timestamp
+  }));
   next();
 });
 
@@ -234,17 +359,41 @@ app.use('*', (req, res) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Entity Relations Service started on port ${PORT}`);
+// Start server with proper Docker binding
+const HOST = process.env.HOST || '0.0.0.0'; // Docker requires binding to 0.0.0.0
+
+const server = app.listen(Number(PORT), HOST, () => {
+  console.log(`🚀 Entity Relations Service started successfully`);
+  console.log(`📍 Host: ${HOST}, Port: ${PORT}`);
+  console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`✅ Environment variables validated`);
+  console.log(`📊 Memory monitoring: Active`);
   console.log(`📋 Available endpoints:`);
   console.log(`   Health: GET /api/health`);
   console.log(`   Info: GET /api`);
   console.log(`   Enhanced Search: POST /api/enhanced/search`);
   console.log(`   Enhanced Stream: GET /api/enhanced/search-stream`);
   console.log(`   Normal Search: POST /api/normal-search`);
-  console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🌐 CORS enabled for: ${process.env.NODE_ENV === 'production' ? 'Production domains' : 'Local development'}`);
+});
+
+// Handle server errors
+server.on('error', (error: any) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} is already in use`);
+    process.exit(1);
+  } else {
+    console.error(`❌ Server error:`, error);
+    process.exit(1);
+  }
+});
+
+// Handle server close event for graceful shutdown
+server.on('close', () => {
+  console.log('🛑 Server closed');
+  if (memoryCheckInterval) {
+    clearInterval(memoryCheckInterval);
+  }
 });
 
 export default app;

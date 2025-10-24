@@ -34,15 +34,28 @@ RUN addgroup -g 1001 -S nodejs && \
 RUN chown -R entityrelations:nodejs /app
 USER entityrelations
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+# Health check with improved configuration for DigitalOcean
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
   CMD node -e "const http = require('http'); \
-    const options = { hostname: 'localhost', port: process.env.PORT || 3002, path: '/api/health', timeout: 2000 }; \
+    const options = { \
+      hostname: 'localhost', \
+      port: process.env.PORT || 3002, \
+      path: '/api/health', \
+      timeout: 5000, \
+      headers: { 'User-Agent': 'Docker-Health-Check/1.0' } \
+    }; \
     const req = http.request(options, (res) => { \
       process.exit(res.statusCode === 200 ? 0 : 1); \
     }); \
-    req.on('error', () => process.exit(1)); \
-    req.on('timeout', () => { req.destroy(); process.exit(1); }); \
+    req.on('error', () => { \
+      console.error('Health check failed: Connection error'); \
+      process.exit(1); \
+    }); \
+    req.on('timeout', () => { \
+      console.error('Health check failed: Timeout'); \
+      req.destroy(); \
+      process.exit(1); \
+    }); \
     req.end();"
 
 # Expose port
