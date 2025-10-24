@@ -35,7 +35,7 @@ RUN chown -R entityrelations:nodejs /app
 USER entityrelations
 
 # Health check with improved configuration for DigitalOcean
-HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=300s --timeout=15s --start-period=60s --retries=3 \
   CMD node -e "const http = require('http'); \
     const options = { \
       hostname: 'localhost', \
