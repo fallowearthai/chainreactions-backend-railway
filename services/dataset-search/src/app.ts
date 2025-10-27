@@ -128,14 +128,18 @@ app.use(errorHandler);
 // 404 handler
 app.use(notFoundHandler);
 
-// Environment variable validation
+// Environment variable validation (graceful degradation)
 const requiredEnvVars = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'LINKUP_API_KEY'];
 const missingRequiredVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
 
 if (missingRequiredVars.length > 0) {
-  console.error(`❌ Error: Missing required environment variables: ${missingRequiredVars.join(', ')}`);
-  console.error('   SSE streaming functionality will not work without proper configuration.');
-  process.exit(1);
+  console.warn(`⚠️  Warning: Missing environment variables: ${missingRequiredVars.join(', ')}`);
+  console.warn('   Some features may not work correctly.');
+  console.warn('   Service will start in degraded mode for troubleshooting.');
+  console.warn('   Please check your Docker environment configuration.');
+  // Don't exit - allow service to start for health checks and debugging
+} else {
+  console.log('✅ All required environment variables are present');
 }
 
 
