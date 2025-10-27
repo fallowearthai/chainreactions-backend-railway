@@ -57,6 +57,7 @@ services:
       - PORT=3003
       - REDIS_URL=redis://redis:6379
       - LINKUP_API_KEY=${LINKUP_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - LINKUP_BASE_URL=${LINKUP_BASE_URL:-https://api.linkup.so/v1}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
@@ -67,10 +68,10 @@ services:
       - chainreactions-network
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3003/api/health", "||", "exit", "1"]
-      interval: 300s
-      timeout: 15s
-      retries: 2
-      start_period: 60s
+      interval: 180s
+      timeout: 30s
+      retries: 4
+      start_period: 120s
 
   dataset-matching:
     build: ./services/dataset-matching

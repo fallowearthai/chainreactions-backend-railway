@@ -101,6 +101,11 @@ export class EnhancedEntitySearchService {
 
     if (!this.apiKey) {
       console.warn('⚠️ GEMINI_API_KEY not configured.');
+      console.warn('   AI-enhanced search features will be disabled.');
+      console.warn('   Basic search will still work through Linkup API.');
+      console.warn('   To enable AI features, set GEMINI_API_KEY environment variable.');
+    } else {
+      console.log('✅ GEMINI_API_KEY configured - AI-enhanced search available');
     }
   }
 
