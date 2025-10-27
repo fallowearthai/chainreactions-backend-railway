@@ -11,8 +11,8 @@ export class NormalSearchController {
   }
 
   /**
-   * Optimized response formatter v2.1.0 - eliminates data redundancy
-   * Returns flattened structure with no repeated data (formatted_display removed)
+   * Optimized response formatter v2.1.0 - streamlined for frontend efficiency
+   * Eliminates key_evidence and sources processing (frontend uses inline citations)
    */
   private formatOptimizedSearchResults(
     result: NormalSearchResult,
@@ -26,46 +26,15 @@ export class NormalSearchController {
       intermediaryString = result.potential_intermediary_B;
     }
 
-    // Process sources into structured array
+    // Create empty sources and key_evidence arrays (frontend no longer uses these)
     const sources: SourceInfo[] = [];
-    let validSourceCount = 0;
+    const processedKeyEvidence: Array<{text: string; source_indices: number[]}> = [];
 
-    if (result.sources && result.sources.length > 0) {
-      result.sources.forEach((url, index) => {
-        // Include all URLs - trust Gemini's quality judgment
-        if (url && typeof url === 'string' && url.trim().length > 0) {
-          validSourceCount++;
-          sources.push({
-            id: validSourceCount,
-            url: url.trim()
-          });
-        }
-      });
-    }
-
-    // Process key_evidence with proper validation and source index mapping
-    let processedKeyEvidence: Array<{text: string; source_indices: number[]}> = [];
-    if ((result as any).key_evidence && Array.isArray((result as any).key_evidence)) {
-      processedKeyEvidence = (result as any).key_evidence
-        .filter((evidence: any) => evidence && evidence.text && evidence.source_indices)
-        .map((evidence: any) => {
-          // Validate and filter source indices to match actual valid sources
-          const validSourceIndices = evidence.source_indices
-            .filter((idx: number) => idx > 0 && idx <= validSourceCount);
-
-          return {
-            text: evidence.text,
-            source_indices: validSourceIndices  // Already 1-based from service layer
-          };
-        })
-        .filter((evidence: any) => evidence.source_indices.length > 0); // Only keep evidence with valid sources
-    }
-
-    // Create quality metrics (required in v2.1.0)
+    // Create quality metrics (simplified for streamlined structure)
     const qualityMetrics: QualityMetrics = {
-      evidence_count: processedKeyEvidence.length,
-      source_count: validSourceCount,
-      coverage_percentage: validSourceCount > 0 ? Math.round((processedKeyEvidence.length / validSourceCount) * 100) : 0,
+      evidence_count: 0,
+      source_count: 0,
+      coverage_percentage: 0,
       source_quality_score: (result as any).quality_metrics?.source_quality_score
     };
 
@@ -83,15 +52,19 @@ export class NormalSearchController {
         finding_summary: result.finding_summary,
         potential_intermediary_B: intermediaryString,
 
-        // Source data information (structured)
-        sources: sources,
-        sources_count: validSourceCount,
 
-        // Key evidence with source mapping
+        // Source data information (empty - frontend uses grounding metadata)
+        sources: sources,
+        sources_count: 0,
+
+        // Key evidence (empty - frontend uses inline citations)
         key_evidence: processedKeyEvidence,
 
-        // Quality metrics (required)
-        quality_metrics: qualityMetrics
+        // Quality metrics (simplified)
+        quality_metrics: qualityMetrics,
+
+        // Grounding metadata (critical for inline citations)
+        grounding_metadata: (result as any).grounding_metadata
       },
 
       // Metadata
@@ -165,6 +138,11 @@ export class NormalSearchController {
       const enhancedResult = results[0];
       const responseResult = this.formatOptimizedSearchResults(enhancedResult, processingTime);
 
+      // Include grounding_supports data if available
+      if (enhancedResult.grounding_metadata && enhancedResult.grounding_metadata.grounding_supports) {
+        responseResult.data.grounding_metadata = enhancedResult.grounding_metadata;
+      }
+
       // 🔍 [DEBUG] Log key evidence data
       console.log('🔍 [BACKEND DEBUG] Key Evidence Data:', {
         key_evidence_count: responseResult.data.key_evidence?.length || 0,
@@ -177,10 +155,12 @@ export class NormalSearchController {
 
     } catch (error) {
       console.error('❌ Normal Search Error:', error);
-      res.status(500).json({
-        error: 'Internal server error during normal search',
-        message: error instanceof Error ? error.message : 'Unknown error'
-      });
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: 'Internal server error during normal search',
+          message: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
     }
   }
 

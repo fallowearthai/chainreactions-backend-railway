@@ -142,7 +142,7 @@ app.use((req, res, next) => {
         timestamp: new Date().toISOString()
       });
     }
-  }, 120000); // 2 minute timeout
+  }, 240000); // 4 minute timeout
 
   res.on('finish', () => clearTimeout(timeout));
   res.on('close', () => clearTimeout(timeout));

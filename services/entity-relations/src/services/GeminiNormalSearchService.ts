@@ -259,16 +259,118 @@ Return a JSON array with one object per risk entity. Each object must contain:
 
 
   /**
+   * Clean JSON content from grounding support text
+   */
+  private cleanGroundingSupportText(text: string): string {
+    if (!text || typeof text !== 'string') {
+      return text;
+    }
+
+    // Check if text starts with JSON pattern
+    const trimmedText = text.trim();
+
+    // If it starts with "{" and contains "finding_summary", extract the finding_summary
+    if (trimmedText.startsWith('{') && trimmedText.includes('"finding_summary"')) {
+      try {
+        // Try to parse as JSON
+        const jsonData = JSON.parse(trimmedText);
+
+        if (jsonData.finding_summary) {
+          console.log('🧹 [CLEAN] Extracted finding_summary from JSON:', {
+            originalLength: text.length,
+            extractedLength: jsonData.finding_summary.length,
+            preview: jsonData.finding_summary.substring(0, 100) + '...'
+          });
+          return jsonData.finding_summary;
+        }
+      } catch (error) {
+        // If JSON parsing fails, check if it's a malformed JSON with finding_summary
+        const findingSummaryMatch = trimmedText.match(/"finding_summary"\s*:\s*"([^"]+)"/);
+        if (findingSummaryMatch && findingSummaryMatch[1]) {
+          console.log('🧹 [CLEAN] Extracted finding_summary from malformed JSON:', {
+            originalLength: text.length,
+            extractedLength: findingSummaryMatch[1].length,
+            preview: findingSummaryMatch[1].substring(0, 100) + '...'
+          });
+          return findingSummaryMatch[1];
+        }
+
+        console.warn('⚠️ [CLEAN] Failed to parse JSON, returning original text:', {
+          textPreview: text.substring(0, 100) + '...',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+
+    return text;
+  }
+
+  /**
+   * Clean only the first grounding support from JSON contamination
+   * DISABLED: Temporarily disabled for performance testing
+   */
+  private cleanFirstGroundingSupport(groundingSupports: any[]): any[] {
+    // DISABLED: Direct return without any JSON processing to test performance
+    return groundingSupports;
+
+    /*
+    if (!groundingSupports || !Array.isArray(groundingSupports) || groundingSupports.length === 0) {
+      return groundingSupports;
+    }
+
+    console.log('🧹 [CLEAN] Processing first grounding support for JSON cleanup:', {
+      totalSupports: groundingSupports.length
+    });
+
+    // Only process the first support for JSON cleanup
+    const firstSupport = groundingSupports[0];
+    if (firstSupport?.segment?.text) {
+      const originalText = firstSupport.segment.text;
+      const cleanedText = this.cleanGroundingSupportText(originalText);
+
+      const wasCleaned = originalText !== cleanedText;
+      if (wasCleaned) {
+        console.log('🧹 [CLEAN] Cleaned first support:', {
+          originalLength: originalText.length,
+          cleanedLength: cleanedText.length,
+          lengthReduction: originalText.length - cleanedText.length,
+          originalPreview: originalText.substring(0, 50) + '...',
+          cleanedPreview: cleanedText.substring(0, 50) + '...'
+        });
+
+        // Return array with cleaned first support and unchanged others
+        return [
+          {
+            ...firstSupport,
+            segment: {
+              ...firstSupport.segment,
+              text: cleanedText
+            }
+          },
+          ...groundingSupports.slice(1)
+        ];
+      }
+    }
+
+    // If no cleaning needed, return original array
+    return groundingSupports;
+    */
+  }
+
+  /**
    * Extract grounding metadata from Gemini response
    */
   private extractGroundingMetadata(response: any): GroundingMetadata {
     const candidate = response?.candidates?.[0];
     const groundingMetadata = candidate?.groundingMetadata;
 
+    const rawSupports = groundingMetadata?.groundingSupports || [];
+    const cleanedSupports = this.cleanFirstGroundingSupport(rawSupports);
+
     return {
       has_grounding: !!groundingMetadata,
       grounding_chunks: groundingMetadata?.groundingChunks || [],
-      grounding_supports: groundingMetadata?.groundingSupports || [],
+      grounding_supports: cleanedSupports,
       web_search_queries: groundingMetadata?.webSearchQueries || []
     };
   }
@@ -308,6 +410,7 @@ Return a JSON array with one object per risk entity. Each object must contain:
 
   /**
    * Build enhanced response with grounding metadata
+   * Optimized: Skip key_evidence and sources processing (frontend no longer uses these)
    */
   private buildEnhancedResponse(
     parsedFindings: any[],
@@ -315,37 +418,19 @@ Return a JSON array with one object per risk entity. Each object must contain:
     searchQueries: string[],
     executionTimeMs: number
   ): EnhancedNormalSearchResult[] {
-    // Process grounding chunks - trust Gemini's quality judgment
-    const sources = this.processGroundingChunks(groundingMetadata.grounding_chunks);
-
-    // Create chunk index to source index mapping
-    const chunkIndexToSourceIndex = new Map<number, number>();
-    sources.forEach((source, index) => {
-      chunkIndexToSourceIndex.set(source.chunk_index, index);
-    });
-
-    // Build enhanced findings with improved evidence mapping
+    // Build enhanced findings without redundant key_evidence and sources
     const enhancedFindings = parsedFindings.map((finding, findingIndex) => {
-      // Find evidence supports that match this finding's content
-      const findingEvidence = this.findRelevantEvidenceForFinding(
-        finding,
-        groundingMetadata.grounding_supports,
-        chunkIndexToSourceIndex,
-        sources
-      );
-
-      // Filter sources to only include those relevant to this finding
-      const relevantSources = this.findRelevantSourcesForFinding(finding, findingEvidence, sources);
-
       return {
         ...finding,
-        key_evidence: findingEvidence,
-        sources: relevantSources,
+        // Skip key_evidence processing - frontend uses inline citations instead
+        key_evidence: [],
+        // Skip sources processing - frontend uses grounding metadata instead
+        sources: [],
         search_queries: searchQueries,
         quality_metrics: {
-          evidence_count: findingEvidence.length,
-          source_count: relevantSources.length,
-          coverage_percentage: this.calculateCoveragePercentage(findingEvidence, groundingMetadata.grounding_supports)
+          evidence_count: 0,
+          source_count: 0,
+          coverage_percentage: 0
         }
       };
     });
@@ -428,6 +513,48 @@ Return a JSON array with one object per risk entity. Each object must contain:
   }
 
   /**
+   * Apply formatting to finding summary for better frontend display
+   */
+  private formatFindingSummaryForDisplay(findingSummary: string): string {
+    try {
+      if (!findingSummary || typeof findingSummary !== 'string') {
+        return findingSummary;
+      }
+
+      // Define patterns for the 7 standard categories (both standard and alternative formats)
+      const categoryPatterns = [
+        /\(\d+\) \*\*Personnel.*?\*\*:/g,
+        /\(\d+\) \*\*Projects.*?\*\*:/g,
+        /\(\d+\) \*\*Publications.*?\*\*:/g,
+        /\(\d+\) \*\*Events.*?\*\*:/g,
+        /\(\d+\) \*\*Funding.*?\*\*:/g,
+        /\(\d+\) \*\*Media.*?\*\*:/g,
+        /\(\d+\) \*\*Organizations.*?\*\*:/g,
+        /\(\d+\) Personnel Connections:[\s\S]*?(?=\n\(\d+\) |\nIntermediary B:)/g,
+        /\(\d+\) Joint Projects & Organizational Ties:[\s\S]*?(?=\n\(\d+\) |\nIntermediary B:)/g,
+        /\(\d+\) Publications:[\s\S]*?(?=\n\(\d+\) |\nIntermediary B:)/g,
+        /\(\d+\) Events:[\s\S]*?(?=\n\(\d+\) |\nIntermediary B:)/g,
+        /\(\d+\) Funding:[\s\S]*?(?=\n\(\d+\) |\nIntermediary B:)/g,
+        /\(\d+\) Media & Significant Mentions:[\s\S]*?(?=\n\(\d+\) |\nIntermediary B:)/g,
+        /\(\d+\) Organizations:[\s\S]*?(?=\n\(\d+\) |\nIntermediary B:)/g
+      ];
+
+      // Add line breaks before each category
+      let formattedSummary = findingSummary;
+      categoryPatterns.forEach(pattern => {
+        formattedSummary = formattedSummary.replace(pattern, '\n\n$&');
+      });
+
+      return formattedSummary;
+
+    } catch (error) {
+      console.error('Error formatting finding summary:', error);
+      return findingSummary;
+    }
+  }
+
+  
+  /**
    * Parse JSON response with error handling
    */
   private parseJsonResponse(textContent: string): NormalSearchResult[] | null {
@@ -441,13 +568,25 @@ Return a JSON array with one object per risk entity. Each object must contain:
       const cleanedString = this.cleanJsonString(jsonContent);
       const parsed = JSON.parse(cleanedString);
 
+      let results: NormalSearchResult[];
+
       if (Array.isArray(parsed)) {
-        return parsed as NormalSearchResult[];
+        results = parsed as NormalSearchResult[];
       } else if (typeof parsed === 'object' && parsed !== null) {
-        return [parsed] as NormalSearchResult[];
+        results = [parsed] as NormalSearchResult[];
+      } else {
+        return null;
       }
 
-      return null;
+      // Apply formatting to finding summaries for better display
+      results.forEach(result => {
+        if (result.finding_summary) {
+          result.finding_summary = this.formatFindingSummaryForDisplay(result.finding_summary);
+        }
+      });
+
+      return results;
+
     } catch (error) {
       console.error('JSON parsing error:', error);
       console.error('Text content:', textContent.substring(0, 500));
@@ -623,7 +762,9 @@ Return a JSON array with one object per risk entity. Each object must contain:
         key_evidence: result.key_evidence,
         enhanced_sources: result.sources,
         search_queries: result.search_queries,
-        quality_metrics: result.quality_metrics
+        quality_metrics: result.quality_metrics,
+        // Include grounding metadata for positional citations
+        grounding_metadata: enhancedResponse.grounding_metadata
       }))
     };
   }
@@ -827,6 +968,7 @@ Return a JSON array with one object per risk entity. Each object must contain:
 
   /**
    * Validate enhanced results for consistency and quality
+   * Optimized: Simplified validation for streamlined data structure
    */
   private validateEnhancedResults(results: EnhancedNormalSearchResult[], groundingMetadata: GroundingMetadata): {
     isValid: boolean;
@@ -844,57 +986,37 @@ Return a JSON array with one object per risk entity. Each object must contain:
       return { isValid: false, errors, warnings, metrics };
     }
 
-    // Check evidence-source consistency
-    let totalEvidence = 0;
-    let evidenceWithValidSources = 0;
-    let totalSources = 0;
+    // Check grounding metadata availability (key for inline citations)
+    const groundingChunksCount = groundingMetadata.grounding_chunks.length;
+    const groundingSupportsCount = groundingMetadata.grounding_supports.length;
 
+    // Validate finding summary content
     results.forEach((result, index) => {
-      if (result.key_evidence) {
-        totalEvidence += result.key_evidence.length;
-        result.key_evidence.forEach(evidence => {
-          if (evidence.source_indices && evidence.source_indices.length > 0) {
-            evidenceWithValidSources++;
-          }
-        });
+      if (!result.finding_summary || result.finding_summary.trim().length === 0) {
+        errors.push(`Result ${index}: Empty finding summary`);
       }
 
-      if (result.sources) {
-        totalSources += result.sources.length;
-      }
-
-      // Check quality metrics
-      if (result.quality_metrics) {
-        if (result.quality_metrics.evidence_count === 0 && result.relationship_type !== 'No Evidence Found') {
-          warnings.push(`Result ${index}: No evidence despite claiming relationship type: ${result.relationship_type}`);
-        }
+      // Check for valid relationship type
+      if (!result.relationship_type || result.relationship_type.trim().length === 0) {
+        warnings.push(`Result ${index}: Missing relationship type`);
       }
     });
 
     metrics = {
       totalResults: results.length,
-      totalEvidence,
-      evidenceWithValidSources,
-      totalSources,
-      evidenceCoverage: totalEvidence > 0 ? (evidenceWithValidSources / totalEvidence) * 100 : 0,
-      avgSourcesPerResult: results.length > 0 ? totalSources / results.length : 0
+      groundingChunksCount,
+      groundingSupportsCount,
+      evidenceCoverage: groundingSupportsCount > 0 && groundingChunksCount > 0 ?
+        (groundingSupportsCount / groundingChunksCount) * 100 : 0
     };
 
-    // Check for inconsistencies
-    if (metrics.evidenceCoverage < 50) {
-      warnings.push(`Low evidence coverage: ${metrics.evidenceCoverage.toFixed(1)}%`);
+    // Check grounding metadata quality
+    if (groundingChunksCount === 0) {
+      warnings.push('No grounding chunks available for citations');
     }
 
-    if (metrics.avgSourcesPerResult < 1) {
-      warnings.push(`Low average sources per result: ${metrics.avgSourcesPerResult.toFixed(1)}`);
-    }
-
-    // Check grounding metadata consistency
-    const groundingSourcesCount = groundingMetadata.grounding_chunks.length;
-    const totalEnhancedSources = results.reduce((sum, r) => sum + (r.sources?.length || 0), 0);
-
-    if (groundingSourcesCount > 0 && totalEnhancedSources === 0) {
-      warnings.push('Grounding metadata available but no enhanced sources in results');
+    if (groundingSupportsCount === 0) {
+      warnings.push('No grounding supports available for citations');
     }
 
     return {

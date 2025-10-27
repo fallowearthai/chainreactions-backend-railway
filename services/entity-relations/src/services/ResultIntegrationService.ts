@@ -2,16 +2,19 @@ import { GeminiService } from './GeminiService';
 import { SearchRequest, SearchResult, OSINTFinding, GeminiTool } from '../types/gemini';
 import { MetaPromptResult } from './WebSearchMetaPromptService';
 import { OptimizedSerpResults, OptimizedSearchResult } from './ResultOptimizationService';
+import { CitationFormatter } from '../utils/CitationFormatter';
 
 export interface OSINTAnalysisResult {
   risk_item: string;
   institution_A: string;
   relationship_type: 'Direct' | 'Indirect' | 'Significant Mention' | 'No Evidence Found';
   finding_summary: string;
+  finding_summary_with_citations?: string; // New field with embedded citations
   affiliated_company?: string;
   sources: string[];
   key_evidence: string[];
   evidence_quality: 'high' | 'medium' | 'low';
+  citations?: any[]; // Structured citation data
   analysis_metadata: {
     confidence_score: number;
     sources_analyzed: number;
@@ -390,15 +393,52 @@ Prioritize factual accuracy, source attribution, and clarity in your analysis. D
       // Use enhanced JSON parsing with fallback strategies
       const analysis = this.parseJsonWithFallback(rawResponse, riskEntity);
 
+      // Create structured sources array from analysis.sources
+      const structuredSources = (analysis.sources || []).map((url: string, index: number) => ({
+        title: `Source ${index + 1}`,
+        url: url,
+        index: index
+      }));
+
+      // Create key evidence objects with source indices
+      const keyEvidenceWithSources = (analysis.key_evidence || []).map((evidence: string, index: number) => ({
+        evidence: evidence,
+        source_index: Math.min(index, structuredSources.length - 1),
+        confidence: analysis.confidence_score || 0.5
+      }));
+
+      // Generate finding summary with embedded citations
+      let findingSummaryWithCitations = analysis.finding_summary || 'No significant evidence found.';
+      let citations: any[] = [];
+
+      try {
+        const citationResult = CitationFormatter.formatFindingWithCitations(
+          analysis.finding_summary || 'No significant evidence found.',
+          keyEvidenceWithSources,
+          structuredSources
+        );
+
+        findingSummaryWithCitations = citationResult.annotatedText;
+        citations = citationResult.citations;
+
+        console.log(`✅ Generated citations for ${riskEntity}: ${citations.length} sources embedded`);
+      } catch (citationError) {
+        console.warn(`⚠️ Citation generation failed for ${riskEntity}:`, citationError);
+        // Fall back to original finding summary without citations
+        findingSummaryWithCitations = analysis.finding_summary || 'No significant evidence found.';
+      }
+
       return {
         risk_item: riskEntity,
         institution_A: request.Target_institution,
         relationship_type: analysis.relationship_type || 'No Evidence Found',
         finding_summary: analysis.finding_summary || 'No significant evidence found.',
+        finding_summary_with_citations: findingSummaryWithCitations,
         affiliated_company: analysis.affiliated_company || analysis.potential_affiliated_entity || analysis.Affiliated_entity,
         sources: analysis.sources || [],
         key_evidence: analysis.key_evidence || [],
         evidence_quality: analysis.evidence_quality || 'medium',
+        citations: citations,
         analysis_metadata: {
           confidence_score: analysis.confidence_score || 0.1,
           sources_analyzed: relevantResults.length,
@@ -485,10 +525,12 @@ TASK: Analyze the search results above and determine the relationship between th
       institution_A: result.institution_A,
       relationship_type: result.relationship_type,
       finding_summary: result.finding_summary,
+      finding_summary_with_citations: result.finding_summary_with_citations,
       potential_intermediary_B: result.affiliated_company, // 映射新字段名到前端兼容字段名
       sources: result.sources,
       key_evidence: result.key_evidence,
-      evidence_quality: result.evidence_quality
+      evidence_quality: result.evidence_quality,
+      citations: result.citations
     }));
 
     // Collect all unique sources

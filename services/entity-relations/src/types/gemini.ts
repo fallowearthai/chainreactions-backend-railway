@@ -110,10 +110,12 @@ export interface OSINTFinding {
   institution_A: string;
   relationship_type: 'Direct' | 'Indirect' | 'Significant Mention' | 'Unknown' | 'No Evidence Found';
   finding_summary: string;
+  finding_summary_with_citations?: string; // New field with embedded citations
   potential_intermediary_B?: string;
   sources: string[];
   key_evidence?: string[];
   evidence_quality?: 'high' | 'medium' | 'low';
+  citations?: any[]; // Structured citation data
 }
 
 // Normal Search Types
@@ -174,6 +176,13 @@ export interface NormalSearchResult {
   finding_summary: string;
   potential_intermediary_B: string[] | null;
   sources: string[];
+  // Enhanced data fields (optional for backward compatibility)
+  key_evidence?: Array<{ text: string; source_indices: number[] }>;
+  enhanced_sources?: any[];
+  search_queries?: string[];
+  quality_metrics?: any;
+  // Grounding metadata for positional citations
+  grounding_metadata?: GroundingMetadata;
 }
 
 export interface FormattedSearchOutput {
@@ -287,6 +296,8 @@ export interface OptimizedSearchResponse {
 
     // Quality metrics (required for standardized responses)
     quality_metrics: QualityMetrics;
+    // Grounding metadata (when enhanced mode is enabled)
+    grounding_metadata?: GroundingMetadata;
   };
 
   // Metadata
