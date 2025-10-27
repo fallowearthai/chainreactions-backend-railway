@@ -491,6 +491,28 @@ export class ConfigManager {
           academic: { boost_factor: 1.1, keywords: ["university", "institute", "college", "academy"] },
           corporate: { boost_factor: 1.0, keywords: ["company", "corporation", "inc", "ltd"] },
           government: { boost_factor: 1.05, keywords: ["agency", "department", "bureau", "office"] }
+        },
+        geographic_boost: {
+          "same_country": 1.2,
+          "same_region": 1.1,
+          "different_region": 0.9
+        },
+        length_penalties: {
+          "very_short": {
+            threshold: 3,
+            penalty: 0.8,
+            description: "Penalize very short matches to avoid false positives"
+          },
+          "very_long": {
+            threshold: 50,
+            penalty: 0.85,
+            description: "Very long names get penalty"
+          },
+          "extremely_long": {
+            threshold: 100,
+            penalty: 0.8,
+            description: "Extremely long names get significant penalty"
+          }
         }
       },
       special_patterns: {
@@ -514,24 +536,28 @@ export class ConfigManager {
           weight_reduction: 0.05
         }
       },
-      confidence_calculation: {
-        base_thresholds: {
-          exact: 1.0,
-          very_high: 0.95,
-          high: 0.85,
-          moderate: 0.75,
-          low: 0.6,
-          minimal: 0.3
+      quality_filters: {
+        minimum_word_overlap: 2,
+        maximum_length_ratio: 3.0,
+        minimum_character_overlap: 0.3,
+        filter_common_words: true,
+        require_significant_match: true
+      },
+      performance_tuning: {
+        early_termination: {
+          enable: true,
+          confidence_threshold: 0.8,
+          description: "Early termination when high confidence achieved"
         },
-        context_boosts: {
-          location_match: 0.1,
-          field_relevance: 0.05,
-          name_frequency: -0.05
+        batch_processing: {
+          chunk_size: 100,
+          parallel_processing: true,
+          max_concurrent: 4
         },
-        penalty_factors: {
-          partial_match: 0.8,
-          case_mismatch: 0.95,
-          word_order_difference: 0.9
+        caching: {
+          normalize_cache_keys: true,
+          cache_negative_results: false,
+          cache_similarity_scores: true
         }
       }
     };
