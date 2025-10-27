@@ -26,6 +26,9 @@ COPY src/ ./src/
 # Build the application
 RUN npm run build
 
+# Verify config files exist in dist directory
+RUN ls -la dist/config/ && echo "Config files in dist:" && find dist/config/ -type f
+
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S entityrelations -u 1001
