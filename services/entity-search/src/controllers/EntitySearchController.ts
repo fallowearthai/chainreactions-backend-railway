@@ -1,35 +1,42 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import { EnhancedEntitySearchService } from '../services/EnhancedEntitySearchService';
-import { EnhancedEntitySearchWithDatasetService } from '../services/EnhancedEntitySearchWithDatasetService';
-import {
-  EnhancedEntitySearchRequest,
-  EnhancedEntitySearchResponse,
-  EnhancedEntitySearchWithDatasetRequest,
-  EnhancedEntitySearchWithDatasetResponse
-} from '../types/enhanced-types';
+
+export interface EntitySearchRequest {
+  company_name: string;
+  location?: string;
+}
+
+export interface EntitySearchResponse {
+  success: boolean;
+  company: string;
+  company_info?: any;
+  error?: string;
+  metadata: {
+    search_duration_ms: number;
+    total_sources: number;
+    search_queries_executed: number;
+    api_calls_made: number;
+  };
+}
 
 export class EntitySearchController {
-  private enhancedSearchService: EnhancedEntitySearchService;
-  private enhancedSearchWithDatasetService: EnhancedEntitySearchWithDatasetService;
+  private enhancedEntitySearchService: EnhancedEntitySearchService;
 
   constructor() {
-    this.enhancedSearchService = new EnhancedEntitySearchService();
-    this.enhancedSearchWithDatasetService = new EnhancedEntitySearchWithDatasetService();
+    this.enhancedEntitySearchService = new EnhancedEntitySearchService();
   }
 
   /**
    * POST /api/entity-search
-   * Enhanced entity search using Google Search via Gemini API
-   * Includes automatic risk keyword analysis
+   * Basic entity search using Enhanced Entity Search Service (Gemini API)
+   * Returns company information from simplified 6-field structure
    */
-  async handleEntitySearch(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async handleEntitySearch(req: Request, res: Response): Promise<void> {
     try {
       const {
         company_name,
-        location,
-        include_risk_analysis = true,
-        custom_risk_keywords
-      }: EnhancedEntitySearchRequest = req.body;
+        location
+      }: EntitySearchRequest = req.body;
 
       // Validate required fields
       if (!company_name) {
@@ -43,75 +50,80 @@ export class EntitySearchController {
             search_queries_executed: 0,
             api_calls_made: 0
           }
-        } as EnhancedEntitySearchResponse);
+        } as EntitySearchResponse);
         return;
       }
 
-      console.log('📥 Enhanced entity search request:', {
+      console.log('📥 Entity search request:', {
         company: company_name,
-        location: location || 'not specified',
-        include_risk_analysis,
-        custom_keywords: custom_risk_keywords?.length || 0
+        location: location || 'not specified'
       });
 
-      // Check if Enhanced service is configured
-      if (!this.enhancedSearchService.isConfigured()) {
+      // Check if Enhanced Entity Search service is configured
+      if (!this.enhancedEntitySearchService.isConfigured()) {
         res.status(503).json({
           success: false,
           company: company_name,
-          location,
-          error: 'Service not configured',
+          error: 'Enhanced Entity Search service not configured - please check GEMINI_API_KEY',
           metadata: {
             search_duration_ms: 0,
             total_sources: 0,
             search_queries_executed: 0,
             api_calls_made: 0
           }
-        } as EnhancedEntitySearchResponse);
+        } as EntitySearchResponse);
         return;
       }
 
-      // Call Enhanced Search Service
-      const searchRequest: EnhancedEntitySearchRequest = {
+      const startTime = Date.now();
+
+      console.log('🔍 [CONTROLLER] Starting entity search request...');
+      console.log(`   - Company: ${company_name}`);
+      console.log(`   - Location: ${location || 'Not specified'}`);
+
+      // Call Enhanced Entity Search Service for basic company information
+      const searchResult = await this.enhancedEntitySearchService.searchEntity({
         company_name,
-        location,
-        include_risk_analysis,
-        custom_risk_keywords
-      };
-
-      const searchResponse = await this.enhancedSearchService.searchEntity(searchRequest);
-
-      // Log response details before sending
-      const responseSize = JSON.stringify(searchResponse).length;
-      const responseTime = new Date().toISOString();
-
-      console.log('📤 Entity Search response ready:', {
-        company: company_name,
-        response_size_bytes: responseSize,
-        response_size_kb: Math.round(responseSize / 1024 * 100) / 100,
-        success: searchResponse.success,
-        timestamp: responseTime,
-        search_duration_ms: searchResponse.metadata?.search_duration_ms || 0
+        location
       });
 
-      // Set proper headers for debugging
-      res.setHeader('X-Response-Size', responseSize.toString());
-      res.setHeader('X-Response-Timestamp', responseTime);
-      res.setHeader('X-Service-Name', 'entity-search');
+      const searchDuration = Date.now() - startTime;
 
-      console.log('🚀 Entity Search sending response - START');
+      console.log('📊 [CONTROLLER] Search result received:');
+      console.log(`   - Success: ${searchResult.success}`);
+      console.log(`   - Has basic_info: ${!!searchResult.basic_info}`);
+      console.log(`   - API calls made: ${searchResult.metadata?.api_calls_made || 0}`);
+      console.log(`   - Error: ${searchResult.error || 'None'}`);
 
-      // Return response directly (service already formats correctly)
-      res.json(searchResponse);
+      // Prepare response in compatible format
+      const response: EntitySearchResponse = {
+        success: searchResult.success,
+        company: searchResult.company,
+        company_info: this.formatCompanyInfoForCompatibility(searchResult.basic_info),
+        metadata: searchResult.metadata,
+        error: searchResult.error
+      };
 
-      console.log('✅ Entity Search response sent - COMPLETE');
+      console.log('📤 [CONTROLLER] Formatted response prepared:');
+      console.log(`   - Final success: ${response.success}`);
+      console.log(`   - Has company_info: ${!!response.company_info}`);
+      console.log(`   - Data completeness: ${response.company_info?.data_completeness || 'Unknown'}`);
+      console.log(`   - Duration: ${searchDuration}ms`);
+
+      // Log response if search failed
+      if (!response.success) {
+        console.error(`❌ [CONTROLLER] Search failed for company: ${company_name}`);
+        console.error(`   - Error: ${response.error}`);
+        console.error(`   - Metadata:`, response.metadata);
+      }
+
+      res.json(response);
 
     } catch (error: any) {
-      console.error('❌ Error in enhanced entity search controller:', error);
+      console.error('❌ Error in entity search controller:', error);
       res.status(500).json({
         success: false,
         company: req.body.company_name || '',
-        location: req.body.location,
         error: error.message,
         metadata: {
           search_duration_ms: 0,
@@ -119,29 +131,30 @@ export class EntitySearchController {
           search_queries_executed: 0,
           api_calls_made: 0
         }
-      } as EnhancedEntitySearchResponse);
+      } as EntitySearchResponse);
     }
   }
+
+  
 
   /**
    * GET /api/health
    * Health check endpoint
    */
-  async healthCheck(req: Request, res: Response): Promise<void> {
-    const isConfigured = this.enhancedSearchService.isConfigured();
+  async healthCheck(_req: Request, res: Response): Promise<void> {
+    const isConfigured = this.enhancedEntitySearchService.isConfigured();
 
     res.json({
       status: isConfigured ? 'healthy' : 'degraded',
       timestamp: new Date().toISOString(),
-      service: 'Enhanced Entity Search Service',
-      version: '2.0.0',
+      service: 'Entity Search Service (Enhanced)',
+      version: '4.0.0',
       configuration: {
         gemini_api_configured: isConfigured,
         features: [
-          'Basic company information search',
-          '8 risk keyword analysis (military, defense, civil-military fusion, etc.)',
-          'Multi-language search support',
-          'Automatic severity assessment'
+          'Basic company information search via Gemini API',
+          'Comprehensive business intelligence gathering',
+          'Simplified architecture focused on company data'
         ]
       },
       note: 'Configuration check only - no API calls made'
@@ -152,204 +165,181 @@ export class EntitySearchController {
    * GET /api/info
    * Service information endpoint
    */
-  async getInfo(req: Request, res: Response): Promise<void> {
+  async getInfo(_req: Request, res: Response): Promise<void> {
     res.json({
-      service: 'Enhanced Entity Search Service',
-      version: '2.0.0',
-      description: 'Google Search via Gemini API for comprehensive entity intelligence with automatic risk analysis',
+      service: 'Entity Search Service (Enhanced)',
+      version: '4.0.0',
+      description: 'Enhanced entity search using Gemini API for comprehensive company information',
       port: process.env.PORT || 3003,
       features: {
-        basic_search: 'Company name, headquarters, sectors, description',
-        risk_analysis: '8 automatic risk keyword checks',
-        keywords: [
-          'military',
-          'defense',
-          'civil-military fusion',
-          'human rights violations',
-          'sanctions',
-          'police technology',
-          'weapons',
-          'terrorist connections'
-        ],
-        multi_language: 'Automatic language detection based on location',
-        severity_levels: ['high', 'medium', 'low', 'none']
+        basic_search: 'Comprehensive company information via Gemini AI',
+        business_intelligence: 'Professional business intelligence gathering',
+        simplified_architecture: 'Focused on high-quality company data only'
       },
       endpoints: [
-        'POST /api/entity-search - Enhanced entity search with risk analysis',
+        'POST /api/entity-search - Enhanced entity search',
         'GET /api/health - Health check',
-        'GET /api/info - Service information'
+        'GET /api/info - Service information',
+        'POST /api/test-gemini - Test Gemini API connectivity'
       ],
       status: 'operational'
     });
   }
 
   /**
-   * POST /api/entity-search-enhanced
-   * Enhanced entity search with real-time dataset matching for affiliated companies
+   * POST /api/test-gemini
+   * Test Gemini API connectivity and diagnostic endpoint
    */
-  async handleEnhancedEntitySearchWithDatasetMatching(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  async testGeminiAPI(testCompany: string = "Test Company"): Promise<{
+    success: boolean;
+    duration?: number;
+    error?: string;
+    api_calls_made?: number;
+    has_data?: boolean;
+  }> {
+    const startTime = Date.now();
+
     try {
-      const {
-        company_name,
-        location,
-        include_risk_analysis = true,
-        custom_risk_keywords,
-        include_dataset_matching = true,
-        dataset_matching_options
-      }: EnhancedEntitySearchWithDatasetRequest = req.body;
+      console.log('🧪 [TEST] Starting Gemini API diagnostic test...');
+      console.log(`   - Test company: ${testCompany}`);
 
-      // Validate required fields
-      if (!company_name) {
-        res.status(400).json({
-          success: false,
-          company: '',
-          error: 'company_name is required',
-          metadata: {
-            search_duration_ms: 0,
-            total_sources: 0,
-            search_queries_executed: 0,
-            api_calls_made: 0
-          }
-        } as EnhancedEntitySearchWithDatasetResponse);
-        return;
-      }
-
-      console.log('📥 Enhanced entity search with dataset matching request:', {
-        company: company_name,
-        location: location || 'not specified',
-        include_risk_analysis,
-        custom_keywords: custom_risk_keywords?.length || 0,
-        include_dataset_matching,
-        dataset_boost: dataset_matching_options?.affiliated_boost || 1.15
+      // Test the service directly
+      const searchResult = await this.enhancedEntitySearchService.searchEntity({
+        company_name: testCompany,
+        location: undefined
       });
 
-      // Check if Enhanced service is configured
-      if (!this.enhancedSearchWithDatasetService.isConfigured()) {
-        res.status(503).json({
-          success: false,
-          company: company_name,
-          location,
-          error: 'Enhanced Entity Search service is not properly configured. Please check GEMINI_API_KEY.',
-          metadata: {
-            search_duration_ms: 0,
-            total_sources: 0,
-            search_queries_executed: 0,
-            api_calls_made: 0
-          }
-        } as EnhancedEntitySearchWithDatasetResponse);
-        return;
-      }
+      const duration = Date.now() - startTime;
 
-      // Perform enhanced search with dataset matching
-      const response = await this.enhancedSearchWithDatasetService.searchEntityWithDatasetMatching({
-        company_name,
-        location,
-        include_risk_analysis,
-        custom_risk_keywords,
-        include_dataset_matching,
-        dataset_matching_options
-      });
+      console.log('🧪 [TEST] Diagnostic test completed:');
+      console.log(`   - Duration: ${duration}ms`);
+      console.log(`   - Success: ${searchResult.success}`);
+      console.log(`   - API calls made: ${searchResult.metadata?.api_calls_made || 0}`);
+      console.log(`   - Has basic_info: ${!!searchResult.basic_info}`);
+      console.log(`   - Error: ${searchResult.error || 'None'}`);
 
-      if (response.success) {
-        console.log(`✅ Enhanced search with dataset matching completed for ${company_name}:`, {
-          duration: response.metadata.search_duration_ms,
-          sources: response.metadata.total_sources,
-          queries: response.metadata.search_queries_executed,
-          api_calls: response.metadata.api_calls_made,
-          risk_keywords_found: response.risk_analysis?.length || 0,
-          dataset_matching_enabled: !!response.dataset_matching,
-          direct_matches: response.dataset_matching?.direct_matches.length || 0,
-          affiliated_matches: response.dataset_matching?.match_summary.total_affiliated_matches || 0
-        });
-
-        res.status(200).json(response);
-      } else {
-        console.error(`❌ Enhanced search with dataset matching failed for ${company_name}:`, response.error);
-        res.status(500).json(response);
-      }
+      return {
+        success: searchResult.success,
+        duration,
+        api_calls_made: searchResult.metadata?.api_calls_made || 0,
+        has_data: !!searchResult.basic_info,
+        error: searchResult.error
+      };
 
     } catch (error: any) {
-      console.error('❌ Unhandled error in enhanced entity search with dataset matching:', error);
+      const duration = Date.now() - startTime;
+      console.error(`❌ [TEST] Diagnostic test failed: ${error.message}`);
 
-      res.status(500).json({
+      return {
         success: false,
-        company: req.body.company_name || 'unknown',
-        location: req.body.location,
-        error: 'Internal server error during enhanced entity search with dataset matching',
-        metadata: {
-          search_duration_ms: 0,
-          total_sources: 0,
-          search_queries_executed: 0,
-          api_calls_made: 0
-        }
-      } as EnhancedEntitySearchWithDatasetResponse);
+        duration,
+        error: `Diagnostic test failed: ${error.message}`,
+        api_calls_made: 0,
+        has_data: false
+      };
     }
   }
 
   /**
-   * GET /api/enhanced-info
-   * Enhanced service information including dataset matching capabilities
+   * Format BasicCompanyInfo to be compatible with existing frontend structure (6-field optimized)
    */
-  async getEnhancedInfo(req: Request, res: Response): Promise<void> {
-    try {
-      const serviceInfo = this.enhancedSearchWithDatasetService.getServiceInfo();
-
-      res.status(200).json({
-        service: 'Enhanced Entity Search Service with Dataset Matching',
-        version: '2.1.0',
-        status: 'operational',
-        description: 'Google Search via Gemini API for comprehensive entity intelligence with automatic risk analysis and real-time dataset matching for affiliated companies',
-        features: {
-          basic_search: 'Company name, headquarters, sectors, description',
-          risk_analysis: '8 automatic risk keyword checks',
-          dataset_matching: 'Real-time matching for affiliated companies discovered during risk analysis',
-          affiliated_boost: 'Confidence boost for affiliated company matches (default: 1.15x)',
-          comprehensive_coverage: 'Entity + affiliated companies comprehensive dataset coverage',
-          risk_keywords: [
-            'military',
-            'defense',
-            'civil-military fusion',
-            'human rights violations',
-            'sanctions',
-            'police technology',
-            'weapons',
-            'terrorist connections'
-          ],
-          multi_language: 'Automatic language detection based on location',
-          severity_levels: ['high', 'medium', 'low', 'none'],
-          integration: 'Real-time Dataset Matching Service integration (port 3004)'
-        },
-        endpoints: [
-          'POST /api/entity-search - Standard enhanced entity search',
-          'POST /api/entity-search-enhanced - Enhanced search with dataset matching',
-          'GET /api/health - Health check',
-          'GET /api/info - Standard service information',
-          'GET /api/enhanced-info - Enhanced service information with dataset matching'
-        ],
-        configuration: serviceInfo,
-        performance: {
-          estimated_response_time: '< 2 seconds (without dataset matching)',
-          estimated_response_time_with_dataset: '< 5 seconds (with dataset matching)',
-          max_affiliated_companies: 50,
-          default_affiliated_boost: '1.15x',
-          dataset_matching_timeout: '30 seconds'
-        },
-        dependencies: [
-          'Gemini API (Google AI)',
-          'Dataset Matching Service (port 3004)',
-          'Google Search API via Gemini'
-        ]
-      });
-    } catch (error: any) {
-      console.error('Error getting enhanced service info:', error);
-      res.status(500).json({
-        error: 'Failed to get enhanced service information',
-        message: error.message
-      });
+  private formatCompanyInfoForCompatibility(basicInfo: any): any {
+    if (!basicInfo) {
+      return {
+        summary: 'Company information not available',
+        sources: [],
+        source_quality: 'minimal',
+        data_completeness: 'no_data',
+        note: 'Limited information available',
+        enhanced_data: null
+      };
     }
+
+    return {
+      summary: basicInfo.description || 'Company information available',
+      sources: basicInfo.sources || [],
+      source_quality: 'gemini_structured',
+      data_completeness: this.assessDataCompleteness(basicInfo),
+      note: 'Using Gemini AI enhanced company data (6-field structure)',
+      enhanced_data: {
+        // Core 6 fields from simplified structure
+        official_name: basicInfo.name || 'Not available',
+        english_name: basicInfo.english_name || 'Not available',
+        previous_names: basicInfo.past_names || [],
+        description: basicInfo.description || 'No description available',
+        headquarters_text: basicInfo.headquarters || 'Not available',
+        sectors: basicInfo.sectors || [],
+        // Additional fields with defaults for compatibility
+        website: basicInfo.website || 'Not available',
+        founded_date: basicInfo.founded_date || 'Not available',
+        company_type: basicInfo.company_type || 'Not available',
+        employees: basicInfo.employees || 'Not available',
+        // Metadata
+        data_source: 'gemini_ai',
+        has_comprehensive_info: this.hasComprehensiveInfo(basicInfo),
+        missing_fields: this.getMissingFields(basicInfo)
+      }
+    };
+  }
+
+  /**
+   * Assess the completeness of company data (6-field structure)
+   */
+  private assessDataCompleteness(basicInfo: any): string {
+    if (!basicInfo) return 'no_data';
+
+    let score = 0;
+
+    // Check for essential 6 fields
+    if (basicInfo.name) score++;
+    if (basicInfo.english_name) score++;
+    if (basicInfo.headquarters && basicInfo.headquarters.length > 10) score++;
+    if (basicInfo.sectors && basicInfo.sectors.length > 0) score++;
+    if (basicInfo.description && basicInfo.description.length > 50) score++;
+    if (basicInfo.past_names && basicInfo.past_names.length > 0) score++;
+
+    if (score >= 5) return 'excellent';
+    if (score >= 4) return 'complete';
+    if (score >= 3) return 'good';
+    if (score >= 2) return 'basic';
+    return 'minimal';
+  }
+
+  /**
+   * Check if company has comprehensive information (6-field structure)
+   */
+  private hasComprehensiveInfo(basicInfo: any): boolean {
+    if (!basicInfo) return false;
+
+    // Check core 6 fields for comprehensive information
+    const hasCoreFields = basicInfo.name &&
+                         basicInfo.description &&
+                         basicInfo.description.length > 50;
+
+    const hasAdditionalInfo = (basicInfo.english_name && basicInfo.english_name !== 'Not available') ||
+                             (basicInfo.headquarters && basicInfo.headquarters !== 'Not available') ||
+                             (basicInfo.sectors && basicInfo.sectors.length > 0) ||
+                             (basicInfo.past_names && basicInfo.past_names.length > 0);
+
+    return hasCoreFields && hasAdditionalInfo;
+  }
+
+  /**
+   * Get list of missing essential fields for debugging purposes
+   */
+  private getMissingFields(basicInfo: any): string[] {
+    if (!basicInfo) return ['all data'];
+
+    const missingFields: string[] = [];
+
+    // Check the 6 essential fields
+    if (!basicInfo.name) missingFields.push('name');
+    if (!basicInfo.english_name) missingFields.push('english_name');
+    if (!basicInfo.headquarters) missingFields.push('headquarters');
+    if (!basicInfo.sectors || basicInfo.sectors.length === 0) missingFields.push('sectors');
+    if (!basicInfo.description || basicInfo.description.length < 50) missingFields.push('description');
+    if (!basicInfo.past_names || basicInfo.past_names.length === 0) missingFields.push('past_names');
+
+    return missingFields;
   }
 }

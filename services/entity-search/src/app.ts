@@ -52,12 +52,8 @@ app.use((req, res, next) => {
 const entitySearchController = new EntitySearchController();
 
 // Routes
-app.post('/api/entity-search', (req, res, next) =>
-  entitySearchController.handleEntitySearch(req, res, next)
-);
-
-app.post('/api/entity-search-enhanced', (req, res, next) =>
-  entitySearchController.handleEnhancedEntitySearchWithDatasetMatching(req, res, next)
+app.post('/api/entity-search', (req, res) =>
+  entitySearchController.handleEntitySearch(req, res)
 );
 
 app.get('/api/health', (req, res) =>
@@ -68,24 +64,50 @@ app.get('/api/info', (req, res) =>
   entitySearchController.getInfo(req, res)
 );
 
-app.get('/api/enhanced-info', (req, res) =>
-  entitySearchController.getEnhancedInfo(req, res)
-);
+app.post('/api/test-gemini', async (req, res) => {
+  try {
+    console.log('🧪 [TEST] Gemini API test endpoint called');
+
+    const { test_company = "Test Company" } = req.body;
+
+    // Test the Enhanced Entity Search Service directly
+    const result = await entitySearchController.testGeminiAPI(test_company);
+
+    console.log('🧪 [TEST] Gemini API test completed');
+    console.log('   - Success:', result.success);
+    console.log('   - Duration:', result.duration || 'Unknown');
+
+    res.json({
+      test_status: 'completed',
+      timestamp: new Date().toISOString(),
+      test_company,
+      ...result
+    });
+
+  } catch (error: any) {
+    console.error('❌ [TEST] Gemini API test failed:', error.message);
+    res.status(500).json({
+      test_status: 'failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
 
 // Root endpoint
 app.get('/api', (req, res) => {
   res.json({
-    service: 'Enhanced Entity Search Service',
-    version: '2.0.0',
+    service: 'Entity Search Service (Enhanced)',
+    version: '4.0.0',
     status: 'operational',
-    description: 'Google Search via Gemini API for comprehensive entity intelligence with automatic risk analysis',
+    description: 'Enhanced entity search using Gemini API for comprehensive company information',
     features: {
-      basic_search: 'Company information, headquarters, sectors, description',
-      risk_analysis: '8 automatic risk keyword checks',
-      multi_language: 'Automatic language detection based on location'
+      basic_search: 'Comprehensive company information via Gemini AI',
+      business_intelligence: 'Professional business intelligence gathering',
+      simplified_architecture: 'Focused on high-quality company data only'
     },
     endpoints: {
-      search: 'POST /api/entity-search - Enhanced entity search with risk analysis',
+      entity_search: 'POST /api/entity-search - Enhanced entity search',
       health: 'GET /api/health - Health check',
       info: 'GET /api/info - Service information'
     },
@@ -117,21 +139,20 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 // Start server
 if (require.main === module) {
   app.listen(PORT, '0.0.0.0', () => {
-    console.log('🚀 Enhanced Entity Search Service Started');
+    console.log('🚀 Entity Search Service (Enhanced) Started');
     console.log(`📡 Server running on port ${PORT} (0.0.0.0)`);
     console.log(`🏥 Health: http://localhost:${PORT}/api/health`);
     console.log(`📊 Info: http://localhost:${PORT}/api/info`);
-    console.log(`🔍 Search: POST http://localhost:${PORT}/api/entity-search`);
+    console.log(`🔍 Entity Search: POST http://localhost:${PORT}/api/entity-search`);
     console.log('');
     console.log('📋 Configuration:');
     console.log(`   GEMINI_API_KEY: ${process.env.GEMINI_API_KEY ? '✅ Configured' : '❌ Not set'}`);
     console.log(`   NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
     console.log('');
     console.log('✨ Features:');
-    console.log('   • Basic company information search');
-    console.log('   • 8 automatic risk keyword analysis');
-    console.log('   • Multi-language search support');
-    console.log('   • Severity assessment (high/medium/low/none)');
+    console.log('   • Comprehensive company information search via Gemini AI');
+    console.log('   • Professional business intelligence gathering');
+    console.log('   • Simplified architecture focused on company data');
     console.log('');
     console.log('✅ Ready to accept requests...');
   });
