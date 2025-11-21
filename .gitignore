@@ -22,6 +22,7 @@ build/
 test_results/
 test_output/
 tests/output/
+test/
 *.test.js
 debug_*.js
 test_*.js
@@ -30,6 +31,11 @@ test_*.js
 test_*.json
 temp_*.json
 tmp_*.json
+*_result.json
+*_report.json
+gemini_raw_response_*.json
+deepthinking_*.json
+standard_search_*.json
 
 # IDE and editor files
 .vscode/
@@ -107,3 +113,22 @@ jspm_packages/
 
 # TernJS port file
 .tern-port
+
+# Documentation and reference files (should be in external storage)
+*.pdf
+*.docx
+*.xlsx
+
+# Service-level build artifacts (ensure they're ignored)
+services/*/dist/
+
+# Additional temporary file patterns
+*_temp.*
+*_tmp.*
+controller_parsing_*
+test_enhanced_controllers.*
+
+# Temporary directories
+test-temp/
+test_backup_*/
+*/test-temp/
