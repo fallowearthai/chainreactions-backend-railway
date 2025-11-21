@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { EnhancedEntitySearchService } from '../services/EnhancedEntitySearchService';
+import { RiskKeywordAnalysisService } from '../services/RiskKeywordAnalysisService';
+import { RiskKeywordAnalysisRequest, RiskAnalysisResponse, RiskKeywordAnalysisError } from '../types/risk-types';
 
 export interface EntitySearchRequest {
   company_name: string;
@@ -21,9 +23,11 @@ export interface EntitySearchResponse {
 
 export class EntitySearchController {
   private enhancedEntitySearchService: EnhancedEntitySearchService;
+  private riskKeywordAnalysisService: RiskKeywordAnalysisService;
 
   constructor() {
     this.enhancedEntitySearchService = new EnhancedEntitySearchService();
+    this.riskKeywordAnalysisService = new RiskKeywordAnalysisService();
   }
 
   /**
@@ -135,7 +139,97 @@ export class EntitySearchController {
     }
   }
 
-  
+  /**
+   * POST /api/entity-search/analyze-keyword
+   * Risk keyword analysis endpoint
+   * Analyzes relationships between companies and specific risk keywords
+   */
+  async analyzeRiskKeyword(req: Request, res: Response): Promise<void> {
+    try {
+      const {
+        company,
+        keyword,
+        location
+      }: RiskKeywordAnalysisRequest = req.body;
+
+      // Validate required fields
+      if (!company || !keyword) {
+        const errorResponse: RiskKeywordAnalysisError = {
+          success: false,
+          error: 'Both company and keyword are required fields',
+          metadata: {
+            analysis_duration_ms: 0,
+            api_calls_made: 0
+          }
+        };
+        res.status(400).json(errorResponse);
+        return;
+      }
+
+      console.log('🔍 [RISK ANALYSIS] Risk keyword analysis request:', {
+        company: company,
+        keyword: keyword,
+        location: location || 'not specified'
+      });
+
+      const startTime = Date.now();
+
+      // Call Risk Keyword Analysis Service
+      const analysisResult = await this.riskKeywordAnalysisService.analyzeRiskKeyword({
+        company,
+        keyword,
+        location
+      });
+
+      const analysisDuration = Date.now() - startTime;
+
+      console.log('📊 [RISK ANALYSIS] Analysis completed:');
+      console.log(`   - Company: ${company}`);
+      console.log(`   - Keyword: ${keyword}`);
+      console.log(`   - Relationship Type: ${analysisResult.data.relationship_type}`);
+      console.log(`   - Severity: ${analysisResult.data.severity}`);
+      console.log(`   - Confidence: ${analysisResult.data.confidence_score}`);
+      console.log(`   - Duration: ${analysisDuration}ms`);
+
+      // Update metadata with actual duration
+      analysisResult.metadata.analysis_duration_ms = analysisDuration;
+
+      res.json(analysisResult);
+
+    } catch (error: any) {
+      const executionTime = 0; // Duration not available in error case
+
+      console.error('❌ Error in risk keyword analysis controller:', error);
+
+      const errorResponse: RiskKeywordAnalysisError = {
+        success: false,
+        error: error.message || 'Unknown error occurred during risk analysis',
+        metadata: {
+          analysis_duration_ms: executionTime,
+          api_calls_made: 1
+        }
+      };
+
+      // Handle specific error types
+      if (error.message?.includes('GEMINI_API_KEY')) {
+        res.status(503).json({
+          ...errorResponse,
+          error: 'Risk analysis service not configured - please check GEMINI_API_KEY'
+        });
+        return;
+      }
+
+      if (error.message?.includes('timeout')) {
+        res.status(408).json({
+          ...errorResponse,
+          error: 'Risk analysis request timed out - please try again'
+        });
+        return;
+      }
+
+      res.status(500).json(errorResponse);
+    }
+  }
 
   /**
    * GET /api/health
@@ -174,10 +268,12 @@ export class EntitySearchController {
       features: {
         basic_search: 'Comprehensive company information via Gemini AI',
         business_intelligence: 'Professional business intelligence gathering',
+        risk_analysis: 'Risk keyword analysis for due diligence and compliance',
         simplified_architecture: 'Focused on high-quality company data only'
       },
       endpoints: [
         'POST /api/entity-search - Enhanced entity search',
+        'POST /api/entity-search/analyze-keyword - Risk keyword analysis',
         'GET /api/health - Health check',
         'GET /api/info - Service information',
         'POST /api/test-gemini - Test Gemini API connectivity'
@@ -342,4 +438,5 @@ export class EntitySearchController {
 
     return missingFields;
   }
-}
+
+  }

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import { SupabaseAuthService } from '@/services/SupabaseAuthService';
-import { SupabaseService } from '@/services/SupabaseService';
-import { AuthMiddleware } from '@/middleware/auth';
+import { SupabaseAuthService } from '../services/SupabaseAuthService';
+import { SupabaseService } from '../services/SupabaseService';
+import { AuthMiddleware } from '../middleware/auth';
 import {
   SignUpRequest,
   SignInRequest,
@@ -11,7 +11,7 @@ import {
   AuthResponse,
   APIResponse,
   ErrorResponse
-} from '@/types/AuthTypes';
+} from '../types/AuthTypes';
 
 export class AuthController {
   private authService: SupabaseAuthService;

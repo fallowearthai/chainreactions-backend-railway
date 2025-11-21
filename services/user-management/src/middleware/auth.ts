@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import { SupabaseAuthService } from '@/services/SupabaseAuthService';
-import { SupabaseService } from '@/services/SupabaseService';
-import { SecurityContext } from '@/types/AuthTypes';
-import { UserProfile, UserRole } from '@/types/UserTypes';
+import { SupabaseAuthService } from '../services/SupabaseAuthService';
+import { SupabaseService } from '../services/SupabaseService';
+import { SecurityContext } from '../types/AuthTypes';
+import { UserProfile, UserRole } from '../types/UserTypes';
 import { User } from '@supabase/supabase-js';
 
 // Extend Request interface to include user context

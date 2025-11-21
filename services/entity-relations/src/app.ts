@@ -2,8 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
-import { EnhancedSearchController } from './controllers/EnhancedSearchController';
-import { NormalSearchController } from './controllers/NormalSearchController';
+import { DeepThinkingSearchController } from './controllers/DeepThinkingSearchController';
+import { StandardSearchController } from './controllers/StandardSearchController';
 import { FeatureFlags } from './utils/FeatureFlags';
 
 // Load environment variables
@@ -55,9 +55,7 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 // Environment variable validation
 function validateEnvironment() {
   const required = [
-    'GEMINI_API_KEY',
-    'BRIGHT_DATA_API_KEY',
-    'BRIGHT_DATA_SERP_ZONE'
+    'GEMINI_API_KEY'
   ];
 
   const missing = required.filter(key => !process.env[key]);
@@ -85,8 +83,8 @@ const app = express();
 const PORT = process.env.PORT || 3002;
 
 // Initialize controllers
-const enhancedSearchController = new EnhancedSearchController();
-const normalSearchController = new NormalSearchController();
+const deepThinkingSearchController = new DeepThinkingSearchController();
+const standardSearchController = new StandardSearchController();
 
 // Memory monitoring
 let memoryCheckInterval: NodeJS.Timeout | null;
@@ -170,30 +168,27 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
     service: 'entity-relations',
-    version: '2.0.0', // Updated to reflect enhanced grounding
+    version: '1.0.0',
     port: PORT,
     timestamp: new Date().toISOString(),
     features: [
-      'DeepThinking 3-Stage OSINT workflow',
-      'Normal Search mode',
+      'DeepThinking Search mode',
+      'Standard Search mode',
       'Enhanced Grounding mode',
       'Gemini AI integration',
-      'Bright Data SERP integration',
-      'Multi-engine search support',
-      'SSE streaming support',
-      'Grounding metadata extraction',
-      'Evidence-to-source mapping'
+      'Grounding metadata extraction'
     ],
     grounding: featureFlags.enhanced_grounding,
     endpoints: {
-      enhanced_search: 'POST /api/enhanced/search',
-      enhanced_search_stream: 'GET /api/enhanced/search-stream',
-      enhanced_strategy: 'POST /api/enhanced/strategy',
-      enhanced_test: 'POST /api/enhanced/test',
-      enhanced_info: 'GET /api/enhanced/info',
+      deepthinking_search: 'POST /api/deepthinking-search',
+      deepthinking_health: 'GET /api/deepthinking/health',
+      deepthinking_info: 'GET /api/deepthinking/info',
       normal_search: 'POST /api/normal-search',
       normal_health: 'GET /api/normal/health',
       normal_info: 'GET /api/normal/info',
+      standard_search: 'POST /api/standard-search',
+      standard_health: 'GET /api/standard/health',
+      standard_info: 'GET /api/standard/info',
       grounding_admin: 'POST /api/admin/grounding/config', // Admin endpoint
       grounding_status: 'GET /api/admin/grounding/status' // Status endpoint
     }
@@ -265,65 +260,61 @@ app.post('/api/admin/grounding/emergency-disable', (req, res) => {
   });
 });
 
-// Enhanced Search (DeepThinking) endpoints
-app.post('/api/enhanced/search', enhancedSearchController.enhancedSearch.bind(enhancedSearchController));
-app.get('/api/enhanced/search-stream', enhancedSearchController.enhancedSearchStream.bind(enhancedSearchController));
-app.post('/api/enhanced/strategy', enhancedSearchController.getSearchStrategy.bind(enhancedSearchController));
-app.post('/api/enhanced/test', enhancedSearchController.testWorkflow.bind(enhancedSearchController));
-app.get('/api/enhanced/info', enhancedSearchController.getWorkflowInfo.bind(enhancedSearchController));
+// DeepThinking Search endpoints
+app.post('/api/deepthinking-search', deepThinkingSearchController.handleDeepThinkingSearch.bind(deepThinkingSearchController));
+app.get('/api/deepthinking/health', deepThinkingSearchController.healthCheck.bind(deepThinkingSearchController));
+app.get('/api/deepthinking/info', deepThinkingSearchController.getInfo.bind(deepThinkingSearchController));
 
-// Normal Search endpoints
-app.post('/api/normal-search', normalSearchController.handleNormalSearch.bind(normalSearchController));
-app.get('/api/normal/health', normalSearchController.healthCheck.bind(normalSearchController));
-app.get('/api/normal/info', normalSearchController.getInfo.bind(normalSearchController));
+// Standard Search endpoints
+app.post('/api/standard-search', standardSearchController.handleStandardSearch.bind(standardSearchController));
+app.get('/api/standard/health', standardSearchController.healthCheck.bind(standardSearchController));
+app.get('/api/standard/info', standardSearchController.getInfo.bind(standardSearchController));
 
 // Service information endpoint
 app.get('/api', (req, res) => {
   res.status(200).json({
     service: 'Entity Relations Service',
-    description: 'DeepThinking 3-Stage OSINT workflow and Normal Search mode for entity relationship analysis',
+    description: 'DeepThinking and Standard Search modes for entity relationship analysis',
     version: '1.0.0',
     port: PORT,
     modes: {
-      enhanced: {
-        name: 'DeepThinking 3-Stage OSINT',
-        description: 'Advanced AI-powered relationship analysis with multi-stage processing',
-        features: [
-          'WebSearch meta-prompting',
-          'Multi-engine SERP execution',
-          'AI result integration and analysis',
-          'SSE streaming support'
-        ]
-      },
-      normal: {
-        name: 'Normal Search Mode',
-        description: 'Fast Google Web Search based OSINT analysis',
+      deepthinking: {
+        name: 'DeepThinking Search Mode',
+        description: 'Advanced AI-powered relationship analysis using Gemini Google Search',
         features: [
           'Direct Gemini Google Search integration',
           'Multi-language support',
           'Time-range filtering',
-          'Quick results'
+          'Relationship type classification',
+          'Grounding metadata extraction'
+        ]
+      },
+      standard: {
+        name: 'Standard Search Mode',
+        description: 'Fast entity verification using Gemini AI',
+        features: [
+          'Quick entity verification',
+          'Basic relationship analysis',
+          'Multi-language support',
+          'Fast response times'
         ]
       }
     },
     documentation: {
-      enhanced_endpoints: {
-        search: 'POST /api/enhanced/search - Full 3-stage analysis',
-        stream: 'GET /api/enhanced/search-stream - SSE streaming analysis',
-        strategy: 'POST /api/enhanced/strategy - Generate search strategy only',
-        test: 'POST /api/enhanced/test - Test workflow with sample data',
-        info: 'GET /api/enhanced/info - Workflow information'
+      deepthinking_endpoints: {
+        search: 'POST /api/deepthinking-search - Advanced entity search',
+        health: 'GET /api/deepthinking/health - Service health check',
+        info: 'GET /api/deepthinking/info - Service information'
       },
-      normal_endpoints: {
-        search: 'POST /api/normal-search - Quick entity search',
-        health: 'GET /api/normal/health - Service health check',
-        info: 'GET /api/normal/info - Service information'
+      standard_endpoints: {
+        search: 'POST /api/standard-search - Fast entity verification',
+        health: 'GET /api/standard/health - Service health check',
+        info: 'GET /api/standard/info - Service information'
       }
     },
     integrations: [
       'Google Gemini 2.5 Flash AI',
-      'Bright Data SERP API',
-      'Multi-engine search (Google, Baidu, Yandex)'
+      'Enhanced Grounding mode'
     ]
   });
 });
@@ -347,14 +338,12 @@ app.use('*', (req, res) => {
     available_endpoints: [
       'GET /api/health',
       'GET /api',
-      'POST /api/enhanced/search',
-      'GET /api/enhanced/search-stream',
-      'POST /api/enhanced/strategy',
-      'POST /api/enhanced/test',
-      'GET /api/enhanced/info',
-      'POST /api/normal-search',
-      'GET /api/normal/health',
-      'GET /api/normal/info'
+      'POST /api/deepthinking-search',
+      'GET /api/deepthinking/health',
+      'GET /api/deepthinking/info',
+      'POST /api/standard-search',
+      'GET /api/standard/health',
+      'GET /api/standard/info'
     ]
   });
 });
@@ -371,9 +360,8 @@ const server = app.listen(Number(PORT), HOST, () => {
   console.log(`📋 Available endpoints:`);
   console.log(`   Health: GET /api/health`);
   console.log(`   Info: GET /api`);
-  console.log(`   Enhanced Search: POST /api/enhanced/search`);
-  console.log(`   Enhanced Stream: GET /api/enhanced/search-stream`);
-  console.log(`   Normal Search: POST /api/normal-search`);
+  console.log(`   DeepThinking Search: POST /api/deepthinking-search`);
+  console.log(`   Standard Search: POST /api/standard-search`);
   console.log(`🌐 CORS enabled for: ${process.env.NODE_ENV === 'production' ? 'Production domains' : 'Local development'}`);
 });
 

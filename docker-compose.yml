@@ -1,20 +1,19 @@
 version: '3.8'
 
 services:
-  # Redis Cache Service
+  # Redis Cache Service (Internal Only)
   redis:
     image: redis:7-alpine
     container_name: chainreactions-redis
-    ports:
-      - "6379:6379"
+    # Remove external port exposure for security - only accessible within Docker network
     volumes:
       - redis-data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-your_strong_redis_password_here}
     networks:
       - chainreactions-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD:-your_strong_redis_password_here}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -28,7 +27,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3002
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - BRIGHT_DATA_API_KEY=${BRIGHT_DATA_API_KEY}
       - BRIGHT_DATA_SERP_ZONE=${BRIGHT_DATA_SERP_ZONE}
@@ -55,7 +54,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3003
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - LINKUP_API_KEY=${LINKUP_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - LINKUP_BASE_URL=${LINKUP_BASE_URL:-https://api.linkup.so/v1}
@@ -81,7 +80,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3004
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
@@ -134,7 +133,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3006
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
@@ -150,6 +149,43 @@ services:
       - chainreactions-network
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3006/api/health", "||", "exit", "1"]
+      interval: 180s
+      timeout: 30s
+      retries: 4
+      start_period: 120s
+
+  user-management:
+    build: ./services/user-management
+    container_name: chainreactions-user-management
+    ports:
+      - "3007:3007"
+    environment:
+      - NODE_ENV=production
+      - PORT=3007
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3001}
+      - JWT_SECRET=${JWT_SECRET}
+      - REFRESH_TOKEN_SECRET=${REFRESH_TOKEN_SECRET}
+      - BCRYPT_ROUNDS=${BCRYPT_ROUNDS:-12}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-1h}
+      - REFRESH_TOKEN_EXPIRES_IN=${REFRESH_TOKEN_EXPIRES_IN:-7d}
+      - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-900000}
+      - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS:-100}
+      - AUTH_RATE_LIMIT_WINDOW_MS=${AUTH_RATE_LIMIT_WINDOW_MS:-300000}
+      - AUTH_RATE_LIMIT_MAX_REQUESTS=${AUTH_RATE_LIMIT_MAX_REQUESTS:-10}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3001,http://localhost:5173}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - chainreactions-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3007/api/health", "||", "exit", "1"]
       interval: 180s
       timeout: 30s
       retries: 4

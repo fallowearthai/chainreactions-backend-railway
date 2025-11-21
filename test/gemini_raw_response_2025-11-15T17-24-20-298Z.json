@@ -1,0 +1,192 @@
+{
+  "timestamp": "2025-11-15T17:24:20.298Z",
+  "request": {
+    "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent",
+    "requestBody": {
+      "system_instruction": {
+        "parts": [
+          {
+            "text": "## Prompt: OSINT Research on Institutional Risk Links\n\n**Role**\nYou are deepdiver, a Research Security Analyst conducting initial open-source intelligence (OSINT) gathering.\n\n---\n\n### <Goal>\n\nUsing web search capabilities, investigate potential connections (e.g., documented cooperation, funding, joint projects, shared personnel, significant mentions linking them) between **Institution A** and each item in **Risk List C** within a specified time range.\n\nSummarize key findings, identify any **potential intermediary organizations (B)** explicitly mentioned as linking **A** and **C**, and provide **source URLs**.\nTreat **each item in List C individually** for investigation.\n\n---\n\n### <Information Gathering Strategy>\n\nFor each item in **Risk List C**:\n\n* Formulate search queries combining **Institution A** ({Institution A}, {Location A}) with the specific risk item from List C.\n* If time_range_start and time_range_end are provided, incorporate this date range into your search using Google's before: and after: filters or equivalent. **CRITICAL: When time range is specified, you MUST ONLY include information from within this exact time period. Events, publications, or relationships outside this range MUST BE EXCLUDED entirely from your analysis.**\n\nAnalyze results from:\n\n* Reports, news, official sites, academic publications, or other public documents within the timeframe.\n* Focus on **specific, verifiable connections**, not general background info.\n\nLook for evidence of:\n\n* **Direct Links**: Clear collaboration, joint funding, projects, or documented relationships.\n* **Indirect Links**: A and C are both explicitly linked through **intermediary B** in a documented shared outcome.\n* **Significant Mentions**: A and C are jointly discussed in a risk-related context, even without direct cooperation.\n\nFor **Potential B**, ensure:\n\n* It is explicitly cited as facilitating the A–C connection.\n* Mere co-membership in alliances or general funding from B is not sufficient unless a specific A–C project via B is described and sourced.\n\nIf credible evidence is found:\n\n* Summarize the connection and assess reliability.\n* **Avoid** irrelevant info like rankings or general institution pages unless they directly support a finding.\n\nIf no evidence is found:\n\n* Clearly note that after thorough search within the range.\n\n---\n\n### <Input>\n\n* **Institution A**: {Institution A}\n* **Location A**: {Location A}\n* **Risk List C**: {Risk List C}\n* **Time Range Start**: {time_range_start}\n* **Time Range End**: {time_range_end}\n\n---\n\n### <Output Instructions>\n\nOutput only a JSON list.\n\nEach item in **Risk List C** must be a separate JSON object containing:\n\n```json\n{\n  \"risk_item\": \"string\",\n  \"institution_A\": \"string\",\n  \"relationship_type\": \"string\", // One of: \"Direct\", \"Indirect\", \"Significant Mention\", \"Unknown\", \"No Evidence Found\"\n  \"finding_summary\": \"string\", // CRITICAL: Citations MUST match exactly with sources array positions\n  \"potential_intermediary_B\": [\"string\"] | null, // Only if clearly described and cited.\n  \"sources\": [\"string\"] // CRITICAL: Must contain exactly the same number of URLs as citations in finding_summary\n}\n```"
+          }
+        ]
+      },
+      "contents": [
+        {
+          "parts": [
+            {
+              "text": "I need you to investigate potential connections between the following institution and risk items:\n\n**Institution A:** 南京大学\n**Location:** China\n**Risk List C:** 江苏省中医院\n**Time Range: No specific time constraints - include recent and historical connections.**\n\n**SEARCH INSTRUCTIONS:**\nSearch in ENGLISH and Chinese (中文). Use search terms in both languages for comprehensive coverage.\n\n**ANALYSIS REQUIREMENTS:**\nFor risk item in Risk List C, investigate:\n1. Direct connections (cooperation, projects, formal relationships)\n2. Indirect connections (through intermediaries with specific A-C linkage)\n3. Significant mentions (joint discussion in risk contexts)\n4. Evidence quality and source reliability\n\n**OUTPUT FORMAT:**\nReturn a JSON array with one object per risk entity. Each object must contain:\n- risk_item: exact name from input list\n- institution_A: exact institution name\n- relationship_type: \"Direct\", \"Indirect\", \"Significant Mention\", \"Unknown\", or \"No Evidence Found\"\n- finding_summary: detailed evidence-based analysis\n- potential_intermediary_B: intermediary name(s) or null\n\n**CRITICAL:**\n- Search in both English AND native languages\n- Focus search queries on the exact institution name provided\n- Prioritize official sources: .gov, .edu, established news organizations\n- Provide specific evidence for all claims\n- If no evidence found: state \"No Evidence Found\"\n- Exclude speculation and general background"
+            }
+          ]
+        }
+      ],
+      "generationConfig": {
+        "temperature": 0.2,
+        "maxOutputTokens": 65536,
+        "topP": 0.95,
+        "topK": 10
+      },
+      "tools": [
+        {
+          "google_search": {}
+        }
+      ]
+    },
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "params": {
+      "key": "AIzaSyBrODwBpnGudzr_..."
+    },
+    "timeout": 180000
+  },
+  "response": {
+    "status": 200,
+    "statusText": "OK",
+    "headers": {
+      "connection": "close",
+      "transfer-encoding": "chunked",
+      "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+      "content-type": "application/json; charset=UTF-8",
+      "date": "Sat, 15 Nov 2025 17:24:20 GMT",
+      "server": "scaffolding on HTTPServer2",
+      "server-timing": "gfet4t7; dur=24470",
+      "vary": "Origin, X-Origin, Referer",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN",
+      "x-xss-protection": "0"
+    },
+    "data": {
+      "candidates": [
+        {
+          "content": {
+            "parts": [
+              {
+                "text": "```json\n[\n  {\n    \"risk_item\": \"江苏省中医院\",\n    \"institution_A\": \"南京大学\",\n    \"relationship_type\": \"Indirect\",\n    \"finding_summary\": \"Initial searches revealed that Jiangsu Provincial Hospital of Chinese Medicine (江苏省中医院) is the primary affiliated hospital of Nanjing University of Chinese Medicine (南京中医药大学), a separate institution from the target, Nanjing University (南京大学). However, two indirect connections were identified. First, in February 2022, Nanjing University was one of several universities that signed a \\\"science and education talent health service cooperation agreement\\\" with the hospital's new Zidong campus to provide healthcare services to university personnel. Second, in June 2022, the Nanjing University Overseas Chinese Federation (南京大学侨联) co-organized a free health clinic event where medical staff from Jiangsu Provincial Hospital of Chinese Medicine provided services. This was a community event, not a direct institutional partnership between the university and the hospital. No evidence of joint academic research, formal affiliation, or shared funding between Nanjing University and Jiangsu Provincial Hospital of Chinese Medicine was found.\",\n    \"potential_intermediary_B\": [\n      \"Nanjing University Overseas Chinese Federation (南京大学侨联)\",\n      \"Nanjing Municipal Overseas Chinese Federation (南京市侨联)\"\n    ],\n    \"sources\": [\n      \"https://news.nju.edu.cn/zh-CN/news/sp/20220607/i114518.html\",\n      \"https://www.js-health.com.cn/sy/yydt/202202/t20220223_78631.html\",\n      \"https://www.njupthospital.com.cn/2023/0908/c1000a241935/page.htm\",\n      \"https://www.qiaolian.org/gq動態/2022/06-03/138859.shtml\",\n      \"https://jsql.org.cn/nanjing/hdly/202206/t20220606_75796.html\",\n      \"http://www.js.gov.cn/art/2022/6/7/art_4865_10472719.html\"\n    ]\n  }\n]\n```"
+              }
+            ],
+            "role": "model"
+          },
+          "finishReason": "STOP",
+          "index": 0,
+          "groundingMetadata": {
+            "searchEntryPoint": {
+              "renderedContent": "<style>\n.container {\n  align-items: center;\n  border-radius: 8px;\n  display: flex;\n  font-family: Google Sans, Roboto, sans-serif;\n  font-size: 14px;\n  line-height: 20px;\n  padding: 8px 12px;\n}\n.chip {\n  display: inline-block;\n  border: solid 1px;\n  border-radius: 16px;\n  min-width: 14px;\n  padding: 5px 16px;\n  text-align: center;\n  user-select: none;\n  margin: 0 8px;\n  -webkit-tap-highlight-color: transparent;\n}\n.carousel {\n  overflow: auto;\n  scrollbar-width: none;\n  white-space: nowrap;\n  margin-right: -12px;\n}\n.headline {\n  display: flex;\n  margin-right: 4px;\n}\n.gradient-container {\n  position: relative;\n}\n.gradient {\n  position: absolute;\n  transform: translate(3px, -9px);\n  height: 36px;\n  width: 9px;\n}\n@media (prefers-color-scheme: light) {\n  .container {\n    background-color: #fafafa;\n    box-shadow: 0 0 0 1px #0000000f;\n  }\n  .headline-label {\n    color: #1f1f1f;\n  }\n  .chip {\n    background-color: #ffffff;\n    border-color: #d2d2d2;\n    color: #5e5e5e;\n    text-decoration: none;\n  }\n  .chip:hover {\n    background-color: #f2f2f2;\n  }\n  .chip:focus {\n    background-color: #f2f2f2;\n  }\n  .chip:active {\n    background-color: #d8d8d8;\n    border-color: #b6b6b6;\n  }\n  .logo-dark {\n    display: none;\n  }\n  .gradient {\n    background: linear-gradient(90deg, #fafafa 15%, #fafafa00 100%);\n  }\n}\n@media (prefers-color-scheme: dark) {\n  .container {\n    background-color: #1f1f1f;\n    box-shadow: 0 0 0 1px #ffffff26;\n  }\n  .headline-label {\n    color: #fff;\n  }\n  .chip {\n    background-color: #2c2c2c;\n    border-color: #3c4043;\n    color: #fff;\n    text-decoration: none;\n  }\n  .chip:hover {\n    background-color: #353536;\n  }\n  .chip:focus {\n    background-color: #353536;\n  }\n  .chip:active {\n    background-color: #464849;\n    border-color: #53575b;\n  }\n  .logo-light {\n    display: none;\n  }\n  .gradient {\n    background: linear-gradient(90deg, #1f1f1f 15%, #1f1f1f00 100%);\n  }\n}\n</style>\n<div class=\"container\">\n  <div class=\"headline\">\n    <svg class=\"logo-light\" width=\"18\" height=\"18\" viewBox=\"9 9 35 35\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n      <path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M42.8622 27.0064C42.8622 25.7839 42.7525 24.6084 42.5487 23.4799H26.3109V30.1568H35.5897C35.1821 32.3041 33.9596 34.1222 32.1258 35.3448V39.6864H37.7213C40.9814 36.677 42.8622 32.2571 42.8622 27.0064V27.0064Z\" fill=\"#4285F4\"/>\n      <path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M26.3109 43.8555C30.9659 43.8555 34.8687 42.3195 37.7213 39.6863L32.1258 35.3447C30.5898 36.3792 28.6306 37.0061 26.3109 37.0061C21.8282 37.0061 18.0195 33.9811 16.6559 29.906H10.9194V34.3573C13.7563 39.9841 19.5712 43.8555 26.3109 43.8555V43.8555Z\" fill=\"#34A853\"/>\n      <path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M16.6559 29.8904C16.3111 28.8559 16.1074 27.7588 16.1074 26.6146C16.1074 25.4704 16.3111 24.3733 16.6559 23.3388V18.8875H10.9194C9.74388 21.2072 9.06992 23.8247 9.06992 26.6146C9.06992 29.4045 9.74388 32.022 10.9194 34.3417L15.3864 30.8621L16.6559 29.8904V29.8904Z\" fill=\"#FBBC05\"/>\n      <path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M26.3109 16.2386C28.85 16.2386 31.107 17.1164 32.9095 18.8091L37.8466 13.8719C34.853 11.082 30.9659 9.3736 26.3109 9.3736C19.5712 9.3736 13.7563 13.245 10.9194 18.8875L16.6559 23.3388C18.0195 19.2636 21.8282 16.2386 26.3109 16.2386V16.2386Z\" fill=\"#EA4335\"/>\n    </svg>\n    <svg class=\"logo-dark\" width=\"18\" height=\"18\" viewBox=\"0 0 48 48\" xmlns=\"http://www.w3.org/2000/svg\">\n      <circle cx=\"24\" cy=\"23\" fill=\"#FFF\" r=\"22\"/>\n      <path d=\"M33.76 34.26c2.75-2.56 4.49-6.37 4.49-11.26 0-.89-.08-1.84-.29-3H24.01v5.99h8.03c-.4 2.02-1.5 3.56-3.07 4.56v.75l3.91 2.97h.88z\" fill=\"#4285F4\"/>\n      <path d=\"M15.58 25.77A8.845 8.845 0 0 0 24 31.86c1.92 0 3.62-.46 4.97-1.31l4.79 3.71C31.14 36.7 27.65 38 24 38c-5.93 0-11.01-3.4-13.45-8.36l.17-1.01 4.06-2.85h.8z\" fill=\"#34A853\"/>\n      <path d=\"M15.59 20.21a8.864 8.864 0 0 0 0 5.58l-5.03 3.86c-.98-2-1.53-4.25-1.53-6.64 0-2.39.55-4.64 1.53-6.64l1-.22 3.81 2.98.22 1.08z\" fill=\"#FBBC05\"/>\n      <path d=\"M24 14.14c2.11 0 4.02.75 5.52 1.98l4.36-4.36C31.22 9.43 27.81 8 24 8c-5.93 0-11.01 3.4-13.45 8.36l5.03 3.85A8.86 8.86 0 0 1 24 14.14z\" fill=\"#EA4335\"/>\n    </svg>\n    <div class=\"gradient-container\"><div class=\"gradient\"></div></div>\n  </div>\n  <div class=\"carousel\">\n    <a class=\"chip\" href=\"https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFX6PhWaMDCr_lmhU3B5vkOXoAN8dHm_N7_ZVWU-2FSERwknHwypW2aII3mYwXo0PRqwndYuWmWH5sx5U7bNsTCGcWxAe97Q-bW4lxDDOO0mDFHorQXsIV9NE65ysVc98TcPUZnlMbB7HzYpd0x36TltcU51h3XMow5DjM1ELheQ26OobSaSxP4R7EA4G5Snad-V3KjwDWL44Rz-t_cnR71n9rYtNbtJaiRtReSAXo-o9P5UamEllJArMFcpd0IKsD1A7MSZ8-7RqW83SRXM3H2L6PcPHpXhg1Su2f1_WFY8XWm1bwOQWV2YRMxHhds7IQbZdBqsod5ILeB7oXheU1jQSZuZuUYTjvzZ1Smkc4WDO2iXHEVqUDa5asdfdHxGL6GCw==\">南京大学侨联 &quot;江苏省中医院&quot; &quot;中医惠侨&quot;</a>\n    <a class=\"chip\" href=\"https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFV-EZCYgvYWmJ7eRbFfmh3vB0FzvGw7H5oOqJD71ovcPhUCuJir1AuaT0T5rq5X4T5BPMc3OtnzyByEe6HyZxMagy4IfCxVbzb7GAhsSSD_CbTOgNeMZC7AiISfUx291yc88rVG5fgt7i9Q8c5gYl8qTdT02XBlPjsJxX6KTF_FV2gIzkyzhncOkOT-_fqB5J0ALZlqBenxxstEL8OGrT-G8wJxnqXOureHmOfAlOQR_x6el9Qljz4T1Qp2o_X3Aji-ijjXalI6bWpldIDQTkOB4SqiSf9fYxFyruC0zv5sHBI7KC7eRE-zgeggEMlJZHOM501vZCWkpJ5d8l0urTvK_ydst9keoS3wA9H3RNxY74TuZ17imMfZr7oTztLYxpJG7Q0Feyvn-JPG2WGGONHzCjSAjvuVM1l6eDB2HCwoSh_ZicGV7genEmfHZ44_-vj984EyOFv8_UMyx0EcJlltNzocZsaFXxcl4Tia_VVFL9Rc5xu2jZFkU74EspLHtBdTQ==\">&quot;南京大学&quot; &quot;江苏省中医院紫东院区&quot; &quot;科教人才健康服务合作协议&quot;</a>\n    <a class=\"chip\" href=\"https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE2_k3Dloehvbh1fNapQj-HXub6Tl7n5qpNKXjN9LCMTrLLBOV7rhNgdn7bzMjxlFVurZOb2zPpDkeych0bzY7p8yLZjzg-lBdovOR5XW3Om-_7NLQEF-p_T8u7Gyi5JRnqd2FW-jjeU6jERzgBRC7Y06kOBVwdPa12uhtytvuWjGLN6Witx6I7gmI3A51RoqGNc3yl1fNdENuTg2tvkw8nrQKW4F-iRmvZ9-5HFHHgYUW8qXxQXgW__2JjTa8y7n7Xcz1WyM6CrvbKxAYA-mbsosp9txrQZRFYunTXbhYB3JEc6iX6qeotB_54hnJUhGPME7b8BC3ambOtL_9a3X6e4Xv9RBKz1APGUMIMzWtnX0loQXQ=\">&quot;南京大学&quot; AND &quot;江苏省中医院&quot; 合作协议</a>\n    <a class=\"chip\" href=\"https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQG3bSApz_FtBDI-9wyV9r-dRKI4LVx5IzOaflOyKqKeI7CCsXx4UVq-BlJrL3y7Q82_KoKJSr1aRi1pTh4fltIMYWmXAb_GXBxJkwUtx5bc5NEvooiMu8yJlUio12CMk-_2ZUsPoCPzezsyLma6GUCVZoQC8Q4dxqqalqA7BLi3rjBuzElEKx0VIW0sC1bBZZ3rDa2Em2CMAyca-QXZQUaQFiK5qtzD0AEp16ppjYtRLtrKjDwjxBQNUoeZJ977xDn_gP34H7iEM9b6XdTh7CFrJ48nGT1jBTDY-j0bc2YEWQ==\">&quot;Nanjing University&quot; AND &quot;Jiangsu Provincial Hospital of Chinese Medicine&quot; agreement</a>\n  </div>\n</div>\n"
+            },
+            "groundingChunks": [
+              {
+                "web": {
+                  "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE8s3kNiVucJPDc0AsRQ6o7KjZY_rbgSx9vkJjS1AjgJpIS_as4fJgnKuD-NXD7j_zaA4bOPEasmWAY-fUfrEWwM-o2zbalUKdQWJM51zBoshRAIgsiKzc9vryZFRsfJMk60-KVzO05bMQiRsdStsALTpa2hg==",
+                  "title": "njupt.edu.cn"
+                }
+              },
+              {
+                "web": {
+                  "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHIDTEQcLPecAosplH6vU5S7WzLkAd9CgiAfe7SsW1zmVPf9HI6z_x-UNYajzu26zNgpOF-no_qKQ8wTiKQxy5ozg2bqCJ0-IaAWRrngndVNucruKV1KhcHSPiQEv_ZLtoKpA6Xegmzlq0d-sD_k6qcaRqy9YT2yD38jYE=",
+                  "title": "jschina.com.cn"
+                }
+              },
+              {
+                "web": {
+                  "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHAogjIDUF7wE9qLay0zui_7r3iAvbK0Gbnv7hDXiuPgpIqg2o5EK5UPDoA2SJjOSV0rGpx8DDMdljnxDr5BsaT7St3FBnS-9VTj3kfLcP5-6CcJczIQzhUr15mikGY1YON1N-m93o=",
+                  "title": "nju.edu.cn"
+                }
+              },
+              {
+                "web": {
+                  "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQH3ZMESgHULQWj4bayCrH3CV9uVVYiQdUka8VCMrNcCv9IGvzPEUrXT-t9f3pyY9gCkgO_S-ZEoJWWbq2diLReqccHtbth1B3pY7TBaU2Qs57MFCYgwkQj7a7r6lDrUP3-eaeH8UXR6xyFnSl0aFVEKxZTGDkbXPfIq",
+                  "title": "chinaql.org"
+                }
+              },
+              {
+                "web": {
+                  "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGGT5XN9APIJe2KqFRUsqnXejZmf5jeP7Hd4Xn-vr-QVhwway2sr3KN34F61fQgD4PY1NGpqkI0K5xKRAjvdWRHglj3PVLVLQAvj_CjkJGagTzk1o1YH1w8Z_KlDb3tjCyXATEKsa205FbV_UzR6oWWGuHhjn8JONXB-Q==",
+                  "title": "jsql.cn"
+                }
+              },
+              {
+                "web": {
+                  "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFQcpi3vN6xh5IfBNhfSVqv5VArIKEZoW9QRWJ0rUh1dIov53JmWskJrgTO_qZyhU5k9ToQtsh5LZVrC8kYvz5xROb88L-ypIc-tMBf2Sf1gvwF5RF9KWuO26k5gDgDhFQnRRQp16n0cy33a_A=",
+                  "title": "nju.edu.cn"
+                }
+              },
+              {
+                "web": {
+                  "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHFU39mppAGF2u6QkGjYppsVXwjj7Uk2-rvIgg3B0JMbNdNHCAldA9-WSC6SF4F4qvMlMdOk4rzh0vGamOjh5amjYQ5VbjMMpyYqFGZbYqDZ4cH1dIfb6kwDIxsIBSKaRs1zwIf_eaZFBNph6AzMJlJX1E1",
+                  "title": "rmzxw.com.cn"
+                }
+              }
+            ],
+            "groundingSupports": [
+              {
+                "segment": {
+                  "startIndex": 479,
+                  "endIndex": 731,
+                  "text": "First, in February 2022, Nanjing University was one of several universities that signed a \\\"science and education talent health service cooperation agreement\\\" with the hospital's new Zidong campus to provide healthcare services to university personnel"
+                },
+                "groundingChunkIndices": [
+                  0,
+                  1
+                ]
+              },
+              {
+                "segment": {
+                  "startIndex": 733,
+                  "endIndex": 957,
+                  "text": "Second, in June 2022, the Nanjing University Overseas Chinese Federation (南京大学侨联) co-organized a free health clinic event where medical staff from Jiangsu Provincial Hospital of Chinese Medicine provided services"
+                },
+                "groundingChunkIndices": [
+                  2,
+                  3,
+                  4,
+                  5,
+                  6
+                ]
+              }
+            ],
+            "webSearchQueries": [
+              "\"Nanjing University\" \"Jiangsu Provincial Hospital of Chinese Medicine\" cooperation",
+              "\"南京大学\" \"江苏省中医院\" 合作",
+              "\"南京大学\" \"江苏省中医院\" 附属医院",
+              "\"南京大学\" \"江苏省中医院\" 教学医院",
+              "南京大学医学院 江苏省中医院",
+              "Nanjing University School of Medicine \"Jiangsu Provincial Hospital of Chinese Medicine\"",
+              "\"南京大学\" AND \"江苏省中医院\" 合作协议",
+              "\"Nanjing University\" AND \"Jiangsu Provincial Hospital of Chinese Medicine\" agreement",
+              "\"南京大学\" \"江苏省中医院紫东院区\" \"科教人才健康服务合作协议\"",
+              "南京大学侨联 \"江苏省中医院\" \"中医惠侨\""
+            ]
+          }
+        }
+      ],
+      "usageMetadata": {
+        "promptTokenCount": 1027,
+        "candidatesTokenCount": 727,
+        "totalTokenCount": 6419,
+        "cachedContentTokenCount": 657,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 1027
+          }
+        ],
+        "cacheTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 657
+          }
+        ],
+        "toolUsePromptTokenCount": 3429,
+        "toolUsePromptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 3429
+          }
+        ],
+        "thoughtsTokenCount": 1236
+      },
+      "modelVersion": "gemini-2.5-pro",
+      "responseId": "RLcYaZL_CouUg8UPkfupgAs"
+    }
+  },
+  "executionTime": 24706
+}

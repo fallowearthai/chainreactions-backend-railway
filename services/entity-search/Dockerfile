@@ -39,7 +39,7 @@ HEALTHCHECK --interval=300s --timeout=15s --start-period=60s --retries=3 \
   CMD node -e "const http = require('http'); \
     const options = { \
       hostname: 'localhost', \
-      port: process.env.PORT || 3002, \
+      port: process.env.PORT || 3003, \
       path: '/api/health', \
       timeout: 5000, \
       headers: { 'User-Agent': 'Docker-Health-Check/1.0' } \
@@ -59,7 +59,7 @@ HEALTHCHECK --interval=300s --timeout=15s --start-period=60s --retries=3 \
     req.end();"
 
 # Expose port
-EXPOSE 3002
+EXPOSE 3003
 
 # Start the application
 CMD ["npm", "start"]

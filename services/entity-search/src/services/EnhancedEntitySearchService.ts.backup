@@ -1,0 +1,306 @@
+import axios from 'axios';
+import { EnhancedEntitySearchRequest, EnhancedEntitySearchResponse, BasicCompanyInfo } from '../types/enhanced-types';
+
+/**
+ * Enhanced Entity Search Service (Simplified)
+ * 专注于基础公司信息搜索，使用 Gemini API
+ *
+ * 核心功能:
+ * 1. 基础公司信息搜索
+ * 专注于收集高质量的工商注册信息、官方网站数据、行业分类等基础企业信息
+ */
+
+export class EnhancedEntitySearchService {
+  private apiKey: string;
+  private geminiApiUrl: string;
+
+  constructor() {
+    this.apiKey = process.env.GEMINI_API_KEY || '';
+    this.geminiApiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+
+    if (!this.apiKey) {
+      console.warn('⚠️ GEMINI_API_KEY not configured.');
+    }
+  }
+
+  /**
+   * Main entry point: Enhanced entity search (simplified - basic info only)
+   */
+  async searchEntity(request: EnhancedEntitySearchRequest): Promise<EnhancedEntitySearchResponse> {
+    const startTime = Date.now();
+
+    console.log(`\n${'='.repeat(70)}`);
+    console.log(`🔍 Company Information Search: ${request.company_name}`);
+    console.log(`📍 Location: ${request.location || 'Not specified'}`);
+    console.log(`${'='.repeat(70)}\n`);
+
+    try {
+      let basicInfo: BasicCompanyInfo | undefined;
+      let totalSources = 0;
+      let totalSearchQueries = 0;
+      let apiCallsCount = 0;
+
+      // Basic company information search
+      console.log('📋 Fetching basic company information...');
+      const basicInfoResult = await this.getBasicCompanyInfo(
+        request.company_name,
+        request.location
+      );
+
+      if (basicInfoResult.success && basicInfoResult.data) {
+        basicInfo = basicInfoResult.data;
+        totalSources += basicInfoResult.data.sources?.length || 0;
+        totalSearchQueries += basicInfoResult.data.search_queries?.length || 0;
+        apiCallsCount++;
+        console.log(`✅ Basic info retrieved (${totalSources} sources)\n`);
+      } else {
+        console.log(`⚠️  Basic info retrieval failed: ${basicInfoResult.error}\n`);
+      }
+
+      const duration = Date.now() - startTime;
+
+      console.log(`\n${'='.repeat(70)}`);
+      console.log(`✅ Search completed in ${(duration / 1000).toFixed(2)}s`);
+      console.log(`📊 Total sources: ${totalSources}`);
+      console.log(`🔎 Total queries: ${totalSearchQueries}`);
+      console.log(`📡 API calls: ${apiCallsCount}`);
+      console.log(`${'='.repeat(70)}\n`);
+
+      return {
+        success: true,
+        company: request.company_name,
+        location: request.location,
+        basic_info: basicInfo,
+        metadata: {
+          search_duration_ms: duration,
+          total_sources: totalSources,
+          search_queries_executed: totalSearchQueries,
+          api_calls_made: apiCallsCount
+        }
+      };
+
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      console.error(`❌ Company search failed after ${duration}ms:`, error.message);
+
+      return {
+        success: false,
+        company: request.company_name,
+        location: request.location,
+        error: error.message,
+        metadata: {
+          search_duration_ms: duration,
+          total_sources: 0,
+          search_queries_executed: 0,
+          api_calls_made: 0
+        }
+      };
+    }
+  }
+
+  /**
+   * Get basic company information using Gemini API
+   */
+  private async getBasicCompanyInfo(
+    companyName: string,
+    location?: string
+  ): Promise<{
+    success: boolean;
+    data?: BasicCompanyInfo & { sources?: any[]; search_queries?: string[] };
+    error?: string;
+  }> {
+    const systemPrompt = `You are a professional business intelligence analyst. Provide comprehensive company information in JSON format.
+
+Focus on collecting accurate, verified information:
+- Official registered name and English name
+- Complete headquarters address
+- Primary business sectors and industry classification
+- Company description and business activities
+- Known previous names or rebranding history
+- Official website URL
+- Founded date and establishment information
+- Company type (e.g., public, private, subsidiary)
+- Employee count or company size
+
+Return structured JSON format:
+{
+  "name": "Official registered name in native language",
+  "english_name": "English name if available",
+  "headquarters": "Complete headquarters address with country",
+  "sectors": ["Primary sector", "Secondary sector if applicable"],
+  "description": "Comprehensive business description",
+  "past_names": ["Previous name 1", "Previous name 2"],
+  "website": "Official website URL",
+  "founded_date": "YYYY or MM/YYYY format",
+  "company_type": "e.g., Public company, Private company, Subsidiary",
+  "employees": "Approximate employee count or size range"
+}
+
+CRITICAL REQUIREMENTS:
+1. Ensure all information is accurate and from authoritative sources
+2. Use official company registration data when available
+3. Include specific address details for headquarters
+4. List all relevant business sectors/industries
+5. Provide meaningful business description
+6. Do NOT include sources array - handled automatically via grounding metadata`;
+
+    const userPrompt = `Company: ${companyName}${location ? `\nLocation: ${location}` : ''}
+
+Please provide comprehensive company information in the specified JSON format.
+
+Include all available details about the company's registration, business activities, sectors, and corporate structure.`;
+
+    try {
+      const response = await this.callGeminiAPI(systemPrompt, userPrompt);
+
+      const textContent = this.extractTextFromResponse(response);
+      if (!textContent) {
+        return { success: false, error: 'No text content in response' };
+      }
+
+      const parsed = this.parseJsonResponse(textContent);
+      if (!parsed) {
+        return { success: false, error: 'Failed to parse JSON response' };
+      }
+
+      // Extract grounding metadata
+      const groundingMetadata = this.extractGroundingMetadata(response);
+      const sources = this.processGroundingChunks(groundingMetadata.grounding_chunks);
+
+      return {
+        success: true,
+        data: {
+          ...parsed,
+          sources,
+          search_queries: groundingMetadata.web_search_queries
+        }
+      };
+
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ==================== Gemini API Helper Methods ====================
+
+  private async callGeminiAPI(systemPrompt: string, userPrompt: string): Promise<any> {
+    const requestBody = {
+      system_instruction: {
+        parts: [{ text: systemPrompt }]
+      },
+      contents: [
+        {
+          parts: [{ text: userPrompt }]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 8192,
+        topP: 0.95,
+        topK: 10
+      },
+      tools: [
+        {
+          google_search: {}
+        }
+      ]
+    };
+
+    const response = await axios.post(
+      this.geminiApiUrl,
+      requestBody,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        params: {
+          key: this.apiKey
+        },
+        timeout: 120000
+      }
+    );
+
+    return response.data;
+  }
+
+  private extractTextFromResponse(response: any): string | null {
+    try {
+      const candidates = response?.candidates;
+      if (candidates && Array.isArray(candidates) && candidates.length > 0) {
+        const content = candidates[0]?.content;
+        if (content && content.parts && Array.isArray(content.parts)) {
+          let allText = '';
+          for (const part of content.parts) {
+            if (part && part.text) {
+              allText += part.text;
+            }
+          }
+          return allText || null;
+        }
+      }
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  private parseJsonResponse(text: string): any | null {
+    try {
+      // Extract JSON from markdown
+      const jsonMatch = text.match(/```json\s*\n([\s\S]*?)\n```/);
+      const jsonContent = jsonMatch ? jsonMatch[1].trim() : text;
+
+      // Clean JSON string
+      const cleaned = jsonContent
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+        .replace(/\\\\/g, '\\')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '');
+
+      return JSON.parse(cleaned);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  private extractGroundingMetadata(response: any): any {
+    const candidate = response?.candidates?.[0];
+    const groundingMetadata = candidate?.groundingMetadata;
+
+    return {
+      has_grounding: !!groundingMetadata,
+      grounding_chunks: groundingMetadata?.groundingChunks || [],
+      grounding_supports: groundingMetadata?.groundingSupports || [],
+      web_search_queries: groundingMetadata?.webSearchQueries || []
+    };
+  }
+
+  private processGroundingChunks(chunks: any[]): Array<{
+    title: string;
+    url: string;
+    type: string;
+  }> {
+    return chunks.map((chunk: any) => ({
+      title: chunk.web?.title || 'Unknown',
+      url: chunk.web?.uri || '',
+      type: this.categorizeUrl(chunk.web?.uri || '')
+    }));
+  }
+
+  private categorizeUrl(url: string): string {
+    if (url.includes('.edu')) return 'academic';
+    if (url.includes('.gov')) return 'government';
+    if (url.includes('.org')) return 'organization';
+    if (url.includes('.mil')) return 'military';
+    if (url.includes('news.') || url.includes('.news')) return 'news';
+    return 'commercial';
+  }
+
+  /**
+   * Check if the service is properly configured
+   */
+  isConfigured(): boolean {
+    return !!this.apiKey && this.apiKey.length > 0;
+  }
+}

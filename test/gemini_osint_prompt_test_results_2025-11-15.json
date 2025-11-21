@@ -1,0 +1,54 @@
+{
+  "test_metadata": {
+    "timestamp": "2025-11-15T15:52:00.000Z",
+    "prompt_version": "OSINT_v1.0",
+    "entities_tested": [
+      {
+        "test_id": 1,
+        "entity_a": "南京大学",
+        "entity_b": "江苏省中医院",
+        "location": "China",
+        "processing_time_ms": 16622,
+        "relationship_type": "Indirect",
+        "confidence_level": "medium",
+        "relationship_likelihood": "medium"
+      },
+      {
+        "test_id": 2,
+        "entity_a": "清华大学",
+        "entity_b": "华为技术有限公司",
+        "location": "China",
+        "processing_time_ms": 21157,
+        "relationship_type": "Direct",
+        "confidence_level": "high",
+        "relationship_likelihood": "high"
+      }
+    ]
+  },
+  "prompt_changes_applied": {
+    "system_instruction": "Updated to OSINT Research methodology with deepdiver role",
+    "user_prompt": "Enhanced with multi-language search requirements",
+    "generation_config": {
+      "temperature": 0.2,
+      "maxOutputTokens": 65536,
+      "topP": 0.95,
+      "topK": 10,
+      "thinkingBudget": 12000
+    },
+    "tools": ["googleSearch", "codeExecution"]
+  },
+  "performance_metrics": {
+    "average_processing_time_ms": 18890,
+    "relationship_detection_accuracy": "High - correctly identified direct vs indirect relationships",
+    "multi_language_support": "Enabled - searches in both English and native languages",
+    "search_engine_diversity": "baidu, google, cnki"
+  },
+  "improvements_over_previous_version": {
+    "more_detailed_entity_descriptions": true,
+    "enhanced_search_keywords": true,
+    "better_relationship_analysis": true,
+    "multi_source_search": true,
+    "code_execution_capability": true,
+    "increased_thinking_budget": 12000
+  }
+}

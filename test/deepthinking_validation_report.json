@@ -1,0 +1,45 @@
+{
+  "test_summary": {
+    "test_timestamp": "2025-11-16T14:23:27.051Z",
+    "test_duration_ms": 19285,
+    "api_version": "1.0.0",
+    "response_version": "2.1.0",
+    "success": true,
+    "relationship_found": "Direct"
+  },
+  "key_findings": {
+    "risk_item": "Jiangsu Province Hospital of Chinese Medicine",
+    "institution_A": "Nanjing University",
+    "relationship_type": "Direct"
+  },
+  "sources_validation": {
+    "sources_count": 7,
+    "sources_array_length": 7,
+    "grounding_chunks_count": 7,
+    "sources_populated": true
+  },
+  "evidence_validation": {
+    "key_evidence_count": 3,
+    "grounding_supports_count": 3,
+    "evidence_items_with_sources": 3
+  },
+  "quality_metrics": {
+    "evidence_count": 3,
+    "source_count": 7,
+    "coverage_percentage": 43,
+    "source_quality_score": 0.6
+  },
+  "grounding_metadata": {
+    "has_grounding": true,
+    "grounding_chunks_available": 7,
+    "grounding_supports_available": 3,
+    "web_search_queries_count": 6
+  },
+  "validation_status": {
+    "sources_array_fixed": true,
+    "key_evidence_working": true,
+    "quality_metrics_calculated": true,
+    "grounding_metadata_complete": true,
+    "overall_success": true
+  }
+}

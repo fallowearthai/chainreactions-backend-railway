@@ -148,7 +148,12 @@ export class GeminiService {
     return this.generateContent(contents, systemInstructionObj, tools, generationConfig);
   }
 
-  async verifyCompanyEntity(companyName: string, location: string, targetInstitution?: string): Promise<any> {
+  async verifyCompanyEntity(
+    companyName: string,
+    location: string,
+    targetInstitution?: string,
+    timeRange?: { start?: string; end?: string }
+  ): Promise<any> {
     const companyA = companyName;
     const companyB = targetInstitution || 'Unknown';
 
@@ -163,52 +168,90 @@ export class GeminiService {
       isConverted: effectiveLocation !== location
     });
 
-    // User Prompt from prompt.md
-    const userPrompt = `Analyze the following entity entities and generate an optimized relationship search strategy:
-Entity A Information:
-Entity Name: ${companyA}
-Entity B Information:
-Entity Name: ${companyB}
-Location:${effectiveLocation}`;
+      const userPrompt = `I need you to investigate potential connections between the following institution and risk items: Institution A: ${companyB} Location: ${effectiveLocation} Risk List C: ["${companyA}"]. For each risk item, please analyze any direct or indirect connections, or significant mentions linking them with the institution.IMPORTANT INSTRUCTION:  You MUST search for each item in BOTH English AND the native language of ${effectiveLocation}. For example, if the country is "China", search using both English terms AND Chinese terms. If the country is "Germany", search using both English terms AND German terms. If the country is "Worldwide", search using English terms. ${timeRange && (timeRange.start || timeRange.end) ? `Time Range: ${timeRange.start || 'Not specified'} to ${timeRange.end || 'Not specified'}` : 'Time Range: Not specified'}.`;
 
     console.log(`🔍 Verifying entities: ${companyA} vs ${companyB} in ${effectiveLocation}`);
 
     try {
-      // System Prompt from prompt.md
-      const systemInstruction = {
-        parts: [{ text: `You are an expert business intelligence analyst specializing in entity identification and open-source relationship analysis. Given two entity names and their locations, your task is to: (1) precisely identify and verify each entity, and (2) develop actionable search strategies to uncover any documented connections between them.
+        const systemInstruction = {
+        parts: [{
+          text: `## Prompt: OSINT Research on Institutional Risk Links
 
-CRITICAL: You must return a single JSON object with the exact structure specified below. No additional text, commentary, or multiple JSON objects.
+**Role**
+You are deepdiver, a Research Security Analyst conducting initial open-source intelligence (OSINT) gathering.
 
-REQUIRED OUTPUT FORMAT:
-Return exactly one JSON object with this structure:
+---
+
+### <Goal>
+
+Using web search capabilities, investigate potential connections (e.g., documented cooperation, funding, joint projects, shared personnel, significant mentions linking them) between **Institution A** and each item in **Risk List C** within a specified time range.
+
+Summarize key findings, identify any **potential intermediary organizations (B)** explicitly mentioned as linking **A** and **C**, and provide **source URLs**.
+Treat **each item in List C individually** for investigation.
+
+---
+
+### <Information Gathering Strategy>
+
+For each item in **Risk List C**:
+
+* Formulate search queries combining **Institution A** ({Institution A}, {Location A}) with the specific risk item from List C.
+* If time_range_start and time_range_end are provided, incorporate this date range into your search using Google's before: and after: filters or equivalent. **CRITICAL: When time range is specified, you MUST ONLY include information from within this exact time period. Events, publications, or relationships outside this range MUST BE EXCLUDED entirely from your analysis.**
+
+Analyze results from:
+
+* Reports, news, official sites, academic publications, or other public documents within the timeframe.
+* Focus on **specific, verifiable connections**, not general background info.
+
+Look for evidence of:
+
+* **Direct Links**: Clear collaboration, joint funding, projects, or documented relationships.
+* **Indirect Links**: A and C are both explicitly linked through **intermediary B** in a documented shared outcome.
+* **Significant Mentions**: A and C are jointly discussed in a risk-related context, even without direct cooperation.
+
+For **Potential B**, ensure:
+
+* It is explicitly cited as facilitating the A–C connection.
+* Mere co-membership in alliances or general funding from B is not sufficient unless a specific A–C project via B is described and sourced.
+
+If credible evidence is found:
+
+* Summarize the connection and assess reliability.
+* **Avoid** irrelevant info like rankings or general institution pages unless they directly support a finding.
+
+If no evidence is found:
+
+* Clearly note that after thorough search within the range.
+
+---
+
+### <Input>
+
+* **Institution A**: {Institution A}
+* **Location A**: {Location A}
+* **Risk List C**: {Risk List C}
+* **Time Range Start**: {time_range_start}
+* **Time Range End**: {time_range_end}
+
+---
+
+### <Output Instructions>
+
+Output only a JSON list.
+
+Each item in **Risk List C** must be a separate JSON object containing:
+
+\`\`\`json
 {
-  "entity_a": {
-    "original_name": "string", // Entity A as legally registered name in its local language
-    "description": "string", // Concise summary of core activities and industry, in English
-    "sectors": ["string"] // Array of primary business sectors
-  },
-  "entity_b": {
-    "original_name": "string", // Entity B as legally registered name in its local language
-    "description": "string", // Concise summary of core activities and industry, in English
-    "sectors": ["string"] // Array of primary business sectors
-  },
-  "search_strategy": {
-    "search_keywords": ["string"], // 5-8 targeted keyword combinations, including English and local language search terms
-    "languages": ["string"], // Recommended search languages based on entity locations (e.g. en, zh, ja, ru, fr, de)
-    "country_code": "string", // Target country code for search (e.g. us, cn, jp, ru, fr, de, uk)
-    "source_engine": ["string"], // Intelligently selected search engines based on search content (google, baidu, yandex)
-    "relationship_likelihood": "string" // Must be exactly one of: "high", "medium", "low"
-  }
+  "risk_item": "string",
+  "institution_A": "string",
+  "relationship_type": "string", // One of: "Direct", "Indirect", "Significant Mention", "Unknown", "No Evidence Found"
+  "finding_summary": "string", // CRITICAL: Citations MUST match exactly with sources array positions
+  "potential_intermediary_B": ["string"] | null, // Only if clearly described and cited.
+  "sources": ["string"] // CRITICAL: Must contain exactly the same number of URLs as citations in finding_summary
 }
-
-INSTRUCTIONS:
-1. Entity Verification: Use authoritative sources such as official websites, government registries, reputable business directories, SEC filings, press releases, and partnership announcements to verify each entity.
-2. Search Strategy: Based on verified entity data, analyze institutional type, risk category, geographic focus, and likelihood of relationship to create optimized search strategy.
-3. Geographic Optimization: Tailor search strategies for the specific location, considering cultural and linguistic context.
-4. Quality Assurance: Ensure all information is up-to-date and accurate.
-
-CRITICAL: Return ONLY the JSON object. No additional text, explanations, or commentary.` }]
+\`\`\``
+        }]
       };
 
       const startTime = Date.now();
@@ -217,21 +260,134 @@ CRITICAL: Return ONLY the JSON object. No additional text, explanations, or comm
       const response = await this.generateContent(
         [{ role: 'user', parts: [{ text: userPrompt }] }],
         systemInstruction,
-        [{ googleSearch: {} }],
+        [
         {
-          temperature: 0.1,
-          maxOutputTokens: 4096,
-          thinkingConfig: {
-            thinkingBudget: 10000
-          }
+          codeExecution: {}
+        },
+        {
+          googleSearch: {}
         }
+      ],
+        {
+        "thinkingConfig": {
+          "thinkingBudget": 12000
+        },
+        "temperature": 0.2,
+        "maxOutputTokens": 65536,
+        "topP": 0.95,
+        "topK": 10
+      }
       );
 
       const elapsedTime = Date.now() - startTime;
       console.log(`✅ Gemini API responded in ${elapsedTime}ms`);
 
-      const resultText = response.candidates?.[0]?.content?.parts?.[0]?.text;
+      // Save raw Gemini response for analysis (same as GeminiNormalSearchService)
+      const fs = require('fs');
+      const path = require('path');
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const rawResponsePath = path.join('/Users/kanbei/Code/chainreactions_backend/test', `gemini_raw_response_${timestamp}.json`);
+
+      try {
+        // Create the test directory if it doesn't exist
+        if (!fs.existsSync('/Users/kanbei/Code/chainreactions_backend/test')) {
+          fs.mkdirSync('/Users/kanbei/Code/chainreactions_backend/test', { recursive: true });
+        }
+
+        fs.writeFileSync(rawResponsePath, JSON.stringify({
+          timestamp: new Date().toISOString(),
+          request: {
+            url: this.generateContent.toString().includes('generativelanguage.googleapis.com') ? 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent' : 'Unknown',
+            requestBody: {
+              systemInstruction: systemInstruction,
+              contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+              generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 65536,
+                topP: 0.95,
+                topK: 10
+              },
+              tools: [
+                {
+                  codeExecution: {}
+                },
+                {
+                  googleSearch: {}
+                }
+              ]
+            },
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            params: {
+              key: `${this.apiKey ? this.apiKey.substring(0, 20) : 'ENV_VAR'}...`
+            },
+            timeout: 180000,
+            model: process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+          },
+          response: {
+            status: 200,
+            statusText: 'OK',
+            data: response
+          },
+          executionTime: elapsedTime,
+          service: 'GeminiService (Standard Search)'
+        }, null, 2));
+        console.log(`📝 Raw Gemini response saved to: ${rawResponsePath}`);
+      } catch (error) {
+        console.error('Failed to save raw response:', error);
+      }
+
+      // Log complete raw response structure for debugging
+      console.log('=== GEMINI API RAW RESPONSE STRUCTURE ===');
+      console.log('Response candidates:', response.candidates);
+      console.log('Candidates length:', response.candidates?.length || 0);
+      console.log('Usage metadata:', response.usageMetadata);
+      console.log('Model version:', response.modelVersion);
+
+      if (response.candidates && response.candidates.length > 0) {
+        console.log('First candidate structure:', {
+          content: response.candidates[0]?.content,
+          finishReason: response.candidates[0]?.finishReason,
+          index: response.candidates[0]?.index
+        });
+
+        if (response.candidates[0]?.content?.parts) {
+          console.log('Parts structure:', response.candidates[0].content.parts);
+          console.log('Parts length:', response.candidates[0].content.parts.length);
+
+          // Log each part with details
+          response.candidates[0].content.parts.forEach((part, index) => {
+            console.log(`Part ${index}:`, {
+              hasText: !!part.text,
+              textLength: part.text?.length || 0,
+              textPreview: part.text?.substring(0, 100) || 'NO TEXT',
+              partKeys: Object.keys(part)
+            });
+          });
+        }
+      }
+      console.log('=== END RAW RESPONSE STRUCTURE ===');
+
+      // Find the part that contains text content (gemini-2.5-flash may return multiple parts)
+      let resultText = null;
+
+      if (response.candidates?.[0]?.content?.parts) {
+        const parts = response.candidates[0].content.parts;
+        // Look for the part that contains text
+        const textPart = parts.find(part => part.text && part.text.trim().length > 0);
+        resultText = textPart?.text || null;
+      }
       if (!resultText) {
+        console.error('❌ FAILED TO EXTRACT TEXT FROM RESPONSE');
+        console.error('Response structure analysis:');
+        console.error('- Has candidates:', !!response.candidates);
+        console.error('- Candidates length:', response.candidates?.length || 0);
+        if (response.candidates?.length > 0) {
+          console.error('- First candidate has content:', !!response.candidates[0]?.content);
+          console.error('- First candidate has parts:', !!response.candidates[0]?.content?.parts);
+          console.error('- First candidate parts length:', response.candidates[0]?.content?.parts?.length || 0);
+        }
         throw new Error('No response text from Gemini API');
       }
 

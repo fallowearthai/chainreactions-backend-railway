@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import { SupabaseService } from '@/services/SupabaseService';
-import { SupabaseAuthService } from '@/services/SupabaseAuthService';
-import { AuthMiddleware } from '@/middleware/auth';
+import { SupabaseService } from '../services/SupabaseService';
+import { SupabaseAuthService } from '../services/SupabaseAuthService';
+import { AuthMiddleware } from '../middleware/auth';
 import {
   UserProfile,
   CreateUserRequest,
@@ -14,7 +14,7 @@ import {
   BulkOperationResult,
   APIResponse,
   ErrorResponse
-} from '@/types/UserTypes';
+} from '../types/UserTypes';
 
 export class UserController {
   private supabaseService: SupabaseService;
@@ -388,6 +388,661 @@ export class UserController {
       const errorResponse: ErrorResponse = {
         success: false,
         error: 'Failed to perform bulk operation',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+        path: req.path
+      };
+      res.status(500).json(errorResponse);
+    }
+  }
+
+  // Validate user credits before performing operations
+  async validateCredits(req: Request, res: Response): Promise<void> {
+    try {
+      const { transactionType, amount } = req.body;
+      const securityContext = AuthMiddleware.extractUser(req);
+      const userId = securityContext.user.id;
+
+      // Call the database function to validate credits
+      const { data, error } = await this.supabaseService.getClient()
+        .rpc('get_user_credit_info', {
+          p_user_id: userId
+        });
+
+      if (error) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Failed to validate credits',
+          details: error.message,
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(500).json(errorResponse);
+        return;
+      }
+
+      const creditInfo = data;
+      let hasEnoughCredits = false;
+
+      // Check if the response was successful
+      if (!creditInfo?.success) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Failed to validate credits',
+          details: creditInfo?.error || 'Unknown error',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(500).json(errorResponse);
+        return;
+      }
+
+      // Parse credit data from the new function response
+      const credits = creditInfo?.credits;
+      const accountType = creditInfo?.account_type;
+
+      if (accountType === 'admin') {
+        hasEnoughCredits = true; // Admin has unlimited credits
+      } else {
+        const creditKey = transactionType === 'long_search' || transactionType === 'deepthinking_search'
+          ? 'dataset_search'
+          : 'ordinary_search';
+        const creditData = credits?.[creditKey];
+        const availableCredits = creditData?.remaining;
+
+        // Check for expired trial
+        if (accountType === 'free_trial' && creditInfo?.trial_info?.expired) {
+          hasEnoughCredits = false;
+        } else {
+          hasEnoughCredits = creditData?.unlimited || availableCredits >= (amount || 1);
+        }
+      }
+
+      const response: APIResponse = {
+        success: true,
+        data: {
+          hasEnoughCredits,
+          creditInfo: {
+            account_type: accountType,
+            ordinary_search: credits?.ordinary_search,
+            dataset_search: credits?.dataset_search,
+            trial_info: creditInfo?.trial_info,
+            reset_date: creditInfo?.reset_date
+          }
+        },
+        timestamp: new Date().toISOString()
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Validate credits error:', error);
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: 'Failed to validate credits',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+        path: req.path
+      };
+      res.status(500).json(errorResponse);
+    }
+  }
+
+  // Deduct user credits (called by other microservices)
+  async deductCredits(req: Request, res: Response): Promise<void> {
+    try {
+      const { creditType, amount, searchDetails } = req.body;
+      const securityContext = AuthMiddleware.extractUser(req);
+      const userId = securityContext.user.id;
+
+      // Call the database function to deduct credits
+      const { data, error } = await this.supabaseService.getClient()
+        .rpc('deduct_user_credits_v2', {
+          p_user_id: userId,
+          p_credit_type: creditType,
+          p_credits_to_deduct: amount || 1,
+          p_search_details: searchDetails || null
+        });
+
+      if (error) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Failed to deduct credits',
+          details: error.message,
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(500).json(errorResponse);
+        return;
+      }
+
+      // Parse the JSONB result from the new function
+      const result = typeof data === 'string' ? JSON.parse(data) : data;
+
+      const response: APIResponse = {
+        success: result?.success || false,
+        data: {
+          deducted: result?.success || false,
+          transaction_id: result?.transaction_id,
+          credits_deducted: result?.credits_deducted,
+          new_credits: result?.new_credits,
+          unlimited: result?.unlimited || false
+        },
+        message: result?.success ? 'Credits deducted successfully' : result?.error || 'Credit deduction failed',
+        timestamp: new Date().toISOString()
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Deduct credits error:', error);
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: 'Failed to deduct credits',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+        path: req.path
+      };
+      res.status(500).json(errorResponse);
+    }
+  }
+
+  // Reset user credits (admin only)
+  async resetUserCredits(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.params;
+      const { resetType } = req.body;
+
+      // Call the database function to reset credits
+      const { data, error } = await this.supabaseService.getClient()
+        .rpc('reset_user_credits', {
+          user_uuid: userId,
+          reset_type: resetType || 'monthly'
+        });
+
+      if (error) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Failed to reset credits',
+          details: error.message,
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(500).json(errorResponse);
+        return;
+      }
+
+      const response: APIResponse = {
+        success: data === true,
+        data: { reset: data === true },
+        message: data === true ? 'Credits reset successfully' : 'Credit reset failed',
+        timestamp: new Date().toISOString()
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Reset credits error:', error);
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: 'Failed to reset credits',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+        path: req.path
+      };
+      res.status(500).json(errorResponse);
+    }
+  }
+
+  // Generate invitation code (admin only)
+  async generateInvitationCode(req: Request, res: Response): Promise<void> {
+    try {
+      const { expiresDays } = req.body;
+      const securityContext = AuthMiddleware.extractUser(req);
+      const adminId = securityContext.user.id;
+
+      // Call the database function to generate invitation code
+      const { data, error } = await this.supabaseService.getClient()
+        .rpc('generate_invitation_code', {
+          admin_uuid: adminId,
+          expires_days: expiresDays || 30
+        });
+
+      if (error) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Failed to generate invitation code',
+          details: error.message,
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(500).json(errorResponse);
+        return;
+      }
+
+      const response: APIResponse = {
+        success: true,
+        data: { invitationCode: data },
+        message: 'Invitation code generated successfully',
+        timestamp: new Date().toISOString()
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Generate invitation code error:', error);
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: 'Failed to generate invitation code',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+        path: req.path
+      };
+      res.status(500).json(errorResponse);
+    }
+  }
+
+  // Get all invitation codes (admin only)
+  async getInvitationCodes(req: Request, res: Response): Promise<void> {
+    try {
+      const { data, error } = await this.supabaseService.getClient()
+        .from('invitation_codes')
+        .select(`
+          *,
+          creator:profiles!invitation_codes_created_by_fkey(email, display_name),
+          user:profiles!invitation_codes_used_by_fkey(email, display_name)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Failed to fetch invitation codes',
+          details: error.message,
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(500).json(errorResponse);
+        return;
+      }
+
+      const response: APIResponse = {
+        success: true,
+        data: data,
+        timestamp: new Date().toISOString()
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Get invitation codes error:', error);
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: 'Failed to fetch invitation codes',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+        path: req.path
+      };
+      res.status(500).json(errorResponse);
+    }
+  }
+
+  // Validate and use invitation code
+  async useInvitationCode(req: Request, res: Response): Promise<void> {
+    try {
+      const { code } = req.body;
+      const securityContext = AuthMiddleware.extractUser(req);
+      const userId = securityContext.user.id;
+
+      // First check if the invitation code is valid
+      const { data: invitationData, error: fetchError } = await this.supabaseService.getClient()
+        .from('invitation_codes')
+        .select('*')
+        .eq('code', code)
+        .eq('is_active', true)
+        .single();
+
+      if (fetchError || !invitationData) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Invalid invitation code',
+          details: 'The invitation code is not valid or has been deactivated',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(400).json(errorResponse);
+        return;
+      }
+
+      // Check if the invitation code has expired
+      if (new Date(invitationData.expires_at) < new Date()) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Invitation code expired',
+          details: 'The invitation code has expired',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(400).json(errorResponse);
+        return;
+      }
+
+      // Check if the invitation code has reached its usage limit
+      if (invitationData.usage_count >= invitationData.max_uses) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Invitation code fully used',
+          details: 'The invitation code has reached its maximum usage limit',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(400).json(errorResponse);
+        return;
+      }
+
+      // Start a transaction to use the invitation code and upgrade user
+      const { data: updateData, error: updateError } = await this.supabaseService.getClient()
+        .from('user_usage_credits')
+        .update({
+          account_type: 'premium',
+          trial_start_date: null,
+          trial_end_date: null,
+          subscription_start_date: new Date().toISOString(),
+          invitation_code: code,
+          invited_by: invitationData.created_by,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', userId)
+        .select()
+        .single();
+
+      if (updateError) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Failed to upgrade user account',
+          details: updateError.message,
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(500).json(errorResponse);
+        return;
+      }
+
+      // Mark the invitation code as used
+      const { data: updatedInvitation, error: markError } = await this.supabaseService.getClient()
+        .from('invitation_codes')
+        .update({
+          used_by: userId,
+          used_at: new Date().toISOString(),
+          usage_count: invitationData.usage_count + 1,
+          is_active: (invitationData.usage_count + 1) >= invitationData.max_uses ? false : true
+        })
+        .eq('id', invitationData.id)
+        .select()
+        .single();
+
+      if (markError) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Failed to mark invitation code as used',
+          details: markError.message,
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(500).json(errorResponse);
+        return;
+      }
+
+      const response: APIResponse = {
+        success: true,
+        data: {
+          userUpgraded: updateData,
+          invitationUsed: updatedInvitation
+        },
+        message: 'Invitation code used successfully. Account upgraded to premium.',
+        timestamp: new Date().toISOString()
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Use invitation code error:', error);
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: 'Failed to use invitation code',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+        path: req.path
+      };
+      res.status(500).json(errorResponse);
+    }
+  }
+
+  // Monthly credit reset for all subscribed users (admin only)
+  async monthlyCreditReset(req: Request, res: Response): Promise<void> {
+    try {
+      // Call the database function to reset all credits
+      const { data, error } = await this.supabaseService.getClient()
+        .rpc('monthly_credit_reset');
+
+      if (error) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Failed to perform monthly credit reset',
+          details: error.message,
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(500).json(errorResponse);
+        return;
+      }
+
+      const response: APIResponse = {
+        success: true,
+        data: {
+          resetCount: data,
+          lastResetDate: new Date().toISOString()
+        },
+        message: `Monthly credit reset completed for ${data} users`,
+        timestamp: new Date().toISOString()
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Monthly credit reset error:', error);
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: 'Failed to perform monthly credit reset',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+        path: req.path
+      };
+      res.status(500).json(errorResponse);
+    }
+  }
+
+  // Check and expire trials (admin only)
+  async checkAndExpireTrials(req: Request, res: Response): Promise<void> {
+    try {
+      // Call the database function to check and expire trials
+      const { data, error } = await this.supabaseService.getClient()
+        .rpc('check_and_expire_trials');
+
+      if (error) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Failed to check and expire trials',
+          details: error.message,
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(500).json(errorResponse);
+        return;
+      }
+
+      const response: APIResponse = {
+        success: true,
+        data: {
+          expiredCount: data,
+          checkDate: new Date().toISOString()
+        },
+        message: `${data} trials expired and deactivated`,
+        timestamp: new Date().toISOString()
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Check and expire trials error:', error);
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: 'Failed to check and expire trials',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+        path: req.path
+      };
+      res.status(500).json(errorResponse);
+    }
+  }
+
+  // Update user account type (admin only)
+  async updateUserAccountType(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.params;
+      const { accountType, reason } = req.body;
+      const securityContext = AuthMiddleware.extractUser(req);
+      const adminId = securityContext.user.id;
+
+      // Validate account type
+      if (!['free_trial', 'premium', 'admin'].includes(accountType)) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Invalid account type',
+          details: 'Account type must be one of: free_trial, premium, admin',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(400).json(errorResponse);
+        return;
+      }
+
+      // Get current user data to track changes
+      const { data: currentData, error: fetchError } = await this.supabaseService.getClient()
+        .from('user_usage_credits')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (fetchError) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'User not found',
+          details: 'User credits record not found',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(404).json(errorResponse);
+        return;
+      }
+
+      const oldAccountType = currentData.account_type;
+
+      // Prepare update data based on new account type
+      let updateData: any = {
+        account_type: accountType,
+        updated_at: new Date().toISOString()
+      };
+
+      // Handle different account type transitions
+      if (accountType === 'premium') {
+        // Upgrading to premium - reset credits and set subscription start
+        updateData = {
+          ...updateData,
+          ordinary_search_credits: 250,
+          long_search_credits: 100,
+          trial_start_date: null,
+          trial_end_date: null,
+          subscription_start_date: new Date().toISOString(),
+          last_credit_reset: new Date().toISOString()
+        };
+      } else if (accountType === 'admin') {
+        // Upgrading to admin - unlimited credits (null values)
+        updateData = {
+          ...updateData,
+          ordinary_search_credits: null,
+          long_search_credits: null,
+          trial_start_date: null,
+          trial_end_date: null,
+          subscription_start_date: new Date().toISOString()
+        };
+      } else if (accountType === 'free_trial') {
+        // Downgrading to trial - set trial period and limited credits
+        const trialEndDate = new Date();
+        trialEndDate.setDate(trialEndDate.getDate() + 14);
+
+        updateData = {
+          ...updateData,
+          ordinary_search_credits: 50,
+          long_search_credits: 5,
+          trial_start_date: new Date().toISOString(),
+          trial_end_date: trialEndDate.toISOString(),
+          subscription_start_date: null
+        };
+      }
+
+      // Update the user's account type and credits
+      const { data: updatedData, error: updateError } = await this.supabaseService.getClient()
+        .from('user_usage_credits')
+        .update(updateData)
+        .eq('user_id', userId)
+        .select()
+        .single();
+
+      if (updateError) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Failed to update account type',
+          details: updateError.message,
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(500).json(errorResponse);
+        return;
+      }
+
+      // Log the account type change for audit purposes
+      const { error: logError } = await this.supabaseService.getClient()
+        .from('account_type_changes')
+        .insert({
+          user_id: userId,
+          old_account_type: oldAccountType,
+          new_account_type: accountType,
+          changed_by: adminId,
+          change_reason: reason || 'Administrative action',
+          change_date: new Date().toISOString()
+        });
+
+      if (logError) {
+        console.warn('Failed to log account type change:', logError);
+        // Don't fail the operation if logging fails
+      }
+
+      const response: APIResponse = {
+        success: true,
+        data: {
+          userId,
+          oldAccountType,
+          newAccountType: accountType,
+          updatedCredits: {
+            ordinary_search_credits: updatedData.ordinary_search_credits,
+            long_search_credits: updatedData.long_search_credits
+          },
+          changedBy: adminId,
+          changeDate: new Date().toISOString()
+        },
+        message: `User account type successfully changed from ${oldAccountType} to ${accountType}`,
+        timestamp: new Date().toISOString()
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Update user account type error:', error);
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: 'Failed to update account type',
         details: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
         path: req.path

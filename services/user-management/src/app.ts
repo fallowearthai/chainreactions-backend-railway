@@ -193,6 +193,7 @@ app.get('/api/info', (req: Request, res: Response) => {
         'PUT /api/users/profile/:userId': 'Update user profile',
         'POST /api/users/:userId/approve': 'Approve user (admin)',
         'POST /api/users/:userId/deactivate': 'Deactivate user (admin)',
+        'PUT /api/users/:userId/account-type': 'Update user account type (admin)',
         'GET /api/users/:userId/usage': 'Get user usage stats',
         'POST /api/users/:userId/credits': 'Add credits (admin)',
         'POST /api/users/bulk': 'Bulk user operations (admin)'
@@ -204,7 +205,19 @@ app.get('/api/info', (req: Request, res: Response) => {
       creditsManagement: {
         'GET /api/users/:userId/credits': 'Get user credits',
         'POST /api/users/:userId/credits/add': 'Add credits (admin)',
+        'POST /api/credits/validate': 'Validate user credits',
+        'POST /api/credits/deduct': 'Deduct user credits',
+        'POST /api/users/:userId/credits/reset': 'Reset user credits (admin)',
         'POST /api/usage/record': 'Record usage'
+      },
+      invitationManagement: {
+        'POST /api/invitations/generate': 'Generate invitation code (admin)',
+        'GET /api/invitations': 'List all invitation codes (admin)',
+        'POST /api/invitations/use': 'Use invitation code to upgrade account'
+      },
+      systemAdministration: {
+        'POST /api/admin/monthly-reset': 'Perform monthly credit reset (admin)',
+        'POST /api/admin/check-trials': 'Check and expire expired trials (admin)'
       }
     },
     status: 'operational',
@@ -278,6 +291,10 @@ app.post('/api/users/:userId/deactivate', authenticate, requireAdmin, validateUs
   userController.deactivateUser(req, res);
 });
 
+app.put('/api/users/:userId/account-type', authenticate, requireAdmin, validateUserId, (req: Request, res: Response) => {
+  userController.updateUserAccountType(req, res);
+});
+
 // Usage Statistics Routes
 app.get('/api/users/:userId/usage', authenticate, validateUserId, validateGetUsageStats, (req: Request, res: Response) => {
   userController.getUserUsageStats(req, res);
@@ -286,6 +303,40 @@ app.get('/api/users/:userId/usage', authenticate, validateUserId, validateGetUsa
 // Credits Management Routes
 app.post('/api/users/:userId/credits', authenticate, requireAdmin, validateUserId, validateAddCredits, (req: Request, res: Response) => {
   userController.addCredits(req, res);
+});
+
+// Credit Validation Routes
+app.post('/api/credits/validate', authenticate, (req: Request, res: Response) => {
+  userController.validateCredits(req, res);
+});
+
+app.post('/api/credits/deduct', authenticate, (req: Request, res: Response) => {
+  userController.deductCredits(req, res);
+});
+
+app.post('/api/users/:userId/credits/reset', authenticate, requireAdmin, validateUserId, (req: Request, res: Response) => {
+  userController.resetUserCredits(req, res);
+});
+
+app.post('/api/invitations/generate', authenticate, requireAdmin, (req: Request, res: Response) => {
+  userController.generateInvitationCode(req, res);
+});
+
+app.get('/api/invitations', authenticate, requireAdmin, (req: Request, res: Response) => {
+  userController.getInvitationCodes(req, res);
+});
+
+app.post('/api/invitations/use', authenticate, (req: Request, res: Response) => {
+  userController.useInvitationCode(req, res);
+});
+
+// System Administration Routes
+app.post('/api/admin/monthly-reset', authenticate, requireAdmin, (req: Request, res: Response) => {
+  userController.monthlyCreditReset(req, res);
+});
+
+app.post('/api/admin/check-trials', authenticate, requireAdmin, (req: Request, res: Response) => {
+  userController.checkAndExpireTrials(req, res);
 });
 
 // Bulk Operations Routes

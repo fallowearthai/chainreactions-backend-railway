@@ -35,17 +35,19 @@ export class SupabaseService {
       throw new Error('Missing required Supabase configuration');
     }
 
-    // Use Anon Key instead of expired Service Role Key
-    // Note: This works because RLS is disabled on the tables
-    // TODO: Update to new service role key when available
-    const apiKey = supabaseAnonKey; // Force using anon key due to expired service role key
-    const keyType = 'ANON_KEY';
+    // Use Service Role Key for proper RLS authentication
+    const apiKey = supabaseServiceKey || supabaseAnonKey;
+    const keyType = supabaseServiceKey ? 'SERVICE_ROLE_KEY' : 'ANON_KEY';
 
     console.log('🔑 SupabaseService initializing with:', {
       url: supabaseUrl,
       keyType: keyType,
       keyPrefix: apiKey?.substring(0, 20) + '...',
-      usingAnonKey: !supabaseServiceKey
+      usingAnonKey: !supabaseServiceKey,
+      hasServiceKey: !!supabaseServiceKey,
+      hasAnonKey: !!supabaseAnonKey,
+      serviceKeyLength: supabaseServiceKey?.length,
+      anonKeyLength: supabaseAnonKey?.length
     });
 
     this.client = createClient(supabaseUrl, apiKey, {
@@ -105,8 +107,8 @@ export class SupabaseService {
         .from('profiles')
         .select(`
           *,
-          user_usage_credits(*),
-          user_roles(*)
+          user_usage_credits!user_usage_credits_user_id_fkey(*),
+          user_roles!user_roles_user_id_fkey(*)
         `)
         .eq('id', userId)
         .single();
@@ -474,52 +476,56 @@ export class SupabaseService {
     }
   }
 
-  async deductCredits(userId: string, amount: number, reason: string): Promise<CreditTransaction> {
+  async deductCredits(userId: string, amount: number, reason: string, transactionType: 'ordinary_search' | 'long_search' = 'ordinary_search', searchDetails?: any): Promise<CreditTransaction> {
     try {
-      // First, get current credits
-      const currentCredits = await this.getUserCredits(userId);
-      if (!currentCredits) {
-        throw new Error('User credits not found');
-      }
-
-      if (currentCredits.ordinarySearchCredits < amount) {
-        throw new Error('Insufficient credits');
-      }
-
-      // Update credits
-      const updatedCredits = {
-        ordinary_search_credits: currentCredits.ordinarySearchCredits - amount,
-        updated_at: new Date().toISOString()
-      };
-
-      const { error: updateError } = await this.client
-        .from('user_usage_credits')
-        .update(updatedCredits)
-        .eq('user_id', userId);
-
-      if (updateError) {
-        throw new Error(`Failed to update credits: ${updateError.message}`);
-      }
-
-      // Record transaction
+      // Call the enhanced database function to deduct credits
       const { data, error } = await this.client
-        .from('usage_transactions')
-        .insert({
-          user_id: userId,
-          transaction_type: 'ordinary_search',
-          credits_used: amount,
-          remaining_credits: updatedCredits.ordinary_search_credits,
-          search_details: { reason },
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single();
+        .rpc('deduct_user_credits_v2', {
+          p_user_id: userId,
+          p_credit_type: transactionType,
+          p_credits_to_deduct: amount,
+          p_search_details: {
+            reason,
+            service: 'user-management',
+            ...searchDetails
+          }
+        });
 
       if (error) {
-        throw new Error(`Failed to record credit transaction: ${error.message}`);
+        throw new Error(`Failed to deduct credits via RPC: ${error.message}`);
       }
 
-      return data;
+      // Parse the JSONB result from the function
+      const result = typeof data === 'string' ? JSON.parse(data) : data;
+
+      if (!result?.success) {
+        throw new Error(result?.error || 'Credit deduction failed');
+      }
+
+      // Return the transaction record
+      const { data: transactionData, error: fetchError } = await this.client
+        .from('usage_transactions')
+        .select('*')
+        .eq('id', result.transaction_id)
+        .single();
+
+      if (fetchError) {
+        // If we can't fetch the transaction, still return success but log the error
+        console.warn('Failed to fetch transaction record after successful deduction:', fetchError);
+
+        // Return a minimal transaction object
+        return {
+          id: result.transaction_id,
+          userId: userId,
+          transactionType: transactionType,
+          creditsUsed: amount,
+          remainingCredits: result.new_credits,
+          searchDetails: result.search_details || { reason },
+          createdAt: result.created_at
+        } as unknown as CreditTransaction;
+      }
+
+      return transactionData;
     } catch (error) {
       console.error('Deduct credits error:', error);
       throw error;

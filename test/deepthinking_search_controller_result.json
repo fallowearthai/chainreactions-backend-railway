@@ -1,0 +1,48 @@
+{
+  "controller": "DeepThinkingSearchController",
+  "service": "GeminiDeepThinkingService",
+  "model": "gemini-2.5-pro",
+  "processing_time_ms": 29198,
+  "raw_data": [
+    {
+      "risk_item": "Jiangsu Province Hospital of Chinese Medicine",
+      "institution_A": "Nanjing University",
+      "relationship_type": "Direct",
+      "finding_summary": "While Jiangsu Province Hospital of Chinese Medicine is the formally affiliated hospital of Nanjing University of Chinese Medicine (a separate institution), direct, event-based cooperation with Nanjing University was identified within the specified timeframe. On September 7, 2023, Nanjing University and the Zidong campus of Jiangsu Province Hospital of Chinese Medicine signed a 'science, education, talent, and health service cooperation agreement'. This agreement was part of a broader event organized by the Xianlin University Town Management Committee to provide university faculty and staff with dedicated health services and establish a 'green channel' for medical treatment. Additionally, on June 2, 2022, the Nanjing University Overseas Chinese Federation co-organized a 'Traditional Chinese Medicine惠侨' (TCM Benefits for Overseas Chinese) free clinic event for university faculty, staff, and local residents. Medical personnel and health consulting services for the event were provided by Jiangsu Province Hospital of Chinese Medicine.",
+      "potential_intermediary_B": [
+        "Xianlin University Town Management Committee",
+        "Nanjing Municipal Overseas Chinese Federation"
+      ],
+      "sources": [
+        "https://www.njucm.edu.cn/2023/0908/c393a120012/page.htm",
+        "http://www.jsql.cn/hdjl/nj/202206/t20220606_7569107.shtml"
+      ]
+    }
+  ],
+  "formatted_result": {
+    "version": "2.1.0",
+    "success": true,
+    "data": {
+      "risk_item": "Jiangsu Province Hospital of Chinese Medicine",
+      "institution_A": "Nanjing University",
+      "relationship_type": "Direct",
+      "finding_summary": "While Jiangsu Province Hospital of Chinese Medicine is the formally affiliated hospital of Nanjing University of Chinese Medicine (a separate institution), direct, event-based cooperation with Nanjing University was identified within the specified timeframe. On September 7, 2023, Nanjing University and the Zidong campus of Jiangsu Province Hospital of Chinese Medicine signed a 'science, education, talent, and health service cooperation agreement'. This agreement was part of a broader event organized by the Xianlin University Town Management Committee to provide university faculty and staff with dedicated health services and establish a 'green channel' for medical treatment. Additionally, on June 2, 2022, the Nanjing University Overseas Chinese Federation co-organized a 'Traditional Chinese Medicine惠侨' (TCM Benefits for Overseas Chinese) free clinic event for university faculty, staff, and local residents. Medical personnel and health consulting services for the event were provided by Jiangsu Province Hospital of Chinese Medicine.",
+      "potential_intermediary_B": "Xianlin University Town Management Committee, Nanjing Municipal Overseas Chinese Federation",
+      "sources": [],
+      "sources_count": 0,
+      "key_evidence": [],
+      "quality_metrics": {
+        "evidence_count": 0,
+        "source_count": 0,
+        "coverage_percentage": 0
+      }
+    },
+    "metadata": {
+      "timestamp": "2025-11-16T06:29:02.742Z",
+      "processing_time_ms": 29198,
+      "enhanced_mode": false,
+      "api_version": "1.0.0"
+    }
+  },
+  "timestamp": "2025-11-16T06:29:02.742Z"
+}

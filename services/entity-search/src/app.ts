@@ -56,6 +56,10 @@ app.post('/api/entity-search', (req, res) =>
   entitySearchController.handleEntitySearch(req, res)
 );
 
+app.post('/api/entity-search/analyze-keyword', (req, res) =>
+  entitySearchController.analyzeRiskKeyword(req, res)
+);
+
 app.get('/api/health', (req, res) =>
   entitySearchController.healthCheck(req, res)
 );
@@ -104,10 +108,12 @@ app.get('/api', (req, res) => {
     features: {
       basic_search: 'Comprehensive company information via Gemini AI',
       business_intelligence: 'Professional business intelligence gathering',
+      risk_analysis: 'Risk keyword analysis for due diligence and compliance',
       simplified_architecture: 'Focused on high-quality company data only'
     },
     endpoints: {
       entity_search: 'POST /api/entity-search - Enhanced entity search',
+      risk_analysis: 'POST /api/entity-search/analyze-keyword - Risk keyword analysis',
       health: 'GET /api/health - Health check',
       info: 'GET /api/info - Service information'
     },
@@ -144,6 +150,7 @@ if (require.main === module) {
     console.log(`🏥 Health: http://localhost:${PORT}/api/health`);
     console.log(`📊 Info: http://localhost:${PORT}/api/info`);
     console.log(`🔍 Entity Search: POST http://localhost:${PORT}/api/entity-search`);
+    console.log(`⚠️  Risk Analysis: POST http://localhost:${PORT}/api/entity-search/analyze-keyword`);
     console.log('');
     console.log('📋 Configuration:');
     console.log(`   GEMINI_API_KEY: ${process.env.GEMINI_API_KEY ? '✅ Configured' : '❌ Not set'}`);
@@ -152,6 +159,7 @@ if (require.main === module) {
     console.log('✨ Features:');
     console.log('   • Comprehensive company information search via Gemini AI');
     console.log('   • Professional business intelligence gathering');
+    console.log('   • Risk keyword analysis for due diligence and compliance');
     console.log('   • Simplified architecture focused on company data');
     console.log('');
     console.log('✅ Ready to accept requests...');

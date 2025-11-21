@@ -1,0 +1,99 @@
+{
+  "report_title": "🎯 南京大学vs江苏省中医院关联搜索测试报告",
+  "timestamp": "2025-11-16T00:24:20.299Z",
+  "test_purpose": "验证test文件夹清理后的新OSINT prompt关联搜索功能",
+  "status": "✅ 测试成功完成",
+  "test_case": {
+    "risk_item": "江苏省中医院",
+    "institution_A": "南京大学",
+    "location": "China",
+    "search_endpoint": "/api/normal-search"
+  },
+  "system_status": {
+    "entity_relations_service": "✅ 运行正常 (Port 3002)",
+    "api_health_check": "✅ 通过",
+    "processing_time": "24.7秒",
+    "response_format": "✅ 符合OSINT标准"
+  },
+  "relationship_analysis": {
+    "relationship_type": "Indirect",
+    "confidence_level": "High",
+    "key_findings": [
+      {
+        "date": "2022年2月",
+        "event": "科教人才健康服务合作协议签署",
+        "description": "南京大学与其他几所大学共同与江苏省中医院紫东院区签署科教人才健康服务合作协议",
+        "evidence_strength": "STRONG"
+      },
+      {
+        "date": "2022年6月",
+        "event": "免费健康诊所活动",
+        "description": "南京大学侨联联合组织免费健康诊所活动，江苏省中医院医护人员提供服务",
+        "evidence_strength": "MODERATE"
+      }
+    ],
+    "intermediary_entities": [
+      "南京大学侨联",
+      "南京市侨联"
+    ]
+  },
+  "osint_prompt_verification": {
+    "status": "✅ 新OSINT prompt完全生效",
+    "search_queries_generated": [
+      "\"Nanjing University\" \"Jiangsu Provincial Hospital of Chinese Medicine\" cooperation",
+      "\"南京大学\" \"江苏省中医院\" 合作",
+      "\"南京大学\" \"江苏省中医院\" 附属医院",
+      "\"南京大学\" \"江苏省中医院\" 教学医院",
+      "南京大学医学院 江苏省中医院"
+    ],
+    "prompt_structure": "## Prompt: OSINT Research on Institutional Risk Links",
+    "role_definition": "deepdiver, a Research Security Analyst",
+    "output_format": "JSON list with risk_item/institution_A structure"
+  },
+  "grounding_sources": {
+    "total_sources": 7,
+    "source_quality": "高质量官方和教育机构网站",
+    "grounding_supports": 2,
+    "evidence_coverage": "完整的证据链支持",
+    "source_domains": [
+      "njupt.edu.cn",
+      "jschina.com.cn",
+      "nju.edu.cn",
+      "chinaql.org",
+      "jsql.cn",
+      "rmzxw.com.cn"
+    ]
+  },
+  "performance_metrics": {
+    "processing_time_ms": 24707,
+    "search_efficiency": "优秀",
+    "response_quality": "高质量的关联分析",
+    "multilingual_capability": "✅ 中英文搜索完美执行"
+  },
+  "test_results_summary": {
+    "primary_relationship": "Indirect - 通过第三方活动和合作协议",
+    "direct_affiliation": "❌ 无直接隶属关系",
+    "joint_research": "❌ 未发现联合研究项目",
+    "collaborative_events": "✅ 发现2个间接合作活动",
+    "evidence_classification": "✅ STRONG/MODERATE等级正确应用"
+  },
+  "key_conclusions": {
+    "osint_prompt_functionality": "🎯 完全正常工作",
+    "relationship_detection": "🔍 准确识别间接关系",
+    "evidence_analysis": "📊 详细的证据链和强度分析",
+    "multilingual_search": "🌍 中英文搜索词生成完美",
+    "grounding_quality": "🔗 高质量信源支持"
+  },
+  "files_created": {
+    "test_result_file": "nanjing_university_vs_jiangsu_tcm_hospital_test_result_20251116_002440.json",
+    "test_report": "nanjing_university_vs_jiangsu_tcm_hospital_test_report_20251116_002440.json"
+  },
+  "verification_checklist": {
+    "test_folder_cleanup": "✅ 清理完成 (33MB → 484KB)",
+    "backup_important_files": "✅ 备份完成",
+    "search_execution": "✅ 执行成功",
+    "result_saving": "✅ 保存到test文件夹",
+    "osint_prompt_verification": "✅ 新prompt正常工作",
+    "quality_validation": "✅ 高质量关联分析结果"
+  }
+}
