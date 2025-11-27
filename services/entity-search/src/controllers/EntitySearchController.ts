@@ -438,5 +438,4 @@ export class EntitySearchController {
 
     return missingFields;
   }
-
-  }
+}

@@ -264,13 +264,6 @@ export interface SourceInfo {
   title?: string;     // Optional title from enhanced sources
 }
 
-export interface QualityMetrics {
-  evidence_count: number;
-  source_count: number;
-  coverage_percentage: number;
-  source_quality_score?: number;
-}
-
 // v2.1.0: Optimized response structure with formatted_display removed
 // Eliminates ~4KB data redundancy by removing duplicate formatted text
 export interface OptimizedSearchResponse {
