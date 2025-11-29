@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { v4 as uuidv4 } from 'uuid';
 import { EnhancedEntitySearchRequest, EnhancedEntitySearchResponse, BasicCompanyInfo } from '../types/enhanced-types';
 
 /**
@@ -10,6 +11,16 @@ import { EnhancedEntitySearchRequest, EnhancedEntitySearchResponse, BasicCompany
  * 专注于收集高质量的工商注册信息、官方网站数据、行业分类等基础企业信息
  */
 
+// Phase 1: Simple error classification for debugging
+enum GeminiErrorType {
+  NETWORK_ERROR = 'NETWORK_ERROR',
+  TIMEOUT = 'TIMEOUT',
+  PARSE_ERROR = 'PARSE_ERROR',
+  AUTHENTICATION_ERROR = 'AUTHENTICATION_ERROR',
+  RATE_LIMIT_ERROR = 'RATE_LIMIT_ERROR',
+  UNKNOWN = 'UNKNOWN'
+}
+
 export class EnhancedEntitySearchService {
   private apiKey: string;
   private geminiApiUrl: string;
@@ -20,18 +31,43 @@ export class EnhancedEntitySearchService {
 
     if (!this.apiKey) {
       console.warn('⚠️ GEMINI_API_KEY not configured.');
+    } else {
+      console.log(`✅ [CONFIG] Gemini API key configured (length: ${this.apiKey.length})`);
     }
+  }
+
+  // Phase 1: Simple error categorization for debugging
+  private categorizeError(error: any): GeminiErrorType {
+    if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+      return GeminiErrorType.TIMEOUT;
+    }
+    if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED' || error.code === 'ECONNRESET') {
+      return GeminiErrorType.NETWORK_ERROR;
+    }
+    if (error.message.includes('JSON') || error.message.includes('parse')) {
+      return GeminiErrorType.PARSE_ERROR;
+    }
+    if (error.message.includes('authentication') || error.message.includes('401') || error.message.includes('403')) {
+      return GeminiErrorType.AUTHENTICATION_ERROR;
+    }
+    if (error.message.includes('rate limit') || error.message.includes('429')) {
+      return GeminiErrorType.RATE_LIMIT_ERROR;
+    }
+    return GeminiErrorType.UNKNOWN;
   }
 
   /**
    * Main entry point: Enhanced entity search (simplified - basic info only)
+   * Phase 1: Enhanced with request ID, detailed logging, and fixed API counter
    */
   async searchEntity(request: EnhancedEntitySearchRequest): Promise<EnhancedEntitySearchResponse> {
+    const requestId = uuidv4();
     const startTime = Date.now();
 
     console.log(`\n${'='.repeat(70)}`);
-    console.log(`🔍 Company Information Search: ${request.company_name}`);
-    console.log(`📍 Location: ${request.location || 'Not specified'}`);
+    console.log(`🔍 [${requestId}] Company Information Search: ${request.company_name}`);
+    console.log(`📍 [${requestId}] Location: ${request.location || 'Not specified'}`);
+    console.log(`⏱️  [${requestId}] Start time: ${new Date().toISOString()}`);
     console.log(`${'='.repeat(70)}\n`);
 
     try {
@@ -41,7 +77,12 @@ export class EnhancedEntitySearchService {
       let apiCallsCount = 0;
 
       // Basic company information search
-      console.log('📋 Fetching basic company information...');
+      console.log(`📋 [${requestId}] Fetching basic company information...`);
+
+      // Phase 1 Fix: Increment API call counter ATTEMPT (not just success)
+      apiCallsCount++;
+      console.log(`📊 [${requestId}] API call attempt #${apiCallsCount}`);
+
       const basicInfoResult = await this.getBasicCompanyInfo(
         request.company_name,
         request.location
@@ -51,19 +92,21 @@ export class EnhancedEntitySearchService {
         basicInfo = basicInfoResult.data;
         totalSources += basicInfoResult.data.sources?.length || 0;
         totalSearchQueries += basicInfoResult.data.search_queries?.length || 0;
-        apiCallsCount++;
-        console.log(`✅ Basic info retrieved (${totalSources} sources)\n`);
+        console.log(`✅ [${requestId}] Basic info retrieved (${totalSources} sources, ${totalSearchQueries} queries)\n`);
       } else {
-        console.log(`⚠️  Basic info retrieval failed: ${basicInfoResult.error}\n`);
+        console.log(`❌ [${requestId}] Basic info retrieval failed: ${basicInfoResult.error}\n`);
+        // Phase 1: Log the error type for debugging
+        const errorType = this.categorizeError(new Error(basicInfoResult.error || 'Unknown error'));
+        console.log(`🔍 [${requestId}] Error type classification: ${errorType}`);
       }
 
       const duration = Date.now() - startTime;
 
       console.log(`\n${'='.repeat(70)}`);
-      console.log(`✅ Search completed in ${(duration / 1000).toFixed(2)}s`);
-      console.log(`📊 Total sources: ${totalSources}`);
-      console.log(`🔎 Total queries: ${totalSearchQueries}`);
-      console.log(`📡 API calls: ${apiCallsCount}`);
+      console.log(`✅ [${requestId}] Search completed in ${(duration / 1000).toFixed(2)}s`);
+      console.log(`📊 [${requestId}] Total sources: ${totalSources}`);
+      console.log(`🔎 [${requestId}] Total queries: ${totalSearchQueries}`);
+      console.log(`📡 [${requestId}] API calls made: ${apiCallsCount} (FIXED: counts attempts, not just successes)`);
       console.log(`${'='.repeat(70)}\n`);
 
       return {
@@ -81,18 +124,26 @@ export class EnhancedEntitySearchService {
 
     } catch (error: any) {
       const duration = Date.now() - startTime;
-      console.error(`❌ Company search failed after ${duration}ms:`, error.message);
+      const errorType = this.categorizeError(error);
+
+      console.error(`❌ [${requestId}] Company search failed after ${duration}ms:`, error.message);
+      console.error(`🔍 [${requestId}] Error type: ${errorType}`);
+      console.error(`📋 [${requestId}] Error details:`, {
+        constructor: error.constructor.name,
+        code: error.code,
+        stack: error.stack ? 'Available' : 'Not available'
+      });
 
       return {
         success: false,
         company: request.company_name,
         location: request.location,
-        error: error.message,
+        error: `${errorType}: ${error.message}`,
         metadata: {
           search_duration_ms: duration,
           total_sources: 0,
           search_queries_executed: 0,
-          api_calls_made: 0
+          api_calls_made: 0 // Still 0 because we didn't get to attempt the API call
         }
       };
     }
@@ -135,7 +186,7 @@ Provide basic company information in JSON format.`;
 
     try {
       console.log('📋 [BASIC INFO] Starting basic company info search...');
-      const response = await this.callGeminiAPI(systemPrompt, userPrompt);
+      const response = await this.callGeminiAPIWithRetry(systemPrompt, userPrompt);
 
       console.log('📝 [BASIC INFO] Extracting text content from response...');
       const textContent = this.extractTextFromResponse(response);
@@ -198,6 +249,39 @@ Provide basic company information in JSON format.`;
   }
 
   // ==================== Gemini API Helper Methods ====================
+
+  // Phase 1: Simple retry logic with detailed logging
+  private async callGeminiAPIWithRetry(systemPrompt: string, userPrompt: string): Promise<any> {
+    const maxRetries = 1; // Conservative retry: maximum 1 retry
+    const retryDelay = 2000; // Fixed 2-second delay
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🌐 [GEMINI API] Attempt #${attempt + 1}/${maxRetries + 1}...`);
+        const result = await this.callGeminiAPI(systemPrompt, userPrompt);
+        console.log(`✅ [GEMINI API] Attempt #${attempt + 1} successful`);
+        return result;
+      } catch (error: any) {
+        const errorType = this.categorizeError(error);
+        console.log(`❌ [GEMINI API] Attempt #${attempt + 1} failed: ${errorType}`);
+        console.log(`   - Error message: ${error.message}`);
+
+        if (attempt === maxRetries) {
+          console.log(`🚫 [GEMINI API] All retries exhausted, throwing final error`);
+          throw error;
+        }
+
+        // For certain error types, don't retry (like authentication errors)
+        if (errorType === GeminiErrorType.AUTHENTICATION_ERROR) {
+          console.log(`🚫 [GEMINI API] Authentication error - not retrying`);
+          throw error;
+        }
+
+        console.log(`⏳ [GEMINI API] Waiting ${retryDelay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
+  }
 
   private async callGeminiAPI(systemPrompt: string, userPrompt: string): Promise<any> {
     // Check API key configuration
