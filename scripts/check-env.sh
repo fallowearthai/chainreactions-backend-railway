@@ -56,8 +56,9 @@ print_header
 if [ ! -f .env ]; then
     print_error ".env file not found!"
     print_error "Please create .env file with the following variables:"
-    for VAR in "${REQUIRED_VARS[@]}"; do
-        echo -e "  ${RED}$VAR${NC}: ${REQUIRED_VARS[$VAR]#*:1}"
+    for VAR_ENTRY in "${REQUIRED_VARS[@]}"; do
+        VAR_NAME="${VAR_ENTRY%%:*}"
+        echo -e "  ${RED}$VAR_NAME${NC}: ${VAR_ENTRY#*:}"
     done
     echo -e "\n${YELLOW}Create .env file from template:${NC}"
     echo -e "${BLUE}cp .env.docker.example .env${NC}"
