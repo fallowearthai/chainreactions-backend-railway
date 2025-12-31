@@ -4,7 +4,7 @@ export class TrialExpirationService {
   private supabaseService: SupabaseService;
 
   constructor() {
-    this.supabaseService = new SupabaseService();
+    this.supabaseService = SupabaseService.getInstance();
   }
 
   /**

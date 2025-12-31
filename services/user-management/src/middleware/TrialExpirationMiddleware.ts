@@ -5,7 +5,7 @@ export class TrialExpirationMiddleware {
   private supabaseService: SupabaseService;
 
   constructor() {
-    this.supabaseService = new SupabaseService();
+    this.supabaseService = SupabaseService.getInstance();
   }
 
   // Check and auto-expire trials on user requests
@@ -68,15 +68,16 @@ export class TrialExpirationMiddleware {
   }
 
   // Middleware to block expired trial users from accessing paid features
-  blockExpiredTrials = (req: Request, res: Response, next: NextFunction) => {
+  blockExpiredTrials = (req: Request, res: Response, next: NextFunction): void => {
     const isTrialExpired = req.headers['x-trial-expired'] === 'true';
 
     if (isTrialExpired) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: 'Your free trial has expired. Please upgrade your account to continue using our services.',
         code: 'TRIAL_EXPIRED'
       });
+      return;
     }
 
     next();

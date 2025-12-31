@@ -17,13 +17,13 @@ import {
   getCachedApiInstance,
   CachedAPIService,
   CachedAPIOptions
-} from '../../../shared/cache/CachedAPIService';
+} from '../shared/cache/CachedAPIService';
 import {
   PerformanceUtils,
   ValidationUtils,
   StringUtils
-} from '../../../shared/utils/CommonUtilities';
-import { Logger } from '../../../shared/cache/CacheLogger';
+} from '../shared/utils/CommonUtilities';
+import { Logger } from '../shared/cache/CacheLogger';
 
 export interface GeminiAPIConfig {
   apiKey: string;
@@ -109,9 +109,10 @@ export class GeminiAPIServiceCached {
           return {
             ...cachedResponse,
             metadata: {
-              ...cachedResponse.metadata,
+              ...(cachedResponse.metadata || {}),
               cached: true,
-              processingTime: responseTime
+              processingTime: responseTime,
+              model: cachedResponse.metadata?.model || 'gemini-pro'
             }
           };
         }
