@@ -4,7 +4,7 @@ import * as dotenv from 'dotenv';
 import compression from 'compression';
 import { DataManagementController } from './controllers/DataManagementController';
 import { upload } from './middleware/upload';
-import { Logger } from '../../../src/shared/utils/Logger';
+import { Logger } from './shared/utils/Logger';
 
 // Load environment variables
 dotenv.config();

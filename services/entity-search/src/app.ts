@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { EntitySearchController } from './controllers/EntitySearchController';
-import { Logger } from '../../../src/shared/utils/Logger';
+import { Logger } from './shared/utils/Logger';
 
 // Load environment variables
 dotenv.config();

@@ -1,0 +1,84 @@
+# Load Testing Configuration for 200 Concurrent Users
+# Target: User Management Service SSE connections
+config:
+  target: 'http://localhost:3007'
+  phases:
+    - duration: 60
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 120
+      arrivalRate: 10
+      name: "Ramp up load"
+    - duration: 300
+      arrivalRate: 20
+      name: "Sustained load (~200 users)"
+    - duration: 60
+      arrivalRate: 5
+      name: "Cool down"
+
+scenarios:
+  - name: "SSE Connection Test"
+    weight: 70
+    flow:
+      # Step 1: User authentication
+      - post:
+          url: "/api/auth/signin"
+          headers:
+            Content-Type: "application/json"
+          json:
+            email: "testuser{{ $randomString() }}@example.com"
+            password: "testpassword123"
+          capture:
+            - json: "$.data.session.access_token"
+              as: "userToken"
+            - json: "$.data.user.id"
+              as: "userId"
+
+      # Step 2: Establish SSE connection
+      - get:
+          url: "/api/notifications/stream?token={{ userToken }}&connectionId=test_{{ $randomString() }}"
+          headers:
+            Accept: "text/event-stream"
+            Cache-Control: "no-cache"
+          expect:
+            - statusCode: 200
+          # Keep connection alive for 30 seconds
+          - think: 30
+
+  - name: "API Health Check"
+    weight: 20
+    flow:
+      - get:
+          url: "/api/health"
+          expect:
+            - statusCode: 200
+
+  - name: "Connection Metrics Check"
+    weight: 10
+    flow:
+      # First authenticate
+      - post:
+          url: "/api/auth/signin"
+          headers:
+            Content-Type: "application/json"
+          json:
+            email: "metricsuser@example.com"
+            password: "testpassword123"
+          capture:
+            - json: "$.data.session.access_token"
+              as: "userToken"
+
+      # Then get metrics
+      - get:
+          url: "/api/notifications/metrics"
+          headers:
+            Authorization: "Bearer {{ userToken }}"
+          expect:
+            - statusCode: 200
+
+processor:
+  # Generate random string for unique user IDs
+  - function: "randomString"
+    settings:
+      length: 8
+      charset: "abcdefghijklmnopqrstuvwxyz0123456789"

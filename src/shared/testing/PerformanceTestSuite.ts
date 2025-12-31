@@ -121,7 +121,14 @@ export class PerformanceTestSuite extends EventEmitter {
         totalRequests: 0,
         successfulRequests: 0,
         failedRequests: 0,
-        responseTime: [],
+        responseTime: {
+          min: 0,
+          max: 0,
+          mean: 0,
+          p50: 0,
+          p95: 0,
+          p99: 0
+        },
         errors: [],
         statusCodes: {},
         metadata: {}

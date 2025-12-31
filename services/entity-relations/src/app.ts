@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import { DeepThinkingSearchController } from './controllers/DeepThinkingSearchController';
 import { StandardSearchController } from './controllers/StandardSearchController';
 import { FeatureFlags } from './utils/FeatureFlags';
-import { Logger } from '../../../src/shared/utils/Logger';
+import { Logger } from './shared/utils/Logger';
 
 // Load environment variables
 dotenv.config();

@@ -312,7 +312,7 @@ export class CachedAPIService {
     service?: string;
     method?: string;
   }): Promise<void> {
-    const namespaces = [pattern.namespace].filter(Boolean);
+    const namespaces = [pattern.namespace].filter((ns): ns is string => Boolean(ns));
 
     for (const namespace of namespaces) {
       await this.cache.clearNamespace(namespace);
@@ -343,7 +343,7 @@ export class CachedAPIService {
       const timer = PerformanceUtils.createTimer('api.health');
       await axios.get('https://httpbin.org/status/200', {
         timeout: 5000,
-        validateStatus: (status) => status >= 200 && status < 300
+        validateStatus: (status: number) => status >= 200 && status < 300
       });
       apiResponseTime = timer.elapsed();
     } catch (error) {
@@ -383,7 +383,7 @@ export class CachedAPIService {
       params,
       data,
       timeout: options.timeout || this.config.timeout,
-      validateStatus: (status) => status >= 200 && status < 300,
+      validateStatus: (status: number) => status >= 200 && status < 300,
       maxContentLength: this.config.maxResponseSize,
       maxBodyLength: this.config.maxResponseSize
     };

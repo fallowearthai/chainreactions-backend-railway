@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import { DatasetSearchController } from './controllers/DatasetSearchController';
 import { errorHandler, notFoundHandler } from './utils/ErrorHandler';
 import { authenticate } from './middleware/auth';
-import { Logger } from '../../../src/shared/utils/Logger';
+import { Logger } from './shared/utils/Logger';
 
 // Initialize logger
 const logger = new Logger('dataset-search');

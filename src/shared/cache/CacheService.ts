@@ -100,20 +100,28 @@ export class CacheService {
 
   private async initializeRedis(): Promise<void> {
     try {
-      this.redis = new Redis({
+      const redisOptions: any = {
         host: this.config.redis.host,
         port: this.config.redis.port,
-        password: this.config.redis.password,
-        db: this.config.redis.db,
         retryDelayOnFailover: this.config.redis.retryDelayOnFailover,
         maxRetriesPerRequest: this.config.redis.maxRetriesPerRequest,
         lazyConnect: this.config.redis.lazyConnect,
         keepAlive: this.config.redis.keepAlive,
-        reconnectOnError: (err) => {
+        reconnectOnError: (err: Error) => {
           const targetError = 'READONLY';
           return err.message.includes(targetError);
         },
-      });
+      };
+
+      // Only add optional properties if they are defined
+      if (this.config.redis.password !== undefined) {
+        redisOptions.password = this.config.redis.password;
+      }
+      if (this.config.redis.db !== undefined) {
+        redisOptions.db = this.config.redis.db;
+      }
+
+      this.redis = new Redis(redisOptions);
 
       this.redis.on('connect', () => {
         Logger.info('Redis connected successfully');
@@ -121,7 +129,7 @@ export class CacheService {
         this.reconnectAttempts = 0;
       });
 
-      this.redis.on('error', (err) => {
+      this.redis.on('error', (err: Error) => {
         Logger.error('Redis connection error:', err);
         this.isRedisConnected = false;
         this.incrementMetric('global', 'errors');

@@ -311,7 +311,7 @@ export class ArrayUtils {
    * Group array items by a key
    */
   static groupBy<T>(array: T[], keyFn: (item: T) => string): Record<string, T[]> {
-    return array.reduce((groups, item) => {
+    return array.reduce((groups: Record<string, T[]>, item) => {
       const key = keyFn(item);
       if (!groups[key]) {
         groups[key] = [];
@@ -404,13 +404,13 @@ export class ObjectUtils {
    */
   static deepMerge<T>(target: T, ...sources: Partial<T>[]): T {
     if (!sources.length) return target;
-    const source = sources.shift();
+    const source = sources.shift()!;
 
     if (this.isObject(target) && this.isObject(source)) {
       for (const key in source) {
         if (this.isObject(source[key])) {
           if (!target[key]) Object.assign(target, { [key]: {} });
-          this.deepMerge(target[key], source[key]);
+          this.deepMerge(target[key] as any, source[key] as any);
         } else {
           Object.assign(target, { [key]: source[key] });
         }
@@ -430,7 +430,7 @@ export class ObjectUtils {
   /**
    * Pick specific properties from object
    */
-  static pick<T, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> {
+  static pick<T extends object, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> {
     const result = {} as Pick<T, K>;
 
     for (const key of keys) {
@@ -516,7 +516,7 @@ export class ValidationUtils {
    */
   static isValidDateString(dateString: string): boolean {
     const date = new Date(dateString);
-    return !isNaN(date.getTime()) && dateString.match(/^\d{4}-\d{2}-\d{2}$/);
+    return !isNaN(date.getTime()) && !!dateString.match(/^\d{4}-\d{2}-\d{2}$/);
   }
 
   /**

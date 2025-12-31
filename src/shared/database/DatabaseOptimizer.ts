@@ -10,7 +10,7 @@
  */
 
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
-import { PerformanceUtils, StringUtils } from '../utils/CommonUtilities';
+import { PerformanceUtils, StringUtils, DataTransformUtils } from '../utils/CommonUtilities';
 import { Logger } from '../cache/CacheLogger';
 
 export interface DatabaseConfig {
@@ -56,7 +56,7 @@ export interface IndexRecommendation {
  * High-performance database optimization service
  */
 export class DatabaseOptimizer {
-  private pool: Pool;
+  private pool!: Pool;
   private queryCache = new Map<string, { result: any; expires: number }>();
   private queryMetrics: QueryMetrics[] = [];
   private config: DatabaseConfig;
@@ -129,7 +129,7 @@ export class DatabaseOptimizer {
             rowCount: cached.rowCount
           });
 
-          return cached;
+          return cached as QueryResult<T>;
         }
       }
 
@@ -178,7 +178,7 @@ export class DatabaseOptimizer {
       const results: T[] = [];
       for (const query of queries) {
         const result = await client.query(query.sql, query.parameters || []);
-        results.push(result.rows);
+        results.push(result.rows as T);
       }
 
       await client.query('COMMIT');
@@ -446,11 +446,11 @@ export class DatabaseOptimizer {
       }, queryTimeout);
 
       this.pool.query<T>(sql, parameters)
-        .then(result => {
+        .then((result: any) => {
           clearTimeout(timer);
           resolve(result);
         })
-        .catch(error => {
+        .catch((error: any) => {
           clearTimeout(timer);
           reject(error);
         });
@@ -525,7 +525,7 @@ export class DatabaseOptimizer {
     const analyzedQueries = new Set<string>();
 
     for (const metric of slowQueries) {
-      const queryHash = StringUtils.hashObject(metric.query);
+      const queryHash = DataTransformUtils.hashObject(metric.query);
       if (analyzedQueries.has(queryHash)) continue;
       analyzedQueries.add(queryHash);
 

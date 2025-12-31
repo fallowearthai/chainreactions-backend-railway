@@ -1,0 +1,806 @@
+import { Request, Response, NextFunction } from 'express';
+import { SupabaseAuthService } from '../services/SupabaseAuthService';
+import { SupabaseService } from '../services/SupabaseService';
+import { SimpleSessionService } from '../services/SimpleSessionService';
+import { AuthMiddleware } from '../middleware/auth';
+import {
+  SignUpRequest,
+  SignInRequest,
+  PasswordResetRequest,
+  UpdatePasswordRequest,
+  EmailVerificationRequest,
+  AuthResponse
+} from '../types/AuthTypes';
+import { BaseController } from '../../../../src/shared/base/BaseController';
+import {
+  ValidationError,
+  AuthenticationError,
+  NotFoundError,
+  ServiceError
+} from '../../../../src/shared/errors/ServiceErrors';
+import { HTTP_STATUS, VALIDATION } from '../../../../src/shared/constants/ServiceConstants';
+
+/**
+ * Authentication Controller for User Management Service
+ *
+ * This controller handles user authentication, registration, and token management.
+ * Extends BaseController to leverage shared error handling and response formatting.
+ */
+export class AuthController extends BaseController {
+  private authService: SupabaseAuthService;
+  private supabaseService: SupabaseService;
+  private simpleSessionService: SimpleSessionService;
+
+  constructor() {
+    super('user-management');
+    this.authService = SupabaseAuthService.getInstance();
+    this.supabaseService = SupabaseService.getInstance();
+    this.simpleSessionService = SimpleSessionService.getInstance();
+  }
+
+  /**
+   * User Registration
+   * POST /api/auth/signup
+   */
+  signUp = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'User registration attempt');
+
+    const validation = this.validateSignUpRequest(req.body);
+    if (!validation.isValid) {
+      throw new ValidationError('Invalid registration data', validation.errors);
+    }
+
+    const signUpRequest: SignUpRequest = req.body;
+
+    // Attempt to sign up the user
+    const authResult = await this.authService.signUp(signUpRequest);
+
+    if (authResult.error || !authResult.user) {
+      throw new ValidationError(
+        authResult.error || 'Registration failed',
+        authResult.message
+      );
+    }
+
+    // Create user profile and credits
+    await this.createUserProfileAndCredits(authResult.user, signUpRequest);
+
+    const response = this.formatAuthResponse(authResult, 'Registration successful. Please check your email for verification.');
+    this.sendSuccess(res, response.data, response.message, HTTP_STATUS.CREATED);
+  });
+
+  /**
+   * User Sign In
+   * POST /api/auth/signin
+   */
+  signIn = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'User sign in attempt');
+
+    const validation = this.validateSignInRequest(req.body);
+    if (!validation.isValid) {
+      throw new ValidationError('Invalid sign in data', validation.errors);
+    }
+
+    const signInRequest: SignInRequest = req.body;
+    const authResult = await this.authService.signIn(signInRequest);
+
+    if (authResult.error || !authResult.user || !authResult.session) {
+      throw new AuthenticationError(
+        authResult.error || 'Sign in failed',
+        authResult.message
+      );
+    }
+
+    // Get complete user profile data
+    const userData = await this.supabaseService.getUserFullProfile(authResult.user.id);
+
+    if (!userData) {
+      throw new NotFoundError('user profile', authResult.user.id, 'User profile could not be found');
+    }
+
+    // Register session and kick out existing sessions (simple version)
+    // This is now MANDATORY for successful login
+    const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
+    const userAgent = req.get('User-Agent') || 'unknown';
+    const sessionToken = authResult.session?.access_token;
+
+    if (!sessionToken) {
+      throw new ServiceError(HTTP_STATUS.INTERNAL_SERVER_ERROR, 'NO_SESSION_TOKEN',
+        'Authentication succeeded but no session token was provided.');
+    }
+
+    console.log(`[Auth] Managing session for user: ${authResult.user.email}`);
+
+    // Use simple session service to kick out existing sessions
+    const kickoutResult = await this.simpleSessionService.kickOutOtherSessions(
+      authResult.user.id,
+      sessionToken,
+      sessionToken
+    );
+
+    if (!kickoutResult.success) {
+      console.error('[Auth] Session management failed:', kickoutResult.error);
+      throw new ServiceError(HTTP_STATUS.SERVICE_UNAVAILABLE, 'SESSION_MANAGEMENT_FAILED',
+        `Unable to create session: ${kickoutResult.error}. Please try again.`);
+    }
+
+    
+    // Update session metadata (IP address and user agent)
+    const { error: updateError } = await this.supabaseService.getClient()
+      .from('user_sessions')
+      .update({
+        ip_address: clientIP,
+        user_agent: userAgent
+      })
+      .eq('user_id', authResult.user.id)
+      .eq('session_id', sessionToken);
+
+    if (updateError) {
+      console.error('[Auth] Failed to update session metadata:', updateError);
+      // Don't fail login for metadata update errors, just log them
+    }
+
+    const response = {
+      user: authResult.user,
+      session: authResult.session,
+      ...userData
+    };
+
+    this.sendSuccess(res, response, authResult.message || 'Sign in successful');
+  });
+
+  /**
+   * User Sign Out
+   * POST /api/auth/signout
+   */
+  signOut = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'User sign out attempt');
+
+    const result = await this.authService.signOut();
+
+    if (!result.success) {
+      throw new ServiceError(HTTP_STATUS.BAD_REQUEST, 'SIGNOUT_FAILED', result.error || 'Sign out failed');
+    }
+
+    this.sendSuccess(res, null, 'Signed out successfully');
+  });
+
+  /**
+   * Verify Email
+   * POST /api/auth/verify
+   */
+  verifyEmail = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'Email verification attempt');
+
+    const { token } = req.body;
+
+    if (!token) {
+      throw new ValidationError('Verification token is required');
+    }
+
+    const authResult = await this.authService.verifyEmail(token);
+
+    if (authResult.error || !authResult.user) {
+      throw new ValidationError(
+        authResult.error || 'Email verification failed',
+        authResult.message
+      );
+    }
+
+    // Create approval request for newly verified user
+    await this.createApprovalRequestForUser(authResult.user);
+
+    const response = this.formatAuthResponse(
+      authResult,
+      'Email verified successfully. Your account is now pending approval.'
+    );
+
+    this.sendSuccess(res, response.data, response.message);
+  });
+
+  /**
+   * Request Password Reset
+   * POST /api/auth/reset-password/request
+   */
+  requestPasswordReset = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'Password reset request');
+
+    const validation = this.validatePasswordResetRequest(req.body);
+    if (!validation.isValid) {
+      throw new ValidationError('Invalid password reset request', validation.errors);
+    }
+
+    const request: PasswordResetRequest = req.body;
+    const result = await this.authService.requestPasswordReset(request);
+
+    if (!result.success) {
+      throw new ServiceError(HTTP_STATUS.BAD_REQUEST, 'PASSWORD_RESET_FAILED', result.error || 'Password reset request failed');
+    }
+
+    this.sendSuccess(res, null, 'Password reset instructions sent to your email');
+  });
+
+  /**
+   * Update Password
+   * POST /api/auth/update-password
+   */
+  updatePassword = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'Password update attempt');
+
+    const validation = this.validateUpdatePasswordRequest(req.body);
+    if (!validation.isValid) {
+      throw new ValidationError('Invalid password update request', validation.errors);
+    }
+
+    const request: UpdatePasswordRequest = req.body;
+    const result = await this.authService.updatePassword(request);
+
+    if (!result.success) {
+      throw new ServiceError(HTTP_STATUS.BAD_REQUEST, 'PASSWORD_UPDATE_FAILED', result.error || 'Password update failed');
+    }
+
+    this.sendSuccess(res, null, 'Password updated successfully');
+  });
+
+  /**
+   * Get Current User
+   * GET /api/auth/me
+   */
+  getCurrentUser = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'Get current user attempt');
+
+    const token = this.extractBearerToken(req);
+    if (!token) {
+      throw new AuthenticationError('Authentication required', 'Please provide a valid authorization token');
+    }
+
+    const user = await this.authService.getCurrentUser(token);
+
+    if (!user) {
+      throw new AuthenticationError('Invalid token', 'User not found or token expired');
+    }
+
+    this.sendSuccess(res, { user }, 'Current user retrieved successfully');
+  });
+
+  /**
+   * Refresh Token
+   * POST /api/auth/refresh
+   */
+  refreshToken = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'Token refresh attempt');
+
+    const { refresh_token } = req.body;
+
+    if (!refresh_token) {
+      throw new ValidationError('Refresh token required', 'Please provide a valid refresh token');
+    }
+
+    const authResult = await this.authService.refreshToken(refresh_token);
+
+    if (authResult.error || !authResult.session) {
+      throw new AuthenticationError(
+        authResult.error || 'Token refresh failed',
+        authResult.message
+      );
+    }
+
+    this.sendSuccess(res,
+      { session: authResult.session },
+      authResult.message || 'Token refreshed successfully'
+    );
+  });
+
+  /**
+   * Service Authentication (for inter-service communication)
+   * POST /api/auth/service-auth
+   */
+  authenticateService = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'Service authentication attempt');
+
+    const { token } = req.body;
+
+    if (!token) {
+      throw new ValidationError('Token required', 'Please provide a valid authentication token');
+    }
+
+    const validation = await this.authService.validateJWT(token);
+
+    if (!validation.valid || !validation.user) {
+      throw new AuthenticationError(
+        'Invalid token',
+        validation.error || 'Token validation failed'
+      );
+    }
+
+    // Get additional user data
+    const [profile, credits, role] = await Promise.all([
+      this.supabaseService.getUserProfile(validation.user.id),
+      this.supabaseService.getUserCredits(validation.user.id),
+      this.supabaseService.getUserRole(validation.user.id)
+    ]);
+
+    const permissions = await this.getUserPermissions(role?.role || 'user');
+
+    const response = {
+      user: validation.user,
+      profile,
+      credits,
+      role,
+      permissions
+    };
+
+    this.sendSuccess(res, response, 'Service authentication successful');
+  });
+
+  /**
+   * Get Session Configuration
+   * GET /api/auth/session-config
+   *
+   * Provides the frontend with configuration for simple session management
+   */
+  getSessionConfig = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'Get session configuration');
+
+    const config = {
+      features: {
+        simpleSessionManagement: true,
+        automaticKickout: true,
+        periodicValidation: true,
+        sessionActivityTracking: true
+      },
+      settings: {
+        validationInterval: 30000, // 30 seconds
+        maxValidationAttempts: 3,
+        activityUpdateInterval: 300000 // 5 minutes
+      },
+      apiEndpoints: {
+        checkSession: '/api/auth/check-session',
+        updateActivity: '/api/auth/update-activity',
+        getSessions: '/api/auth/sessions',
+        logoutSession: '/api/auth/sessions/:sessionId/logout'
+      }
+    };
+
+    this.sendSuccess(res, config, 'Session configuration retrieved successfully');
+  });
+
+  /**
+   * Check Session Status
+   * POST /api/auth/check-session
+   *
+   * Check if the current session is still valid
+   */
+  checkSession = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'Check session status');
+
+    // User is already validated by lightweight AuthMiddleware.authenticateJWTOnly
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+
+    const token = this.extractBearerToken(req);
+    if (!token) {
+      throw new AuthenticationError('Authentication required');
+    }
+
+    const result = await this.simpleSessionService.isSessionValid(req.user.user.id, token, token);
+
+    this.sendSuccess(res, result, 'Session status checked successfully');
+  });
+
+  /**
+   * Update Session Activity
+   * POST /api/auth/update-activity
+   *
+   * Update the activity timestamp for current session
+   */
+  updateActivity = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'Update session activity');
+
+    const token = this.extractBearerToken(req);
+    if (!token) {
+      throw new AuthenticationError('Authentication required');
+    }
+
+    const result = await this.simpleSessionService.updateSessionActivity(token);
+
+    if (result.success) {
+      this.sendSuccess(res, null, 'Activity updated successfully');
+    } else {
+      throw new ServiceError(HTTP_STATUS.BAD_REQUEST, 'UPDATE_FAILED', result.error || 'Failed to update activity');
+    }
+  });
+
+  /**
+   * Get User Active Sessions
+   * GET /api/auth/sessions
+   *
+   * Returns all active sessions for the current user
+   */
+  getUserSessions = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'Get user sessions');
+
+    const token = this.extractBearerToken(req);
+    if (!token) {
+      throw new AuthenticationError('Authentication required');
+    }
+
+    const user = await this.authService.getCurrentUser(token);
+    if (!user) {
+      throw new AuthenticationError('Invalid token');
+    }
+
+    const sessions = await this.simpleSessionService.getUserActiveSessions(user.id);
+
+    this.sendSuccess(res, sessions, 'User sessions retrieved successfully');
+  });
+
+  /**
+   * Force Logout Session
+   * POST /api/auth/sessions/:sessionId/logout
+   *
+   * Force logout a specific session (for current user or admin)
+   */
+  forceLogoutSession = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'Force logout session');
+
+    const { sessionId } = req.params;
+    const token = this.extractBearerToken(req);
+
+    if (!token) {
+      throw new AuthenticationError('Authentication required');
+    }
+
+    const user = await this.authService.getCurrentUser(token);
+    if (!user) {
+      throw new AuthenticationError('Invalid token');
+    }
+
+    // Users can only logout their own sessions, admins can logout any session
+    const isAdmin = await this.isAdmin(user.id);
+    if (!isAdmin) {
+      // Verify the session belongs to the current user
+      const userSessions = await this.simpleSessionService.getUserActiveSessions(user.id);
+      const sessionBelongsToUser = userSessions.sessions.some(
+        session => session.session_id === sessionId
+      );
+
+      if (!sessionBelongsToUser) {
+        throw new AuthenticationError('You can only logout your own sessions');
+      }
+    }
+
+    const result = await this.simpleSessionService.forceLogoutSession(sessionId);
+
+    if (result.success) {
+      this.sendSuccess(res, null, 'Session logged out successfully');
+    } else {
+      throw new ServiceError(HTTP_STATUS.BAD_REQUEST, 'LOGOUT_FAILED', result.error || 'Failed to logout session');
+    }
+  });
+
+  /**
+   * Register Session (for Supabase Auth integration)
+   * POST /api/auth/sessions
+   */
+  registerSession = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'Session registration attempt');
+
+    // User is already validated by lightweight AuthMiddleware.authenticateJWTOnly
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+
+    const { action, user_agent } = req.body;
+
+    if (action !== 'register') {
+      throw new ValidationError('Invalid action', 'Only "register" action is supported');
+    }
+
+    const user = req.user.user;
+    console.log(`[Auth] Registering session for user: ${user.email}`);
+
+    // Extract token for session management
+    const token = this.extractBearerToken(req);
+
+    // Use the existing session management logic
+    const kickoutResult = await this.simpleSessionService.kickOutOtherSessions(
+      user.id,
+      token,
+      token
+    );
+
+    if (!kickoutResult.success) {
+      console.error('[Auth] Session registration failed:', kickoutResult.error);
+      throw new ServiceError(HTTP_STATUS.SERVICE_UNAVAILABLE, 'SESSION_REGISTRATION_FAILED',
+        `Unable to register session: ${kickoutResult.error}`);
+    }
+
+    // Update session metadata if user agent provided
+    if (user_agent) {
+      const { error: updateError } = await this.supabaseService.getClient()
+        .from('user_sessions')
+        .update({
+          user_agent: user_agent
+        })
+        .eq('user_id', user.id)
+        .eq('session_id', token);
+
+      if (updateError) {
+        console.error('[Auth] Failed to update user agent:', updateError);
+      }
+    }
+
+    
+    this.sendSuccess(res, {
+      kickedOutCount: kickoutResult.kickedOutCount,
+      message: 'Session registered successfully'
+    }, 'Session registered successfully');
+  });
+
+  /**
+   * Update Session ID (for token refresh scenarios)
+   * POST /api/auth/update-session-id
+   */
+  updateSessionId = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    this.logRequest(req, 'Session ID update attempt');
+
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+
+    const { session_id, user_agent } = req.body;
+    const user = req.user.user;
+
+    if (!session_id) {
+      throw new ValidationError('Missing session_id', 'session_id is required');
+    }
+
+    console.log(`[Auth] Updating session ID for user: ${user.email}`);
+
+    // Update or insert session record
+    const { error } = await this.supabaseService.getClient()
+      .from('user_sessions')
+      .upsert({
+        user_id: user.id,
+        session_id: session_id,
+        user_agent: user_agent || null,
+        ip_address: req.ip || req.headers['x-forwarded-for'] || null,
+        created_at: new Date().toISOString(),
+        last_activity_at: new Date().toISOString(),
+        is_active: true
+      }, {
+        onConflict: 'user_id,session_id'
+      });
+
+    if (error) {
+      console.error('[Auth] Failed to update session ID:', error);
+      throw new ServiceError(HTTP_STATUS.INTERNAL_SERVER, 'SESSION_UPDATE_FAILED',
+        `Unable to update session ID: ${error.message}`);
+    }
+
+    this.sendSuccess(res, {
+      message: 'Session ID updated successfully'
+    }, 'Session ID updated successfully');
+  });
+
+  // Private Helper Methods
+
+  /**
+   * Validate sign up request
+   */
+  private validateSignUpRequest(body: any): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    // Required fields validation
+    const requiredValidation = this.validateRequiredFields(body, [
+      'email', 'password', 'displayName'
+    ]);
+    errors.push(...requiredValidation.errors);
+
+    // Email validation
+    if (body.email && !this.validateEmail(body.email)) {
+      errors.push('Invalid email format');
+    }
+
+    // Password validation
+    const passwordValidation = this.validateStringField(
+      body.password,
+      'password',
+      VALIDATION.MIN_PASSWORD_LENGTH,
+      VALIDATION.MAX_PASSWORD_LENGTH
+    );
+    errors.push(...passwordValidation.errors);
+
+    // Display name validation
+    const nameValidation = this.validateStringField(
+      body.displayName,
+      'displayName',
+      VALIDATION.MIN_NAME_LENGTH,
+      VALIDATION.MAX_NAME_LENGTH
+    );
+    errors.push(...nameValidation.errors);
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Validate sign in request
+   */
+  private validateSignInRequest(body: any): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    const requiredValidation = this.validateRequiredFields(body, [
+      'email', 'password'
+    ]);
+    errors.push(...requiredValidation.errors);
+
+    if (body.email && !this.validateEmail(body.email)) {
+      errors.push('Invalid email format');
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Validate password reset request
+   */
+  private validatePasswordResetRequest(body: any): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    const requiredValidation = this.validateRequiredFields(body, ['email']);
+    errors.push(...requiredValidation.errors);
+
+    if (body.email && !this.validateEmail(body.email)) {
+      errors.push('Invalid email format');
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Validate update password request
+   */
+  private validateUpdatePasswordRequest(body: any): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    const requiredValidation = this.validateRequiredFields(body, [
+      'token', 'newPassword'
+    ]);
+    errors.push(...requiredValidation.errors);
+
+    const passwordValidation = this.validateStringField(
+      body.newPassword,
+      'newPassword',
+      VALIDATION.MIN_PASSWORD_LENGTH,
+      VALIDATION.MAX_PASSWORD_LENGTH
+    );
+    errors.push(...passwordValidation.errors);
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Extract Bearer token from request
+   */
+  private extractBearerToken(req: Request): string | null {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return null;
+    }
+
+    return authHeader.substring(7);
+  }
+
+  /**
+   * Create user profile and credits
+   */
+  private async createUserProfileAndCredits(user: any, signUpRequest: SignUpRequest): Promise<void> {
+    try {
+      await Promise.all([
+        this.supabaseService.createUserProfile(user.id, {
+          email: signUpRequest.email,
+          displayName: signUpRequest.displayName,
+          department: signUpRequest.department
+        }),
+        this.supabaseService.createDefaultCredits(user.id, 'free_trial')
+      ]);
+
+      console.log('User profile and credits created for:', user.id);
+    } catch (profileError) {
+      this.logError(
+        profileError instanceof Error ? profileError : new Error(String(profileError)),
+        `Failed to create profile for user ${user.id}`
+      );
+      // Note: User is created in auth system, so we should still return success
+    }
+  }
+
+  /**
+   * Create approval request for user
+   */
+  private async createApprovalRequestForUser(user: any): Promise<void> {
+    try {
+      await this.supabaseService.createApprovalRequest({
+        userId: user.id,
+        requestType: 'user_creation',
+        requestData: {
+          email: user.email,
+          verifiedAt: new Date().toISOString()
+        },
+        notes: 'User completed email verification and awaiting approval'
+      });
+    } catch (approvalError) {
+      this.logError(
+        approvalError instanceof Error ? approvalError : new Error(String(approvalError)),
+        `Failed to create approval request for user ${user.id}`
+      );
+      // Continue with success response even if approval request fails
+    }
+  }
+
+  /**
+   * Format authentication response
+   */
+  private formatAuthResponse(authResult: AuthResponse, message: string): { data: any; message: string } {
+    const data = {
+      user: authResult.user,
+      session: authResult.session
+    };
+
+    // Don't include full session data in registration response for security
+    if (authResult.session) {
+      data.session = {
+        access_token: authResult.session.access_token,
+        refresh_token: authResult.session.refresh_token,
+        expires_in: authResult.session.expires_in,
+        user: authResult.session.user,
+        token_type: 'bearer'
+      };
+    }
+
+    return { data, message: authResult.message || message };
+  }
+
+  /**
+   * Get user permissions based on role
+   */
+  private async getUserPermissions(role: string): Promise<string[]> {
+    switch (role) {
+      case 'admin':
+        return ['admin', 'user_management', 'approve_users', 'manage_credits', 'view_analytics'];
+      case 'manager':
+        return ['manager', 'team_management', 'view_team_analytics'];
+      case 'user':
+      default:
+        return ['user', 'search', 'view_own_data'];
+    }
+  }
+
+  /**
+   * Check if user is an admin
+   */
+  private async isAdmin(userId: string): Promise<boolean> {
+    try {
+      const role = await this.supabaseService.getUserRole(userId);
+      return role?.role === 'admin';
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      return false;
+    }
+  }
+}

@@ -108,15 +108,18 @@ export class RateLimitError extends ServiceError {
  * External API error (502 Bad Gateway)
  */
 export class ExternalApiError extends ServiceError {
+  serviceStatusCode?: number;
+
   constructor(
     public service: string,
     message: string,
-    public statusCode?: number,
+    serviceStatusCode?: number,
     details?: any
   ) {
     const fullMessage = `${service} API error: ${message}`;
-    super(502, 'EXTERNAL_API_ERROR', fullMessage, { service, statusCode, ...details });
+    super(502, 'EXTERNAL_API_ERROR', fullMessage, { service, serviceStatusCode, ...details });
     this.name = 'ExternalApiError';
+    this.serviceStatusCode = serviceStatusCode;
   }
 }
 

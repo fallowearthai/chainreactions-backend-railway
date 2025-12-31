@@ -132,3 +132,15 @@ test_enhanced_controllers.*
 test-temp/
 test_backup_*/
 */test-temp/
+# 符号链接（本地开发使用，在部署时通过脚本创建）
+services/*/src/shared
+
+# TypeScript编译输出
+src/shared/**/*.d.ts
+src/shared/**/*.d.ts.map
+src/shared/**/*.js
+src/shared/**/*.js.map
+
+# 上传文件
+services/*/uploads/
+*.csv

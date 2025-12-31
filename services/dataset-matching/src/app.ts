@@ -3,7 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { DatasetMatchingController } from './controllers/DatasetMatchingController';
-import { Logger } from '../../../src/shared/utils/Logger';
+import { Logger } from './shared/utils/Logger';
 
 // Load environment variables
 dotenv.config();
