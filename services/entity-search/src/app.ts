@@ -2,9 +2,13 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { EntitySearchController } from './controllers/EntitySearchController';
+import { Logger } from '../../../src/shared/utils/Logger';
 
 // Load environment variables
 dotenv.config();
+
+// Initialize logger
+const logger = new Logger('entity-search');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3003', 10);
@@ -36,13 +40,18 @@ app.use(cors({
   credentials: true
 }));
 
-// Request logging middleware
+// Request logging middleware (sanitized)
 app.use((req, res, next) => {
   const startTime = Date.now();
 
   res.on('finish', () => {
     const duration = Date.now() - startTime;
-    console.log(`${req.method} ${req.path} ${res.statusCode} - ${duration}ms`);
+    logger.info('Request completed', {
+      method: req.method,
+      path: logger.sanitizePath(req.path),
+      status: res.statusCode,
+      duration
+    });
   });
 
   next();
@@ -70,16 +79,17 @@ app.get('/api/info', (req, res) =>
 
 app.post('/api/test-gemini', async (req, res) => {
   try {
-    console.log('🧪 [TEST] Gemini API test endpoint called');
+    logger.debug('Gemini API test endpoint called');
 
     const { test_company = "Test Company" } = req.body;
 
     // Test the Enhanced Entity Search Service directly
     const result = await entitySearchController.testGeminiAPI(test_company);
 
-    console.log('🧪 [TEST] Gemini API test completed');
-    console.log('   - Success:', result.success);
-    console.log('   - Duration:', result.duration || 'Unknown');
+    logger.debug('Gemini API test completed', {
+      success: result.success,
+      duration: result.duration
+    });
 
     res.json({
       test_status: 'completed',
@@ -89,7 +99,7 @@ app.post('/api/test-gemini', async (req, res) => {
     });
 
   } catch (error: any) {
-    console.error('❌ [TEST] Gemini API test failed:', error.message);
+    logger.error('Gemini API test failed', error);
     res.status(500).json({
       test_status: 'failed',
       error: error.message,
@@ -133,7 +143,7 @@ app.use((req, res) => {
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Unhandled error:', err);
+  logger.error('Unhandled error', err);
 
   res.status(500).json({
     error: 'Internal server error',
@@ -145,24 +155,17 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 // Start server
 if (require.main === module) {
   app.listen(PORT, '0.0.0.0', () => {
-    console.log('🚀 Entity Search Service (Enhanced) Started');
-    console.log(`📡 Server running on port ${PORT} (0.0.0.0)`);
-    console.log(`🏥 Health: http://localhost:${PORT}/api/health`);
-    console.log(`📊 Info: http://localhost:${PORT}/api/info`);
-    console.log(`🔍 Entity Search: POST http://localhost:${PORT}/api/entity-search`);
-    console.log(`⚠️  Risk Analysis: POST http://localhost:${PORT}/api/entity-search/analyze-keyword`);
-    console.log('');
-    console.log('📋 Configuration:');
-    console.log(`   GEMINI_API_KEY: ${process.env.GEMINI_API_KEY ? '✅ Configured' : '❌ Not set'}`);
-    console.log(`   NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
-    console.log('');
-    console.log('✨ Features:');
-    console.log('   • Comprehensive company information search via Gemini AI');
-    console.log('   • Professional business intelligence gathering');
-    console.log('   • Risk keyword analysis for due diligence and compliance');
-    console.log('   • Simplified architecture focused on company data');
-    console.log('');
-    console.log('✅ Ready to accept requests...');
+    logger.info(`Entity Search Service (Enhanced) started on port ${PORT}`, {
+      port: PORT,
+      host: '0.0.0.0'
+    });
+    logger.info('Endpoints available: GET /api/health, GET /api/info, POST /api/entity-search, POST /api/entity-search/analyze-keyword');
+    logger.info('Features: Comprehensive company information, Business intelligence, Risk keyword analysis, Simplified architecture');
+    logger.info('Configuration loaded', {
+      geminiApiKey: !!process.env.GEMINI_API_KEY,
+      environment: process.env.NODE_ENV || 'development'
+    });
+    logger.info('Service ready to accept requests');
   });
 }
 

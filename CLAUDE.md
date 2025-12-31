@@ -91,15 +91,6 @@ npm start
 npm run lint
 ```
 
-### Performance Testing
-```bash
-# Run performance tests for dataset matching
-node test_performance.js
-
-# Run fixed performance tests
-node test_performance_fixed.js
-```
-
 ### Batch Operations
 ```bash
 # Install dependencies for all services
@@ -116,6 +107,24 @@ done
 for service in entity-relations entity-search dataset-matching data-management dataset-search user-management; do
   cd services/$service && npm run type-check && cd ../..
 done
+```
+
+### 🚀 Deployment Scripts (Organized)
+```bash
+# Verify deployment configuration before deployment
+./scripts/verify-deployment.sh
+
+# Complete Docker deployment
+./scripts/deploy.sh
+
+# Monitor running services
+./scripts/monitor-services.sh
+
+# Validate environment variables
+./scripts/check-env.sh
+
+# Reset Redis if needed
+./scripts/reset-redis.sh
 ```
 
 ### Service Health Verification
@@ -172,6 +181,47 @@ All services use strict TypeScript configuration:
 - **Cost**: One less service to maintain and monitor
 
 **Migration Path**: Frontend now connects directly to each microservice using individual URLs. CloudFlare CDN handles routing in production.
+
+## 🔧 Shared Infrastructure (Phase 3 Performance Optimization)
+
+### `/src/shared/` Architecture
+**Purpose**: Eliminate code duplication and ensure consistent patterns across all microservices
+
+**Core Components**:
+- **ResponseFormatter**: Standardized API response structure and error handling
+- **ServiceErrors**: Common error types with HTTP status code mapping
+- **CommonTypes**: Shared TypeScript interfaces used across services
+- **BaseController**: Base class with common middleware and request handling
+- **CommonUtilities**: Shared utility functions for validation and formatting
+
+**Performance Optimization Layer**:
+- **CacheService**: Redis-based caching with TTL management and fallback strategies
+- **CachedAPIService**: Base class for external API calls with automatic caching
+- **DatabaseOptimizer**: Query optimization and connection pooling for Supabase
+- **APMService**: Application Performance Monitoring with metrics collection
+- **PerformanceTestSuite**: Automated performance testing framework
+
+**Usage Pattern**:
+```typescript
+// In any microservice
+import { BaseController, ResponseFormatter, CacheService } from '../shared';
+
+class MyController extends BaseController {
+  async handleRequest(req: Request, res: Response) {
+    const cacheKey = 'my-data';
+    const cached = await CacheService.get(cacheKey);
+
+    if (cached) {
+      return ResponseFormatter.success(res, cached);
+    }
+
+    // Process and cache result
+    const result = await this.processData();
+    await CacheService.set(cacheKey, result, 3600); // 1 hour TTL
+    return ResponseFormatter.success(res, result);
+  }
+}
+```
 
 ### Core Services
 

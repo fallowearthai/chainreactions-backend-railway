@@ -3,9 +3,13 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { DatasetMatchingController } from './controllers/DatasetMatchingController';
+import { Logger } from '../../../src/shared/utils/Logger';
 
 // Load environment variables
 dotenv.config();
+
+// Initialize logger
+const logger = new Logger('dataset-matching');
 
 const app = express();
 const PORT = process.env.PORT || 3004;
@@ -29,9 +33,12 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Request logging middleware
+// Request logging middleware (sanitized)
 app.use((req, res, next) => {
-  console.log(`📨 ${req.method} ${req.path} - ${new Date().toISOString()}`);
+  logger.info('Request received', {
+    method: req.method,
+    path: logger.sanitizePath(req.path)
+  });
   next();
 });
 
@@ -161,7 +168,7 @@ app.get('/api', (req, res) => {
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('❌ Unhandled error:', err);
+  logger.error('Unhandled error', err);
 
   res.status(500).json({
     error: 'Internal server error',
@@ -191,20 +198,15 @@ app.use('*', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Dataset Matching Service started on port ${PORT}`);
-  console.log(`📋 Available endpoints:`);
-  console.log(`   Health: GET /api/health`);
-  console.log(`   Info: GET /api`);
-  console.log(`   Single Match: POST /api/dataset-matching/match`);
-  console.log(`   Batch Match: POST /api/dataset-matching/batch`);
-  console.log(`   Cache Clear: DELETE /api/dataset-matching/cache/clear`);
-  console.log(`   Statistics: GET /api/dataset-matching/stats`);
-  console.log(`   Test: GET /api/dataset-matching/test`);
-  console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 CORS enabled for: ${process.env.NODE_ENV === 'production' ? 'Production domains' : 'Local development'}`);
-  console.log(`🧠 Advanced matching algorithms ready`);
-  console.log(`💾 Caching system initialized`);
-  console.log(`⚡ Batch processing enabled`);
+  logger.info(`Dataset Matching Service started on port ${PORT}`, {
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development'
+  });
+  logger.info('Endpoints available: GET /api/health, GET /api, POST /api/dataset-matching/match, POST /api/dataset-matching/batch, DELETE /api/dataset-matching/cache/clear');
+  logger.info(`CORS enabled for: ${process.env.NODE_ENV === 'production' ? 'Production domains' : 'Local development'}`);
+  logger.info('Advanced matching algorithms ready');
+  logger.info('Caching system initialized');
+  logger.info('Batch processing enabled');
 });
 
 export default app;

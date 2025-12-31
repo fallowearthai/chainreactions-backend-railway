@@ -7,6 +7,7 @@ export interface DatasetSearchRequest {
   end_date?: string;   // YYYY-MM-DD format
   excel_file?: Express.Multer.File;
   excel_file_name?: string;
+  dataset_id?: string; // Optional dataset ID for dynamic dataset selection
 }
 
 export interface DatasetSearchResponse {
@@ -111,6 +112,20 @@ export class DatasetSearchError extends Error {
     this.code = code;
     this.statusCode = statusCode;
   }
+}
+
+// Dataset interface for dynamic dataset selection
+export interface Dataset {
+  id: string;
+  name: string;
+  description?: string;
+  entity_count?: number;
+  is_system: boolean;
+  created_at: string;
+  updated_at?: string;
+  uploaded_by?: string;
+  file_name?: string;
+  schema_type?: string;
 }
 
 // 新增：Canadian NRO组织接口

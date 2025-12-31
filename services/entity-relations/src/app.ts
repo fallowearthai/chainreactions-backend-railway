@@ -5,25 +5,25 @@ import dotenv from 'dotenv';
 import { DeepThinkingSearchController } from './controllers/DeepThinkingSearchController';
 import { StandardSearchController } from './controllers/StandardSearchController';
 import { FeatureFlags } from './utils/FeatureFlags';
+import { Logger } from '../../../src/shared/utils/Logger';
 
 // Load environment variables
 dotenv.config();
 
+// Initialize logger
+const logger = new Logger('entity-relations');
+
 // Global error handlers for stability
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('🚨 Unhandled Promise Rejection:', {
+  logger.error('Unhandled Promise Rejection', reason instanceof Error ? reason : undefined, {
     reason: reason?.toString() || reason,
-    promise: promise?.toString() || 'unknown',
-    timestamp: new Date().toISOString(),
-    stack: reason instanceof Error ? reason.stack : undefined
+    promise: promise?.toString() || 'unknown'
   });
 });
 
 process.on('uncaughtException', (error) => {
-  console.error('🚨 Uncaught Exception:', {
-    message: error.message,
-    stack: error.stack,
-    timestamp: new Date().toISOString()
+  logger.error('Uncaught Exception', error, {
+    context: 'process_handler'
   });
   gracefulShutdown('UNCAUGHT_EXCEPTION');
 });
@@ -33,16 +33,16 @@ let isShuttingDown = false;
 
 function gracefulShutdown(signal: string) {
   if (isShuttingDown) {
-    console.log(`⚠️ ${signal} received but shutdown already in progress`);
+    logger.warn(`Signal ${signal} received but shutdown already in progress`);
     return;
   }
 
   isShuttingDown = true;
-  console.log(`🛑 ${signal} received, starting graceful shutdown...`);
+  logger.info(`Signal ${signal} received, starting graceful shutdown`);
 
   // Force exit after 10 seconds if graceful shutdown fails
   setTimeout(() => {
-    console.log('⏰ Forced shutdown timeout reached');
+    logger.error('Forced shutdown timeout reached');
     process.exit(1);
   }, 10000);
 
@@ -61,11 +61,11 @@ function validateEnvironment() {
   const missing = required.filter(key => !process.env[key]);
 
   if (missing.length > 0) {
-    throw new Error(`❌ Missing required environment variables: ${missing.join(', ')}`);
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
   }
 
   if (!process.env.NODE_ENV) {
-    console.warn('⚠️ NODE_ENV not set, defaulting to development');
+    logger.warn('NODE_ENV not set, defaulting to development');
     process.env.NODE_ENV = 'development';
   }
 }
@@ -73,9 +73,9 @@ function validateEnvironment() {
 // Validate environment on startup
 try {
   validateEnvironment();
-  console.log('✅ Environment variables validated');
+  logger.info('Service configuration validated');
 } catch (error) {
-  console.error(error instanceof Error ? error.message : 'Environment validation failed');
+  logger.error('Environment validation failed', error instanceof Error ? error : undefined);
   process.exit(1);
 }
 
@@ -97,11 +97,11 @@ function startMemoryMonitoring() {
     const usedMB = Math.round(usage.heapUsed / 1024 / 1024);
 
     if (usedMB > 400) { // Warning at 400MB
-      console.warn(`⚠️ High memory usage: ${usedMB}MB`);
+      logger.warn('High memory usage detected', { usedMB, limitMB: 512 });
     }
 
     if (usage.heapUsed > memoryLimit) {
-      console.error(`🚨 Memory limit exceeded: ${usedMB}MB > 512MB`);
+      logger.error('Memory limit exceeded', undefined, { usedMB, limitMB: 512 });
       // Trigger garbage collection and consider graceful degradation
       if (global.gc) {
         global.gc();
@@ -133,7 +133,10 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use((req, res, next) => {
   const timeout = setTimeout(() => {
     if (!res.headersSent) {
-      console.warn(`⏰ Request timeout: ${req.method} ${req.path}`);
+      logger.warn('Request timeout', {
+        method: req.method,
+        path: logger.sanitizePath(req.path)
+      });
       res.status(504).json({
         error: 'Request timeout',
         message: 'Request took too long to process',
@@ -147,17 +150,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// Request logging middleware with structured logging
+// Request logging middleware (sanitized, no IP or User-Agent)
 app.use((req, res, next) => {
-  const timestamp = new Date().toISOString();
-  console.log(JSON.stringify({
-    level: 'info',
+  logger.info('Request received', {
     method: req.method,
-    path: req.path,
-    ip: req.ip,
-    userAgent: req.get('User-Agent'),
-    timestamp
-  }));
+    path: logger.sanitizePath(req.path)
+  });
   next();
 });
 
@@ -352,33 +350,29 @@ app.use('*', (req, res) => {
 const HOST = process.env.HOST || '0.0.0.0'; // Docker requires binding to 0.0.0.0
 
 const server = app.listen(Number(PORT), HOST, () => {
-  console.log(`🚀 Entity Relations Service started successfully`);
-  console.log(`📍 Host: ${HOST}, Port: ${PORT}`);
-  console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`✅ Environment variables validated`);
-  console.log(`📊 Memory monitoring: Active`);
-  console.log(`📋 Available endpoints:`);
-  console.log(`   Health: GET /api/health`);
-  console.log(`   Info: GET /api`);
-  console.log(`   DeepThinking Search: POST /api/deepthinking-search`);
-  console.log(`   Standard Search: POST /api/standard-search`);
-  console.log(`🌐 CORS enabled for: ${process.env.NODE_ENV === 'production' ? 'Production domains' : 'Local development'}`);
+  logger.info(`Entity Relations Service started successfully`, {
+    host: HOST,
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development'
+  });
+  logger.info('Endpoints available: GET /api/health, GET /api, POST /api/deepthinking-search, POST /api/standard-search');
+  logger.info(`CORS enabled for: ${process.env.NODE_ENV === 'production' ? 'Production domains' : 'Local development'}`);
 });
 
 // Handle server errors
 server.on('error', (error: any) => {
   if (error.code === 'EADDRINUSE') {
-    console.error(`❌ Port ${PORT} is already in use`);
+    logger.error(`Port ${PORT} is already in use`, undefined, { port: PORT });
     process.exit(1);
   } else {
-    console.error(`❌ Server error:`, error);
+    logger.error('Server error', error);
     process.exit(1);
   }
 });
 
 // Handle server close event for graceful shutdown
 server.on('close', () => {
-  console.log('🛑 Server closed');
+  logger.info('Server closed');
   if (memoryCheckInterval) {
     clearInterval(memoryCheckInterval);
   }

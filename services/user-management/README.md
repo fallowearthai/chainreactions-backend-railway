@@ -61,15 +61,42 @@ services/user-management/
 ### Database Integration
 - **Supabase Auth** for user authentication
 - **PostgreSQL** via Supabase for user data
-- **Existing tables**: `profiles`, `user_roles`, `user_usage_credits`
+- **Existing tables**: `profiles`, `user_roles`, `user_usage_credits`, `user_sessions`
 - **Row Level Security** for data isolation
+
+### Session Management System
+The service implements a polling-based multi-device session management:
+
+**How it works:**
+1. **Login**: When a user logs in, all existing sessions are deactivated and a new active session is created
+2. **Polling**: Frontend clients check session status every 30 seconds via `/api/auth/check-session`
+3. **Auto-logout**: When a session becomes inactive, clients automatically sign out the user
+
+**Database Schema:**
+```sql
+user_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  session_id text UNIQUE NOT NULL,
+  is_active boolean DEFAULT true,
+  ip_address inet,
+  user_agent text,
+  created_at timestamptz DEFAULT now(),
+  last_activity_at timestamptz DEFAULT now()
+);
+```
+
+**RLS Policies:**
+- Users can only manage their own sessions
+- Service role key bypasses RLS for administrative operations
+- Sessions automatically expire after 24 hours of inactivity
 
 ## 📡 API Endpoints
 
 ### Authentication
 ```http
 POST /api/auth/signup          # User registration
-POST /api/auth/signin           # User login
+POST /api/auth/signin           # User login (with session management)
 POST /api/auth/signout          # User logout
 POST /api/auth/verify-email     # Email verification
 POST /api/auth/reset-password   # Password reset request
@@ -79,6 +106,15 @@ POST /api/auth/oauth/callback   # OAuth callback
 GET  /api/auth/user             # Get current user
 POST /api/auth/refresh          # Refresh JWT token
 POST /api/auth/service-auth     # Service authentication
+
+### Session Management
+```http
+GET  /api/auth/session-config   # Get session configuration
+POST /api/auth/check-session    # Check if current session is active
+POST /api/auth/update-activity  # Update session activity timestamp
+GET  /api/auth/sessions         # Get user's active sessions
+POST /api/auth/sessions         # Register new session
+POST /api/auth/sessions/:sessionId/logout # Force logout specific session
 ```
 
 ### User Management

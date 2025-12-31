@@ -4,9 +4,13 @@ import * as dotenv from 'dotenv';
 import compression from 'compression';
 import { DataManagementController } from './controllers/DataManagementController';
 import { upload } from './middleware/upload';
+import { Logger } from '../../../src/shared/utils/Logger';
 
 // Load environment variables
 dotenv.config();
+
+// Initialize logger
+const logger = new Logger('data-management');
 
 // Initialize Express app
 const app = express();
@@ -43,9 +47,12 @@ app.use(cors({
   credentials: true
 }));
 
-// Request logging
+// Request logging (sanitized)
 app.use((req: Request, res: Response, next: NextFunction) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  logger.info('Request received', {
+    method: req.method,
+    path: logger.sanitizePath(req.path)
+  });
   next();
 });
 
@@ -154,24 +161,22 @@ app.use((req: Request, res: Response) => {
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-  console.log('🚀 Data Management Service Started');
-  console.log(`📡 Server running on port ${PORT} (0.0.0.0)`);
-  console.log(`🏥 Health: http://localhost:${PORT}/api/health`);
-  console.log(`📊 Info: http://localhost:${PORT}/api/info`);
-  console.log(`📂 Datasets: GET http://localhost:${PORT}/api/data-management/datasets`);
-  console.log(`📤 Upload: POST http://localhost:${PORT}/api/data-management/datasets/:id/upload`);
-  console.log('');
-  console.log('📋 Configuration:');
-  console.log(`   SUPABASE_URL: ${process.env.SUPABASE_URL ? '✅ Set' : '❌ Not set'}`);
-  console.log(`   SUPABASE_ANON_KEY: ${process.env.SUPABASE_ANON_KEY ? '✅ Set' : '❌ Not set'}`);
-  console.log(`   UPLOAD_PATH: ${process.env.UPLOAD_PATH || './uploads'}`);
-  console.log(`   NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
-  console.log('');
-  console.log('✅ Ready to accept requests...');
+  logger.info(`Data Management Service started on port ${PORT}`, {
+    port: PORT,
+    host: '0.0.0.0'
+  });
+  logger.info('Endpoints available: GET /api/health, GET /api/info, GET /api/data-management/datasets, POST /api/data-management/datasets/:id/upload');
+  logger.info('Configuration loaded', {
+    supabaseUrl: !!process.env.SUPABASE_URL,
+    supabaseAnonKey: !!process.env.SUPABASE_ANON_KEY,
+    uploadPath: process.env.UPLOAD_PATH || './uploads',
+    environment: process.env.NODE_ENV || 'development'
+  });
+  logger.info('Service ready to accept requests');
 
   // Configuration warnings
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-    console.warn('⚠️ Supabase configuration incomplete. Service may not function properly.');
+    logger.warn('Supabase configuration incomplete. Service may not function properly');
   }
 });
 

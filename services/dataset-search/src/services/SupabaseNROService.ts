@@ -1,5 +1,18 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+export interface Dataset {
+  id: string;
+  name: string;
+  description?: string;
+  entity_count?: number;
+  is_system: boolean;
+  created_at: string;
+  updated_at?: string;
+  uploaded_by?: string;
+  file_name?: string;
+  schema_type?: string;
+}
+
 export interface NROOrganization {
   id: string;
   organization_name: string;
@@ -30,13 +43,99 @@ export class SupabaseNROService {
   }
 
   /**
-   * 获取所有Canadian NRO组织数据
-   * @param testMode 测试模式：如果为true，只返回前6个实体以节省token
-   * @returns Promise<NROOrganization[]> Canadian NRO组织列表
+   * 获取所有可用的数据集
+   * @returns Promise<Dataset[]> 数据集列表
    */
-  async getCanadianNRO(testMode: boolean = false): Promise<NROOrganization[]> {
+  async getAvailableDatasets(): Promise<Dataset[]> {
+    console.log('📋 Fetching available datasets from Supabase...');
+
+    try {
+      const { data, error } = await this.supabase
+        .from('datasets')
+        .select(`
+          id,
+          name,
+          description,
+          is_system,
+          created_at,
+          updated_at,
+          created_by,
+          publisher
+        `)
+        .eq('is_active', true) // Only get active datasets
+        .order('is_system', { ascending: false }) // 系统数据集优先
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error('❌ Supabase query error:', error);
+        throw new Error(`Failed to fetch datasets: ${error.message}`);
+      }
+
+      if (!data || data.length === 0) {
+        console.warn('⚠️ No datasets found in database');
+        return [];
+      }
+
+      console.log(`✅ Successfully fetched ${data.length} datasets`);
+
+      // Get entity counts for each dataset
+      const datasetsWithCounts = await Promise.all(
+        data.map(async (row) => {
+          try {
+            const { count } = await this.supabase
+              .from('dataset_entries')
+              .select('*', { count: 'exact', head: true })
+              .eq('dataset_id', row.id);
+
+            return {
+              id: row.id,
+              name: row.name,
+              description: row.description,
+              entity_count: count || 0,
+              is_system: row.is_system || false,
+              created_at: row.created_at,
+              updated_at: row.updated_at,
+              uploaded_by: row.created_by,
+              file_name: row.publisher, // Map publisher to file_name for compatibility
+              schema_type: row.publisher
+            };
+          } catch (countError) {
+            console.warn(`⚠️ Could not count entities for dataset ${row.id}:`, countError);
+            return {
+              id: row.id,
+              name: row.name,
+              description: row.description,
+              entity_count: 0,
+              is_system: row.is_system || false,
+              created_at: row.created_at,
+              updated_at: row.updated_at,
+              uploaded_by: row.created_by,
+              file_name: row.publisher,
+              schema_type: row.publisher
+            };
+          }
+        })
+      );
+
+      return datasetsWithCounts;
+
+    } catch (error) {
+      console.error('❌ Error fetching datasets:', error);
+      throw new Error(
+        `SupabaseNROService.getAvailableDatasets failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * 根据数据集ID获取数据集条目
+   * @param datasetId 数据集ID
+   * @param testMode 测试模式：如果为true，只返回前6个实体以节省token
+   * @returns Promise<NROOrganization[]> 数据集条目列表
+   */
+  async getDatasetEntries(datasetId: string, testMode: boolean = false): Promise<NROOrganization[]> {
     const entityCount = testMode ? 6 : undefined;
-    console.log(`🔍 Fetching Canadian NRO organizations from Supabase... ${testMode ? '(TEST MODE - Limited to 6 entities)' : '(Full dataset - 103 entities)'}`);
+    console.log(`🔍 Fetching dataset entries for dataset: ${datasetId}... ${testMode ? '(TEST MODE - Limited to 6 entities)' : '(Full dataset)'}`);
 
     try {
       let query = this.supabase
@@ -50,8 +149,7 @@ export class SupabaseNROService {
           metadata,
           dataset_source
         `)
-        // 通过dataset_id关联查询Canadian Named Research Organizations数据集
-        .eq('dataset_id', '93283166-d816-43c3-b060-264290a561ab')
+        .eq('dataset_id', datasetId)
         .order('organization_name', { ascending: true });
 
       if (testMode) {
@@ -62,15 +160,15 @@ export class SupabaseNROService {
 
       if (error) {
         console.error('❌ Supabase query error:', error);
-        throw new Error(`Failed to fetch Canadian NRO data: ${error.message}`);
+        throw new Error(`Failed to fetch dataset entries: ${error.message}`);
       }
 
       if (!data || data.length === 0) {
-        console.warn('⚠️ No Canadian NRO organizations found in database');
+        console.warn(`⚠️ No dataset entries found for dataset: ${datasetId}`);
         return [];
       }
 
-      console.log(`✅ Successfully fetched ${data.length} Canadian NRO organizations`);
+      console.log(`✅ Successfully fetched ${data.length} dataset entries`);
 
       return data.map(row => ({
         id: row.id,
@@ -83,11 +181,21 @@ export class SupabaseNROService {
       }));
 
     } catch (error) {
-      console.error('❌ Error fetching Canadian NRO data:', error);
+      console.error('❌ Error fetching dataset entries:', error);
       throw new Error(
-        `SupabaseNROService.getCanadianNRO failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `SupabaseNROService.getDatasetEntries failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
+  }
+
+  /**
+   * 获取所有Canadian NRO组织数据 (保持向后兼容性)
+   * @param testMode 测试模式：如果为true，只返回前6个实体以节省token
+   * @returns Promise<NROOrganization[]> Canadian NRO组织列表
+   */
+  async getCanadianNRO(testMode: boolean = false): Promise<NROOrganization[]> {
+    const nroDatasetId = '93283166-d816-43c3-b060-264290a561ab';
+    return this.getDatasetEntries(nroDatasetId, testMode);
   }
 
   /**

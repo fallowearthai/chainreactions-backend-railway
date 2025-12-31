@@ -1,5 +1,5 @@
 // Shared infrastructure declarations for user-management service
-declare module '../../../shared/base/BaseController' {
+declare module '../../../../src/shared/base/BaseController' {
   import { Request, Response, NextFunction } from 'express';
   export abstract class BaseController {
     constructor(serviceName: string);
@@ -19,7 +19,7 @@ declare module '../../../shared/base/BaseController' {
   }
 }
 
-declare module '../../../shared/errors/ServiceErrors' {
+declare module '../../../../src/shared/errors/ServiceErrors' {
   export class ServiceError extends Error {
     constructor(statusCode: number, code: string, message: string, details?: any);
   }
@@ -73,7 +73,7 @@ declare module '../../../shared/errors/ServiceErrors' {
   }
 }
 
-declare module '../../../shared/constants/ServiceConstants' {
+declare module '../../../../src/shared/constants/ServiceConstants' {
   export const HTTP_STATUS: {
     OK: number;
     CREATED: number;

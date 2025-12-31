@@ -2,6 +2,8 @@ import { Response, NextFunction } from 'express';
 import { ResponseFormatter } from '../utils/ResponseFormatter';
 import { ServiceError, ValidationError, ExternalApiError, NotFoundError } from '../errors/ServiceErrors';
 import { Request } from 'express';
+import { Logger } from '../utils/Logger';
+import { Sanitization } from '../utils/Sanitization';
 
 /**
  * Base controller class for all ChainReactions microservices.
@@ -10,15 +12,19 @@ import { Request } from 'express';
  * - Error handling with appropriate HTTP status codes
  * - Request validation
  * - Response formatting
- * - Logging
+ * - Professional logging with sanitization
  *
  * Extending controllers should call super.setup() in their constructor.
  */
 export abstract class BaseController {
   protected serviceName: string;
+  protected logger: Logger;
+  protected sanitizer: Sanitization;
 
   constructor(serviceName: string) {
     this.serviceName = serviceName;
+    this.logger = new Logger(serviceName);
+    this.sanitizer = new Sanitization();
   }
 
   /**
@@ -30,7 +36,12 @@ export abstract class BaseController {
     defaultMessage: string = 'Internal server error',
     path?: string
   ): void {
-    console.error(`[${this.serviceName}] Error:`, error);
+    // Log error using professional logger
+    if (error instanceof Error) {
+      this.logger.error(defaultMessage, error, { path });
+    } else {
+      this.logger.error(defaultMessage, undefined, { error: String(error), path });
+    }
 
     if (error instanceof ValidationError) {
       res.status(400).json(
@@ -181,6 +192,7 @@ export abstract class BaseController {
 
   /**
    * Get client IP address from request
+   * Note: Only use this for legitimate security purposes, not for logging
    */
   protected getClientIP(req: Request): string {
     return (
@@ -193,33 +205,21 @@ export abstract class BaseController {
   }
 
   /**
-   * Log request information
+   * Log request information (sanitized - no IP or User-Agent)
    */
   protected logRequest(req: Request, additionalInfo?: string): void {
-    const timestamp = new Date().toISOString();
-    const clientIP = this.getClientIP(req);
-    const userAgent = req.headers['user-agent'] || 'unknown';
-
-    console.log(
-      `[${this.serviceName}] ${timestamp} - ${req.method} ${req.path} - IP: ${clientIP} - UA: ${userAgent}${
-        additionalInfo ? ` - ${additionalInfo}` : ''
-      }`
-    );
+    this.logger.info('Request received', {
+      method: req.method,
+      path: this.logger.sanitizePath(req.path),
+      additionalInfo
+    });
   }
 
   /**
    * Log error with additional context
    */
   protected logError(error: Error, context?: string): void {
-    const timestamp = new Date().toISOString();
-    console.error(
-      `[${this.serviceName}] ${timestamp} - ERROR${context ? ` - ${context}` : ''}:`,
-      {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      }
-    );
+    this.logger.error(error.message, error, { context });
   }
 
   /**

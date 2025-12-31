@@ -111,6 +111,76 @@ export class AuthMiddleware {
     }
   }
 
+  // Lightweight JWT-only Authentication (no database calls)
+  static async authenticateJWTOnly(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const authHeader = req.headers.authorization;
+
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required',
+          message: 'Please provide a valid authorization token',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        });
+        return;
+      }
+
+      const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+      // Validate the token using lightweight JWT decode-only
+      const tokenValidation = await AuthMiddleware.getAuthService().validateJWT(token);
+
+      if (!tokenValidation.valid || !tokenValidation.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Invalid or expired token',
+          message: 'Please authenticate again',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        });
+        return;
+      }
+
+      // Create minimal security context without database calls
+      const securityContext: SecurityContext = {
+        user: tokenValidation.user,
+        profile: {
+          id: tokenValidation.user.id,
+          email: tokenValidation.user.email || '',
+          firstName: tokenValidation.user.user_metadata?.firstName || '',
+          lastName: tokenValidation.user.user_metadata?.lastName || '',
+          avatarUrl: tokenValidation.user.user_metadata?.avatar_url || '',
+          company: tokenValidation.user.user_metadata?.company || '',
+          department: tokenValidation.user.user_metadata?.department || '',
+          role: tokenValidation.user.app_metadata?.role || 'user',
+          emailVerified: !!tokenValidation.user.email_confirmed_at,
+          createdAt: tokenValidation.user.created_at,
+          updatedAt: tokenValidation.user.updated_at || tokenValidation.user.created_at
+        } as any,
+        permissions: AuthMiddleware.getUserPermissions(tokenValidation.user.app_metadata?.role || 'user'),
+        sessionId: AuthMiddleware.extractSessionId(req),
+        ipAddress: req.ip || req.connection.remoteAddress || 'unknown',
+        userAgent: req.get('User-Agent') || 'unknown'
+      };
+
+      // Attach user context to request
+      req.user = securityContext;
+
+      next();
+    } catch (error) {
+      console.error('JWT authentication middleware error:', error);
+      res.status(401).json({
+        success: false,
+        error: 'Authentication error',
+        message: 'An error occurred during authentication',
+        timestamp: new Date().toISOString(),
+        path: req.path
+      });
+    }
+  }
+
   // Optional Authentication (doesn't fail if no token)
   static async optionalAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -338,7 +408,7 @@ export class AuthMiddleware {
   }
 
   // Helper Methods
-  private static async getUserPermissions(role: string): Promise<string[]> {
+  private static getUserPermissions(role: string): string[] {
     switch (role) {
       case 'admin':
         return ['admin', 'user_management', 'approve_users', 'manage_credits', 'view_analytics'];

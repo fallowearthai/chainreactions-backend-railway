@@ -1,10 +1,25 @@
 import { Request, Response } from 'express';
+
+// Extend Request interface to include user context (same as middleware/auth.ts)
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: string;
+        email: string;
+        user_metadata?: any;
+        app_metadata?: any;
+      };
+    }
+  }
+}
 import { v4 as uuidv4 } from 'uuid';
 import { SupabaseNROService } from '../services/SupabaseNROService';
 import { LinkupSearchService } from '../services/LinkupSearchService';
 import { LinkupResponseParser } from '../services/LinkupResponseParser';
 import { SearchHistoryService } from '../services/SearchHistoryService';
 import { sseService } from '../services/SSEService';
+import { CreditServiceIntegration } from '../services/CreditServiceIntegration';
 import {
   DatasetSearchRequest,
   DatasetSearchResponse,
@@ -28,13 +43,88 @@ export class DatasetSearchController {
   private nroService: SupabaseNROService;
   private linkupService: LinkupSearchService;
   private historyService: SearchHistoryService;
+  private creditService: CreditServiceIntegration;
   private activeExecutions: Map<string, DatasetExecutionState> = new Map();
 
   constructor() {
     this.nroService = new SupabaseNROService();
     this.linkupService = new LinkupSearchService();
     this.historyService = new SearchHistoryService();
+    this.creditService = new CreditServiceIntegration();
   }
+
+  /**
+   * Credit validation middleware
+   * Validates user has sufficient credits before starting dataset search
+   */
+  private validateCredits = async (req: Request): Promise<{ valid: boolean; error?: string }> => {
+    try {
+      // Get user_id from authenticated user object
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return { valid: false, error: 'User authentication required' };
+      }
+
+      // Extract JWT token from request headers for credit service calls
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        this.creditService.setAuthToken(token);
+      }
+
+      const creditCheck = await this.creditService.checkCredits(userId);
+
+      if (!creditCheck.success) {
+        return { valid: false, error: creditCheck.error || 'Credit check failed' };
+      }
+
+      if (!creditCheck.hasCredits) {
+        return {
+          valid: false,
+          error: 'Insufficient credits for dataset search. Please upgrade your account or contact support.'
+        };
+      }
+
+      return { valid: true };
+    } catch (error) {
+      console.error('Credit validation error:', error);
+      return { valid: false, error: 'Credit validation service unavailable' };
+    }
+  };
+
+  /**
+   * Credit deduction method
+   * Deducts 1 credit for dataset search
+   */
+  private deductCredit = async (req: Request, reason: string = 'dataset_search'): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const userId = req.user?.id;
+      const query = req.body?.target_institution;
+
+      if (!userId) {
+        return { success: false, error: 'User ID required for credit deduction' };
+      }
+
+      // Extract JWT token from request headers for credit service calls
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        this.creditService.setAuthToken(token);
+      }
+
+      const deductionResult = await this.creditService.deductCredits(userId, 'dataset_search', query, reason);
+
+      if (!deductionResult.success) {
+        return { success: false, error: deductionResult.error || 'Credit deduction failed' };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Credit deduction error:', error);
+      return { success: false, error: 'Credit deduction service unavailable' };
+    }
+  };
 
 
 
@@ -48,7 +138,7 @@ export class DatasetSearchController {
    * POST /api/dataset-search/stream
    */
   streamSearch = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const { target_institution, test_mode = false, from_date, to_date } = req.body;
+    const { target_institution, test_mode = false, from_date, to_date, dataset_id } = req.body;
 
     // 验证输入
     validateRequired(target_institution, 'target_institution');
@@ -62,14 +152,40 @@ export class DatasetSearchController {
       validateString(to_date, 'to_date', 1, 50);
     }
 
+    // 验证dataset_id格式（如果提供）
+    if (dataset_id) {
+      validateString(dataset_id, 'dataset_id', 1, 50);
+    }
+
+    // 验证用户积分
+    const creditValidation = await this.validateCredits(req);
+    if (!creditValidation.valid) {
+      res.status(402).json({
+        success: false,
+        error: creditValidation.error,
+        code: 'INSUFFICIENT_CREDITS'
+      });
+      return;
+    }
+
     const executionId = uuidv4();
     const startTime = Date.now();
 
-    console.log(`🚀 Starting SSE stream search for: ${target_institution} (${executionId})${test_mode ? ' [TEST MODE]' : ''}`);
+    const defaultDatasetId = '93283166-d816-43c3-b060-264290a561ab'; // Canadian NRO default
+    const selectedDatasetId = dataset_id || defaultDatasetId;
+
+    console.log(`🚀 Starting SSE stream search for: ${target_institution} (${executionId})${test_mode ? ' [TEST MODE]' : ''} [Dataset: ${selectedDatasetId}]`);
 
     try {
-      // 获取Canadian NRO组织列表 (测试模式下限制为6个实体)
-      const nroOrganizations = await this.nroService.getCanadianNRO(test_mode);
+      // 立即扣除积分 - 确保无论搜索结果如何都扣除
+      const creditDeduction = await this.deductCredit(req, 'dataset_search_start');
+      if (!creditDeduction.success) {
+        console.error('Failed to deduct credits for dataset search:', creditDeduction.error);
+        // 继续执行，但记录错误 - 可能需要监控
+      }
+
+      // 获取指定数据集的组织列表 (测试模式下限制为6个实体)
+      const nroOrganizations = await this.nroService.getDatasetEntries(selectedDatasetId, test_mode);
 
       if (nroOrganizations.length === 0) {
         throw new DatasetSearchError('No Canadian NRO organizations found', 'NO_NRO_DATA', 500);
@@ -303,6 +419,32 @@ export class DatasetSearchController {
 
     } catch (error) {
       console.error(`❌ Failed to get stream search status:`, error);
+      throw error;
+    }
+  });
+
+  /**
+   * 获取所有可用的数据集列表
+   * GET /api/dataset-search/datasets
+   */
+  listAvailableDatasets = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    try {
+      console.log('📋 Fetching available datasets...');
+
+      const datasets = await this.nroService.getAvailableDatasets();
+
+      res.json({
+        success: true,
+        data: {
+          datasets,
+          total: datasets.length
+        }
+      });
+
+      console.log(`✅ Retrieved ${datasets.length} available datasets`);
+
+    } catch (error) {
+      console.error(`❌ Failed to fetch datasets:`, error);
       throw error;
     }
   });

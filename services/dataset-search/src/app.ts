@@ -3,16 +3,11 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { DatasetSearchController } from './controllers/DatasetSearchController';
 import { errorHandler, notFoundHandler } from './utils/ErrorHandler';
+import { authenticate } from './middleware/auth';
+import { Logger } from '../../../src/shared/utils/Logger';
 
-// Simple logger for standalone service
-const logger = {
-  info: (msg: string, ...args: any[]) => console.log(`[DatasetSearch] ${msg}`, ...args),
-  warn: (msg: string, ...args: any[]) => console.warn(`[DatasetSearch] ${msg}`, ...args),
-  error: (msg: string, ...args: any[]) => console.error(`[DatasetSearch] ${msg}`, ...args),
-  debug: (msg: string, ...args: any[]) => console.log(`[DatasetSearch:DEBUG] ${msg}`, ...args),
-  verbose: (msg: string, ...args: any[]) => console.log(`[DatasetSearch:VERBOSE] ${msg}`, ...args),
-  success: (msg: string, ...args: any[]) => console.log(`[DatasetSearch:SUCCESS] ${msg}`, ...args)
-};
+// Initialize logger
+const logger = new Logger('dataset-search');
 
 // Simplified service registration for testing
 async function registerWithServiceDiscovery(): Promise<void> {
@@ -20,7 +15,7 @@ async function registerWithServiceDiscovery(): Promise<void> {
     logger.info('Dataset search service started (Redis service discovery disabled for testing)');
     // TODO: Implement proper service discovery after fixing dependencies
   } catch (error) {
-    logger.error('Failed to register with service discovery:', error);
+    logger.error('Failed to register with service discovery', error instanceof Error ? error : undefined);
   }
 }
 
@@ -55,9 +50,12 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Request logging middleware
+// Request logging middleware (sanitized)
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  logger.info('Request received', {
+    method: req.method,
+    path: logger.sanitizePath(req.path)
+  });
   next();
 });
 
@@ -74,6 +72,7 @@ app.get('/api', (req, res) => {
       'POST /api/dataset-search/stream - Start SSE streaming search',
       'DELETE /api/dataset-search/stream/:execution_id - Cancel streaming search',
       'GET /api/dataset-search/stream/:execution_id/status - Get streaming search status',
+      'GET /api/dataset-search/datasets - List available datasets',
       'GET /api/dataset-search/nro-stats - Get Canadian NRO statistics',
       'GET /api/health - Health check'
     ],
@@ -96,7 +95,10 @@ app.get('/api/test', (req, res) => {
 });
 
 
-// SSE Streaming Routes
+// Apply authentication middleware to all dataset-search routes
+app.use('/api/dataset-search', authenticate);
+
+// SSE Streaming Routes (with authentication)
 app.post('/api/dataset-search/stream',
   datasetSearchController.streamSearch
 );
@@ -109,13 +111,17 @@ app.get('/api/dataset-search/stream/:execution_id/status',
   datasetSearchController.getStreamSearchStatus
 );
 
+app.get('/api/dataset-search/datasets',
+  datasetSearchController.listAvailableDatasets
+);
+
 app.get('/api/dataset-search/nro-stats',
   datasetSearchController.getNROStats
 );
 
 // Serve the test frontend explicitly
 app.get('/test-frontend.html', (req, res) => {
-  console.log('📄 Serving test-frontend.html');
+  logger.debug('Serving test-frontend.html');
   res.sendFile('test-frontend.html', { root: '.' });
 });
 
@@ -133,65 +139,55 @@ const requiredEnvVars = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'LINKUP_API_KEY'];
 const missingRequiredVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
 
 if (missingRequiredVars.length > 0) {
-  console.warn(`⚠️  Warning: Missing environment variables: ${missingRequiredVars.join(', ')}`);
-  console.warn('   Some features may not work correctly.');
-  console.warn('   Service will start in degraded mode for troubleshooting.');
-  console.warn('   Please check your Docker environment configuration.');
-  // Don't exit - allow service to start for health checks and debugging
+  logger.warn(`Missing environment variables: ${missingRequiredVars.join(', ')}`, {
+    missingVars,
+    mode: 'degraded'
+  });
+  logger.warn('Service will start in degraded mode. Please check your Docker environment configuration');
 } else {
-  console.log('✅ All required environment variables are present');
+  logger.info('All required environment variables are present');
 }
 
 
 
 app.listen(PORT, async () => {
-  console.log(`🚀 ChainReactions Dataset Search Service - Phase 3`);
-  console.log(`📡 Service running on port ${PORT} (0.0.0.0)`);
-  console.log(`🏥 Health: http://localhost:${PORT}/api/health`);
-  console.log(`📋 Service Info: http://localhost:${PORT}/api`);
-  console.log(`🔄 Phase 3: Final microservices architecture`);
-  console.log(`🔗 API Gateway: http://localhost:3000`);
+  logger.info(`Dataset Search Service started`, {
+    port: PORT,
+    phase: 'Final microservices architecture'
+  });
+  logger.info('Endpoints available: GET /api, GET /api/health, POST /api/dataset-search/stream');
+  logger.info('SSE Streaming: POST /api/dataset-search/stream, DELETE /api/dataset-search/stream/:id, GET /api/dataset-search/stream/:id/status');
+  logger.info('Data endpoints: GET /api/dataset-search/datasets, GET /api/dataset-search/nro-stats');
 
   // Register with service discovery
   await registerWithServiceDiscovery();
-
-  console.log(`📋 Service endpoints:`);
-  console.log(`   • GET  /api - Service information`);
-  console.log(`   • GET  /api/health - Health check`);
-  console.log(``);
-  console.log(`   📡 SSE Streaming:`);
-  console.log(`   • POST /api/dataset-search/stream - Start streaming search`);
-  console.log(`   • DELETE /api/dataset-search/stream/:id - Cancel streaming search`);
-  console.log(`   • GET  /api/dataset-search/stream/:id/status - Stream status`);
-  console.log(`   • GET  /api/dataset-search/nro-stats - Canadian NRO statistics`);
-  console.log(``);
-  console.log(`🔧 Configuration:`);
-  console.log(`   🗄️  Supabase: ${process.env.SUPABASE_URL ? '✅' : '❌'}`);
-  console.log(`   🔍 Linkup API: ${process.env.LINKUP_API_KEY ? '✅' : '❌'}`);
-  console.log(`   🔄 Service Discovery: ${process.env.REDIS_HOST ? '✅' : '❌'}`);
-  console.log(``);
-  console.log(`🎯 Ready for SSE streaming dataset searches with Canadian NRO data!`);
+  logger.info('Configuration loaded', {
+    supabase: !!process.env.SUPABASE_URL,
+    linkupApi: !!process.env.LINKUP_API_KEY,
+    serviceDiscovery: !!process.env.REDIS_HOST
+  });
+  logger.info('Service ready for SSE streaming dataset searches');
 });
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('[DatasetSearch] Received SIGTERM, shutting down gracefully...');
+  logger.info('Received SIGTERM, shutting down gracefully');
   try {
-    console.log('[DatasetSearch] Service stopped');
+    logger.info('Service stopped');
     process.exit(0);
   } catch (error) {
-    console.error('[DatasetSearch] Error during shutdown:', error);
+    logger.error('Error during shutdown', error instanceof Error ? error : undefined);
     process.exit(1);
   }
 });
 
 process.on('SIGINT', async () => {
-  console.log('[DatasetSearch] Received SIGINT, shutting down gracefully...');
+  logger.info('Received SIGINT, shutting down gracefully');
   try {
-    console.log('[DatasetSearch] Service stopped');
+    logger.info('Service stopped');
     process.exit(0);
   } catch (error) {
-    console.error('[DatasetSearch] Error during shutdown:', error);
+    logger.error('Error during shutdown', error instanceof Error ? error : undefined);
     process.exit(1);
   }
 });

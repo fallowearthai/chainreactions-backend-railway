@@ -2,9 +2,10 @@
   "name": "chainreactions-dataset-search",
   "version": "2.0.0",
   "description": "ChainReactions Dataset Search Service - Phase 2 Standalone Service",
-  "main": "src/app.ts",
+  "main": "dist/app.js",
   "scripts": {
-    "start": "ts-node src/app.ts",
+    "start": "node dist/app.js",
+    "prestart": "npm run build",
     "dev": "nodemon --exec ts-node src/app.ts",
     "build": "tsc",
     "test": "jest",

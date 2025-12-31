@@ -28,24 +28,27 @@ export class UserController {
   // Get current user profile
   async getCurrentUserProfile(req: Request, res: Response): Promise<void> {
     try {
-      const securityContext = AuthMiddleware.extractUser(req);
-      const userId = securityContext.user.id;
-
-      // 🚀 优化：使用批量查询替代3个顺序查询（从 ~900ms 降至 ~300ms）
-      const userData = await this.supabaseService.getUserFullProfile(userId);
-      if (!userData) {
+      // For lightweight authentication, get basic user data from request context
+      if (!req.user) {
         const errorResponse: ErrorResponse = {
           success: false,
-          error: 'Profile not found',
-          details: 'User profile could not be found',
+          error: 'Authentication required',
+          details: 'User context not found',
           timestamp: new Date().toISOString(),
           path: req.path
         };
-        res.status(404).json(errorResponse);
+        res.status(401).json(errorResponse);
         return;
       }
 
-      const { profile, credits, role } = userData;
+      const userId = req.user.user.id;
+
+      // Only query for credits (critical data that's not in JWT)
+      // This reduces database load significantly
+      const credits = await this.supabaseService.getUserCredits(userId);
+
+      const profile = req.user.profile;
+      const role = req.user.permissions.includes('admin') ? 'admin' : 'user';
 
       const response: APIResponse = {
         success: true,
@@ -53,7 +56,7 @@ export class UserController {
           ...profile,
           credits,
           role,
-          permissions: securityContext.permissions
+          permissions: req.user.permissions
         },
         timestamp: new Date().toISOString()
       };
@@ -421,54 +424,75 @@ export class UserController {
         return;
       }
 
-      const creditInfo = data;
+      // get_user_credit_info returns a TABLE (array), so we need to get the first row
+      const creditInfoArray = data;
       let hasEnoughCredits = false;
 
-      // Check if the response was successful
-      if (!creditInfo?.success) {
+      // Check if we got any results
+      if (!creditInfoArray || creditInfoArray.length === 0) {
         const errorResponse: ErrorResponse = {
           success: false,
           error: 'Failed to validate credits',
-          details: creditInfo?.error || 'Unknown error',
+          details: 'User credit record not found',
           timestamp: new Date().toISOString(),
           path: req.path
         };
-        res.status(500).json(errorResponse);
+        res.status(404).json(errorResponse);
         return;
       }
 
-      // Parse credit data from the new function response
-      const credits = creditInfo?.credits;
+      // Get the first (and should be only) row
+      const creditInfo = creditInfoArray[0];
       const accountType = creditInfo?.account_type;
 
+      // Check if account is active
+      if (!creditInfo?.is_active) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: 'Account is not active',
+          details: 'Please contact support',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        };
+        res.status(403).json(errorResponse);
+        return;
+      }
+
       if (accountType === 'admin') {
-        hasEnoughCredits = true; // Admin has unlimited credits
+        hasEnoughCredits = true; // Admin has unlimited credits (NULL values)
       } else {
-        const creditKey = transactionType === 'long_search' || transactionType === 'deepthinking_search'
-          ? 'dataset_search'
-          : 'ordinary_search';
-        const creditData = credits?.[creditKey];
-        const availableCredits = creditData?.remaining;
+        // Determine which credit field to check based on transaction type
+        const isLongSearch = transactionType === 'long_search' || transactionType === 'deepthinking_search' || transactionType === 'dataset_search';
+        const availableCredits = isLongSearch
+          ? creditInfo?.long_search_credits
+          : creditInfo?.ordinary_search_credits;
 
         // Check for expired trial
-        if (accountType === 'free_trial' && creditInfo?.trial_info?.expired) {
-          hasEnoughCredits = false;
+        if (accountType === 'free_trial') {
+          const trialEndDate = new Date(creditInfo?.trial_end_date);
+          const isExpired = trialEndDate < new Date();
+          if (isExpired) {
+            hasEnoughCredits = false;
+          } else {
+            hasEnoughCredits = (availableCredits || 0) >= (amount || 1);
+          }
         } else {
-          hasEnoughCredits = creditData?.unlimited || availableCredits >= (amount || 1);
+          hasEnoughCredits = (availableCredits || 0) >= (amount || 1);
         }
       }
 
       const response: APIResponse = {
         success: true,
         data: {
-          hasEnoughCredits,
-          creditInfo: {
-            account_type: accountType,
-            ordinary_search: credits?.ordinary_search,
-            dataset_search: credits?.dataset_search,
-            trial_info: creditInfo?.trial_info,
-            reset_date: creditInfo?.reset_date
-          }
+          hasCredits: hasEnoughCredits,
+          hasEnoughCredits: hasEnoughCredits, // For backwards compatibility
+          remainingCredits: {
+            ordinary_search: creditInfo?.ordinary_search_credits,
+            long_search: creditInfo?.long_search_credits
+          },
+          account_type: accountType,
+          trial_end_date: creditInfo?.trial_end_date,
+          is_active: creditInfo?.is_active
         },
         timestamp: new Date().toISOString()
       };
@@ -591,227 +615,7 @@ export class UserController {
     }
   }
 
-  // Generate invitation code (admin only)
-  async generateInvitationCode(req: Request, res: Response): Promise<void> {
-    try {
-      const { expiresDays } = req.body;
-      const securityContext = AuthMiddleware.extractUser(req);
-      const adminId = securityContext.user.id;
-
-      // Call the database function to generate invitation code
-      const { data, error } = await this.supabaseService.getClient()
-        .rpc('generate_invitation_code', {
-          admin_uuid: adminId,
-          expires_days: expiresDays || 30
-        });
-
-      if (error) {
-        const errorResponse: ErrorResponse = {
-          success: false,
-          error: 'Failed to generate invitation code',
-          details: error.message,
-          timestamp: new Date().toISOString(),
-          path: req.path
-        };
-        res.status(500).json(errorResponse);
-        return;
-      }
-
-      const response: APIResponse = {
-        success: true,
-        data: { invitationCode: data },
-        message: 'Invitation code generated successfully',
-        timestamp: new Date().toISOString()
-      };
-
-      res.json(response);
-    } catch (error) {
-      console.error('Generate invitation code error:', error);
-      const errorResponse: ErrorResponse = {
-        success: false,
-        error: 'Failed to generate invitation code',
-        details: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-        path: req.path
-      };
-      res.status(500).json(errorResponse);
-    }
-  }
-
-  // Get all invitation codes (admin only)
-  async getInvitationCodes(req: Request, res: Response): Promise<void> {
-    try {
-      const { data, error } = await this.supabaseService.getClient()
-        .from('invitation_codes')
-        .select(`
-          *,
-          creator:profiles!invitation_codes_created_by_fkey(email, display_name),
-          user:profiles!invitation_codes_used_by_fkey(email, display_name)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        const errorResponse: ErrorResponse = {
-          success: false,
-          error: 'Failed to fetch invitation codes',
-          details: error.message,
-          timestamp: new Date().toISOString(),
-          path: req.path
-        };
-        res.status(500).json(errorResponse);
-        return;
-      }
-
-      const response: APIResponse = {
-        success: true,
-        data: data,
-        timestamp: new Date().toISOString()
-      };
-
-      res.json(response);
-    } catch (error) {
-      console.error('Get invitation codes error:', error);
-      const errorResponse: ErrorResponse = {
-        success: false,
-        error: 'Failed to fetch invitation codes',
-        details: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-        path: req.path
-      };
-      res.status(500).json(errorResponse);
-    }
-  }
-
-  // Validate and use invitation code
-  async useInvitationCode(req: Request, res: Response): Promise<void> {
-    try {
-      const { code } = req.body;
-      const securityContext = AuthMiddleware.extractUser(req);
-      const userId = securityContext.user.id;
-
-      // First check if the invitation code is valid
-      const { data: invitationData, error: fetchError } = await this.supabaseService.getClient()
-        .from('invitation_codes')
-        .select('*')
-        .eq('code', code)
-        .eq('is_active', true)
-        .single();
-
-      if (fetchError || !invitationData) {
-        const errorResponse: ErrorResponse = {
-          success: false,
-          error: 'Invalid invitation code',
-          details: 'The invitation code is not valid or has been deactivated',
-          timestamp: new Date().toISOString(),
-          path: req.path
-        };
-        res.status(400).json(errorResponse);
-        return;
-      }
-
-      // Check if the invitation code has expired
-      if (new Date(invitationData.expires_at) < new Date()) {
-        const errorResponse: ErrorResponse = {
-          success: false,
-          error: 'Invitation code expired',
-          details: 'The invitation code has expired',
-          timestamp: new Date().toISOString(),
-          path: req.path
-        };
-        res.status(400).json(errorResponse);
-        return;
-      }
-
-      // Check if the invitation code has reached its usage limit
-      if (invitationData.usage_count >= invitationData.max_uses) {
-        const errorResponse: ErrorResponse = {
-          success: false,
-          error: 'Invitation code fully used',
-          details: 'The invitation code has reached its maximum usage limit',
-          timestamp: new Date().toISOString(),
-          path: req.path
-        };
-        res.status(400).json(errorResponse);
-        return;
-      }
-
-      // Start a transaction to use the invitation code and upgrade user
-      const { data: updateData, error: updateError } = await this.supabaseService.getClient()
-        .from('user_usage_credits')
-        .update({
-          account_type: 'premium',
-          trial_start_date: null,
-          trial_end_date: null,
-          subscription_start_date: new Date().toISOString(),
-          invitation_code: code,
-          invited_by: invitationData.created_by,
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', userId)
-        .select()
-        .single();
-
-      if (updateError) {
-        const errorResponse: ErrorResponse = {
-          success: false,
-          error: 'Failed to upgrade user account',
-          details: updateError.message,
-          timestamp: new Date().toISOString(),
-          path: req.path
-        };
-        res.status(500).json(errorResponse);
-        return;
-      }
-
-      // Mark the invitation code as used
-      const { data: updatedInvitation, error: markError } = await this.supabaseService.getClient()
-        .from('invitation_codes')
-        .update({
-          used_by: userId,
-          used_at: new Date().toISOString(),
-          usage_count: invitationData.usage_count + 1,
-          is_active: (invitationData.usage_count + 1) >= invitationData.max_uses ? false : true
-        })
-        .eq('id', invitationData.id)
-        .select()
-        .single();
-
-      if (markError) {
-        const errorResponse: ErrorResponse = {
-          success: false,
-          error: 'Failed to mark invitation code as used',
-          details: markError.message,
-          timestamp: new Date().toISOString(),
-          path: req.path
-        };
-        res.status(500).json(errorResponse);
-        return;
-      }
-
-      const response: APIResponse = {
-        success: true,
-        data: {
-          userUpgraded: updateData,
-          invitationUsed: updatedInvitation
-        },
-        message: 'Invitation code used successfully. Account upgraded to premium.',
-        timestamp: new Date().toISOString()
-      };
-
-      res.json(response);
-    } catch (error) {
-      console.error('Use invitation code error:', error);
-      const errorResponse: ErrorResponse = {
-        success: false,
-        error: 'Failed to use invitation code',
-        details: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-        path: req.path
-      };
-      res.status(500).json(errorResponse);
-    }
-  }
-
+  
   // Monthly credit reset for all subscribed users (admin only)
   async monthlyCreditReset(req: Request, res: Response): Promise<void> {
     try {
