@@ -10,8 +10,8 @@ RUN apk add --no-cache \
     && ln -sf python3 /usr/bin/python
 
 # Copy package files
-COPY package*.json ./
-COPY tsconfig.json ./
+COPY services/entity-search/package*json ./
+COPY services/entity-search/tsconfig.json ./
 
 # Configure npm for better reliability and install dependencies
 RUN npm config set fetch-retry-maxtimeout 120000 && \
@@ -21,7 +21,8 @@ RUN npm config set fetch-retry-maxtimeout 120000 && \
     npm cache clean --force
 
 # Copy source code
-COPY src/ ./src/
+COPY services/entity-search/src/ ./src/
+COPY src/shared/ ./src/shared/
 
 # Build the application
 RUN npm run build

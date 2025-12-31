@@ -10,8 +10,8 @@ RUN apk add --no-cache \
     && ln -sf python3 /usr/bin/python
 
 # Copy package files
-COPY package*.json ./
-COPY tsconfig.json ./
+COPY services/data-management/package*.json ./
+COPY services/data-management/tsconfig.json ./
 
 # Configure npm for better reliability and install dependencies
 RUN npm config set fetch-retry-maxtimeout 120000 && \
@@ -20,8 +20,9 @@ RUN npm config set fetch-retry-maxtimeout 120000 && \
     npm install --no-audit --no-fund && \
     npm cache clean --force
 
-# Copy source code
-COPY src/ ./src/
+# Copy source code and shared modules
+COPY services/data-management/src/ ./src/
+COPY src/shared/ ./src/shared/
 
 # Build the application
 RUN npm run build

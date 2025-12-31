@@ -5,14 +5,15 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
-COPY tsconfig.json ./
+COPY services/user-management/package*json ./
+COPY services/user-management/tsconfig.json ./
 
 # Install dependencies (include devDependencies for TypeScript compilation)
 RUN npm ci && npm cache clean --force
 
-# Copy source code
-COPY src/ ./src/
+# Copy source code and shared modules
+COPY services/user-management/src/ ./src/
+COPY src/shared/ ./src/shared/
 
 # Build the TypeScript code
 RUN npm run build
@@ -31,7 +32,7 @@ RUN addgroup -g 1001 -S nodejs && \
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY services/user-management/package*json ./
 
 # Install only production dependencies
 RUN npm ci --only=production && npm cache clean --force

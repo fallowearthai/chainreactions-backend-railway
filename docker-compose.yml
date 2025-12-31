@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Redis Cache Service (Internal Only)
   redis:
@@ -20,7 +18,9 @@ services:
 
   # Core Microservices
   entity-relations:
-    build: ./services/entity-relations
+    build:
+      context: .
+      dockerfile: services/entity-relations/Dockerfile
     container_name: chainreactions-entity-relations
     ports:
       - "3002:3002"
@@ -47,7 +47,9 @@ services:
       start_period: 60s
 
   entity-search:
-    build: ./services/entity-search
+    build:
+      context: .
+      dockerfile: services/entity-search/Dockerfile
     container_name: chainreactions-entity-search
     ports:
       - "3003:3003"
@@ -73,7 +75,9 @@ services:
       start_period: 120s
 
   dataset-matching:
-    build: ./services/dataset-matching
+    build:
+      context: .
+      dockerfile: services/dataset-matching/Dockerfile
     container_name: chainreactions-dataset-matching
     ports:
       - "3004:3004"
@@ -100,7 +104,9 @@ services:
       start_period: 120s
 
   data-management:
-    build: ./services/data-management
+    build:
+      context: .
+      dockerfile: services/data-management/Dockerfile
     container_name: chainreactions-data-management
     ports:
       - "3005:3005"
@@ -126,7 +132,9 @@ services:
       start_period: 60s
 
   dataset-search:
-    build: ./services/dataset-search
+    build:
+      context: .
+      dockerfile: services/dataset-search/Dockerfile
     container_name: chainreactions-dataset-search
     ports:
       - "3006:3006"
@@ -155,7 +163,9 @@ services:
       start_period: 120s
 
   user-management:
-    build: ./services/user-management
+    build:
+      context: .
+      dockerfile: services/user-management/Dockerfile
     container_name: chainreactions-user-management
     ports:
       - "3007:3007"
