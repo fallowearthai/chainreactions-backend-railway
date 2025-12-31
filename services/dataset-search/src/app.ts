@@ -140,7 +140,7 @@ const missingRequiredVars = requiredEnvVars.filter(envVar => !process.env[envVar
 
 if (missingRequiredVars.length > 0) {
   logger.warn(`Missing environment variables: ${missingRequiredVars.join(', ')}`, {
-    missingVars,
+    missingVars: missingRequiredVars,
     mode: 'degraded'
   });
   logger.warn('Service will start in degraded mode. Please check your Docker environment configuration');
